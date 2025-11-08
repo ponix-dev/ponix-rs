@@ -1,0 +1,20 @@
+[package]
+name = "ponix-all-in-one"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "ponix-all-in-one"
+path = "src/main.rs"
+
+[dependencies]
+ponix-runner = { path = "../runner" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+config = { version = "0.14", features = ["toml"] }

@@ -1,0 +1,10 @@
+[tools]
+
+tilt = "latest"
+
+
+[env]
+_.file = '.env'
+
+[tasks.install-tools]
+run = "mise install && brew install goose"

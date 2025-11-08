@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/runner",
+    "crates/ponix-all-in-one",
 ]
 resolver = "2"
 

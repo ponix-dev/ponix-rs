@@ -1,0 +1,17 @@
+name: ponix-rs
+
+services:
+  ponix-all-in-one:
+    image: ponix-all-in-one:latest
+    container_name: ponix-all-in-one
+    environment:
+      PONIX_LOG_LEVEL: debug
+      PONIX_MESSAGE: "Hello from ponix-rs!"
+      PONIX_INTERVAL_SECS: "3"
+    restart: unless-stopped
+    networks:
+      - ponix
+
+networks:
+  ponix:
+    name: ponix

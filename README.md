@@ -10,8 +10,21 @@ This is a Cargo workspace containing multiple crates:
 ponix-rs/
 ├── Cargo.toml           # Workspace configuration
 └── crates/
-    └── runner/          # Concurrent application runner
+    ├── runner/          # Concurrent application runner
+    └── ponix-all-in-one/ # Main service binary
 ```
+
+## Services
+
+### ponix-all-in-one
+
+The main service binary that will eventually orchestrate all Ponix functionality. Currently provides basic scaffolding with:
+- Integration with runner for lifecycle management
+- Environment-based configuration
+- Docker containerization
+- Tilt-based local development
+
+See [crates/ponix-all-in-one/README.md](crates/ponix-all-in-one/README.md) for details.
 
 ## Crates
 
