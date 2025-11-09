@@ -1,10 +1,13 @@
 mod config;
 
 use anyhow::Result;
+use ponix_proto::envelope::v1::ProcessedEnvelope;
 use ponix_runner::Runner;
-use std::time::Duration;
+use prost::Message;
+use prost_types::Timestamp;
+use std::time::{Duration, SystemTime};
 use tracing::info;
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() {
@@ -58,7 +61,6 @@ async fn run_service(
     info!("Service started successfully");
 
     let interval = Duration::from_secs(config.interval_secs);
-    let mut counter = 0u64;
 
     loop {
         tokio::select! {
@@ -67,8 +69,41 @@ async fn run_service(
                 break;
             }
             _ = tokio::time::sleep(interval) => {
-                counter += 1;
-                info!("{} (iteration: {})", config.message, counter);
+                // Generate unique, sortable ID using xid
+                let id = xid::new();
+
+                // Get current time for timestamps
+                let now = SystemTime::now();
+                let timestamp = now
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .map(|d| Timestamp {
+                        seconds: d.as_secs() as i64,
+                        nanos: d.subsec_nanos() as i32,
+                    })
+                    .ok();
+
+                // Create a ProcessedEnvelope message
+                let envelope = ProcessedEnvelope {
+                    end_device_id: id.to_string(),
+                    occurred_at: timestamp,
+                    data: None, // Could populate with sample data if needed
+                    processed_at: timestamp,
+                    organization_id: "example-org".to_string(),
+                };
+
+                // Log the envelope details
+                info!(
+                    end_device_id = %envelope.end_device_id,
+                    occurred_at = ?envelope.occurred_at,
+                    processed_at = ?envelope.processed_at,
+                    organization_id = %envelope.organization_id,
+                    "{}",
+                    config.message
+                );
+
+                // Demonstrate serialization
+                let encoded = envelope.encode_to_vec();
+                tracing::debug!("Serialized envelope to {} bytes", encoded.len());
             }
         }
     }
