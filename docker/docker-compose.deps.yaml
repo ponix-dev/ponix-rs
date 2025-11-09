@@ -1,0 +1,27 @@
+name: ponix-deps
+
+services:
+  nats:
+    image: nats:latest
+    container_name: ponix-nats
+    ports:
+      - "4222:4222"  # Client connections
+      - "8222:8222"  # HTTP management
+      - "6222:6222"  # Cluster routing
+    command:
+      - "-js"        # Enable JetStream
+      - "-m"         # Enable monitoring
+      - "8222"       # Monitoring port
+    volumes:
+      - nats-data:/data
+    restart: unless-stopped
+    networks:
+      - ponix
+
+networks:
+  ponix:
+    name: ponix
+
+volumes:
+  nats-data:
+    driver: local

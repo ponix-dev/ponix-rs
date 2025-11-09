@@ -14,6 +14,31 @@ pub struct ServiceConfig {
     /// Sleep interval in seconds
     #[serde(default = "default_interval")]
     pub interval_secs: u64,
+
+    // NATS configuration
+    /// NATS server URL
+    #[serde(default = "default_nats_url")]
+    pub nats_url: String,
+
+    /// NATS JetStream stream name
+    #[serde(default = "default_nats_stream")]
+    pub nats_stream: String,
+
+    /// NATS subject pattern for consumer filter
+    #[serde(default = "default_nats_subject")]
+    pub nats_subject: String,
+
+    /// Batch size for consumer
+    #[serde(default = "default_nats_batch_size")]
+    pub nats_batch_size: usize,
+
+    /// Max wait time for batches in seconds
+    #[serde(default = "default_nats_batch_wait_secs")]
+    pub nats_batch_wait_secs: u64,
+
+    /// Startup timeout for initialization operations in seconds
+    #[serde(default = "default_startup_timeout_secs")]
+    pub startup_timeout_secs: u64,
 }
 
 fn default_message() -> String {
@@ -26,6 +51,31 @@ fn default_log_level() -> String {
 
 fn default_interval() -> u64 {
     5
+}
+
+// NATS defaults
+fn default_nats_url() -> String {
+    "nats://localhost:4222".to_string()
+}
+
+fn default_nats_stream() -> String {
+    "processed_envelopes".to_string()
+}
+
+fn default_nats_subject() -> String {
+    "processed_envelopes.>".to_string()
+}
+
+fn default_nats_batch_size() -> usize {
+    30
+}
+
+fn default_nats_batch_wait_secs() -> u64 {
+    5
+}
+
+fn default_startup_timeout_secs() -> u64 {
+    30
 }
 
 impl ServiceConfig {

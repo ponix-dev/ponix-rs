@@ -1,0 +1,22 @@
+[package]
+name = "ponix-nats"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+async-nats = "0.37"
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+tracing = "0.1"
+
+# Protobuf support (optional, for ProcessedEnvelope types)
+ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf", optional = true }
+prost = { version = "0.13", optional = true }
+xid = { version = "1.1", optional = true }
+
+[features]
+default = []
+# Enable ProcessedEnvelope-specific producer and processor
+processed-envelope = ["ponix-proto", "prost", "xid"]

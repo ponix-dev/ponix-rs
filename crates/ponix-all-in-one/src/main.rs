@@ -1,12 +1,14 @@
 mod config;
 
 use anyhow::Result;
+use ponix_nats::{
+    create_processed_envelope_processor, NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
+};
 use ponix_proto::envelope::v1::ProcessedEnvelope;
 use ponix_runner::Runner;
-use prost::Message;
 use prost_types::Timestamp;
 use std::time::{Duration, SystemTime};
-use tracing::info;
+use tracing::{debug, error, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]
@@ -22,28 +24,80 @@ async fn main() {
 
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new(&config.log_level)))
+        .with(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new(&config.log_level)),
+        )
         .init();
 
     info!("Starting ponix-all-in-one service");
-    info!("Configuration: {:?}", config);
+    debug!("Configuration: {:?}", config);
 
-    // Create runner with the main service process
+    // Create startup timeout for all initialization operations
+    let startup_timeout = Duration::from_secs(config.startup_timeout_secs);
+    debug!(
+        "Using startup timeout of {:?} for all initialization",
+        startup_timeout
+    );
+
+    // Connect to NATS (timeout is passed to the client for internal timeout configuration)
+    let nats_client = match NatsClient::connect(&config.nats_url, startup_timeout).await {
+        Ok(client) => client,
+        Err(e) => {
+            error!("Failed to connect to NATS: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Ensure stream exists
+    if let Err(e) = nats_client.ensure_stream(&config.nats_stream).await {
+        error!("Failed to ensure stream exists: {}", e);
+        std::process::exit(1);
+    }
+
+    // Create the batch processor
+    // The processor defines the custom logic for handling batches of messages
+    // Using the default ProcessedEnvelope processor from ponix-nats
+    let processor = create_processed_envelope_processor();
+
+    // Create consumer
+    let consumer = match NatsConsumer::new(
+        nats_client.jetstream(),
+        &config.nats_stream,
+        "ponix-all-in-one",
+        &config.nats_subject,
+        config.nats_batch_size,
+        config.nats_batch_wait_secs,
+        processor,
+    )
+    .await
+    {
+        Ok(consumer) => consumer,
+        Err(e) => {
+            error!("Failed to create consumer: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Create producer
+    let producer = ProcessedEnvelopeProducer::new(
+        nats_client.jetstream().clone(),
+        config.nats_stream.clone(),
+    );
+
+    // Create runner with producer and consumer processes
     let runner = Runner::new()
         .with_app_process({
             let config = config.clone();
-            move |ctx| {
-                Box::pin(async move {
-                    run_service(ctx, config).await
-                })
-            }
+            move |ctx| Box::pin(async move { run_producer_service(ctx, config, producer).await })
         })
-        .with_closer(|| {
+        .with_app_process({
+            move |ctx| Box::pin(async move { consumer.run(ctx).await })
+        })
+        .with_closer(move || {
             Box::pin(async move {
                 info!("Running cleanup tasks...");
-                // Placeholder for future cleanup
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                nats_client.close().await;
                 info!("Cleanup complete");
                 Ok(())
             })
@@ -54,22 +108,23 @@ async fn main() {
     runner.run().await;
 }
 
-async fn run_service(
+async fn run_producer_service(
     ctx: tokio_util::sync::CancellationToken,
     config: config::ServiceConfig,
+    producer: ProcessedEnvelopeProducer,
 ) -> Result<()> {
-    info!("Service started successfully");
+    info!("Producer service started successfully");
 
     let interval = Duration::from_secs(config.interval_secs);
 
     loop {
         tokio::select! {
             _ = ctx.cancelled() => {
-                info!("Received shutdown signal, stopping service");
+                info!("Received shutdown signal, stopping producer service");
                 break;
             }
             _ = tokio::time::sleep(interval) => {
-                // Generate unique, sortable ID using xid
+                // Generate unique ID using xid
                 let id = xid::new();
 
                 // Get current time for timestamps
@@ -82,32 +137,37 @@ async fn run_service(
                     })
                     .ok();
 
-                // Create a ProcessedEnvelope message
+                // Create ProcessedEnvelope message
                 let envelope = ProcessedEnvelope {
                     end_device_id: id.to_string(),
-                    occurred_at: timestamp,
-                    data: None, // Could populate with sample data if needed
+                    occurred_at: timestamp.clone(),
+                    data: None,
                     processed_at: timestamp,
                     organization_id: "example-org".to_string(),
                 };
 
-                // Log the envelope details
-                info!(
-                    end_device_id = %envelope.end_device_id,
-                    occurred_at = ?envelope.occurred_at,
-                    processed_at = ?envelope.processed_at,
-                    organization_id = %envelope.organization_id,
-                    "{}",
-                    config.message
-                );
-
-                // Demonstrate serialization
-                let encoded = envelope.encode_to_vec();
-                tracing::debug!("Serialized envelope to {} bytes", encoded.len());
+                // Publish to NATS JetStream
+                match producer.publish(&envelope).await {
+                    Ok(_) => {
+                        debug!(
+                            end_device_id = %envelope.end_device_id,
+                            organization_id = %envelope.organization_id,
+                            "{}",
+                            config.message
+                        );
+                    }
+                    Err(e) => {
+                        error!(
+                            end_device_id = %envelope.end_device_id,
+                            error = %e,
+                            "Failed to publish envelope"
+                        );
+                    }
+                }
             }
         }
     }
 
-    info!("Service stopped gracefully");
+    info!("Producer service stopped gracefully");
     Ok(())
 }

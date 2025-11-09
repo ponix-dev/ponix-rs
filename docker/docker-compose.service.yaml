@@ -1,4 +1,7 @@
-name: ponix-rs
+name: ponix-service
+
+include:
+  - docker-compose.deps.yaml
 
 services:
   ponix-all-in-one:
@@ -8,10 +11,14 @@ services:
       PONIX_LOG_LEVEL: debug
       PONIX_MESSAGE: "Hello from ponix-rs!"
       PONIX_INTERVAL_SECS: "3"
+      PONIX_NATS_URL: "nats://ponix-nats:4222"
+      PONIX_NATS_STREAM: "processed_envelopes"
+      PONIX_NATS_SUBJECT: "processed_envelopes.>"
+      PONIX_NATS_BATCH_SIZE: "30"
+      PONIX_NATS_BATCH_WAIT_SECS: "5"
+      PONIX_STARTUP_TIMEOUT_SECS: "30"
+    depends_on:
+      - nats
     restart: unless-stopped
     networks:
       - ponix
-
-networks:
-  ponix:
-    name: ponix

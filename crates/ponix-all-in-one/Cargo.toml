@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 ponix-runner = { path = "../runner" }
+ponix-nats = { path = "../ponix-nats", features = ["processed-envelope"] }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
@@ -21,6 +22,5 @@ config = { version = "0.14", features = ["toml"] }
 
 # Protobuf support
 ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf" }
-prost = { workspace = true }
 prost-types = { workspace = true }
 xid = { workspace = true }
