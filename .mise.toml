@@ -1,8 +1,9 @@
 [tools]
-
+github-cli = "latest"
 tilt = "latest"
+rust = "latest"
 
-
+# all envs should be set in a .env file
 [env]
 _.file = '.env'
 

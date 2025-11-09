@@ -9,12 +9,21 @@ RUN apt-get update && \
 
 WORKDIR /build
 
+# Configure BSR registry
+COPY .cargo/config.toml ./.cargo/config.toml
+
 # Copy workspace files
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
-# Build the service
-RUN cargo build --release --bin ponix-all-in-one
+# Build the service with BSR authentication via secret
+RUN --mount=type=secret,id=bsr_token \
+    if [ -f /run/secrets/bsr_token ]; then \
+        export CARGO_REGISTRIES_BUF_TOKEN="Bearer $(cat /run/secrets/bsr_token)" && \
+        cargo build --release --bin ponix-all-in-one; \
+    else \
+        echo "Error: BSR token secret not found" && exit 1; \
+    fi
 
 # Runtime stage
 FROM debian:bookworm-slim

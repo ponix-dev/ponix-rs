@@ -79,6 +79,19 @@ async fn main() {
 - Rust 1.70 or later
 - Cargo
 
+### BSR Authentication
+
+This project uses protobuf types from the Buf Schema Registry. To set up access:
+
+1. Ensure BSR_TOKEN is configured in `.mise.toml`
+2. Follow the [BSR Cargo Registry setup guide](https://buf.build/docs/bsr/generated-sdks/cargo/)
+3. Authenticate once per machine:
+   ```bash
+   cargo login --registry buf "Bearer $BSR_TOKEN"
+   ```
+
+The generated SDK workflow is documented in the BSR documentation.
+
 ### Building
 
 Build all crates in the workspace:
@@ -118,6 +131,18 @@ cargo run --example basic_runner
 Press Ctrl+C to trigger graceful shutdown and see the cleanup process in action.
 
 ## Development
+
+### Building with Docker
+
+The Docker build requires BSR authentication via Docker secrets. The BSR_TOKEN is managed via `.mise.toml`.
+
+Build and run with Tilt (recommended for development):
+```bash
+# mise automatically loads BSR_TOKEN from .mise.toml
+tilt up
+```
+
+**Note**: Docker secrets are used to securely pass the BSR token during build without exposing it in build args or image layers. The token is configured in `.mise.toml`.
 
 ### Adding a New Crate
 
