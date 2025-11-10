@@ -13,15 +13,19 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 tracing = "0.1"
 
-# Protobuf support (optional, for ProcessedEnvelope types)
-ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf", optional = true }
+# Protobuf support (optional)
 prost = { version = "0.13", optional = true }
+
+# ProcessedEnvelope-specific dependencies (optional)
+ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf", optional = true }
 xid = { version = "1.1", optional = true }
 
 [features]
 default = []
+# Enable generic protobuf batch processor
+protobuf = ["prost"]
 # Enable ProcessedEnvelope-specific producer and processor
-processed-envelope = ["ponix-proto", "prost", "xid"]
+processed-envelope = ["ponix-proto", "protobuf", "xid"]
 
 [dev-dependencies]
 mockall = "0.13"
