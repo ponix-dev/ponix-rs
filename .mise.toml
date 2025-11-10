@@ -9,3 +9,6 @@ _.file = '.env'
 
 [tasks.install-tools]
 run = "mise install && brew install goose && brew tap nats-io/nats-tools && brew install nats-io/nats-tools/nats"
+
+[tasks.test]
+run = "cargo test --workspace"
