@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use async_nats::jetstream::{self, stream::Config as StreamConfig};
-use tracing::info;
+use async_trait::async_trait;
+use crate::traits::{JetStreamConsumer, JetStreamPublisher, PullConsumer};
+use std::sync::Arc;
+use tracing::{error, info};
 
 pub struct NatsClient {
     client: async_nats::Client,
@@ -54,6 +57,16 @@ impl NatsClient {
         &self.jetstream
     }
 
+    /// Create a JetStreamConsumer trait object from this client
+    pub fn create_consumer_client(&self) -> Arc<dyn JetStreamConsumer> {
+        Arc::new(NatsJetStreamConsumer::new(self.jetstream.clone()))
+    }
+
+    /// Create a JetStreamPublisher trait object from this client
+    pub fn create_publisher_client(&self) -> Arc<dyn JetStreamPublisher> {
+        Arc::new(NatsJetStreamPublisher::new(self.jetstream.clone()))
+    }
+
     pub async fn close(self) {
         info!("Closing NATS connection");
         // Connection closes automatically when dropped
@@ -65,5 +78,112 @@ impl NatsClient {
     // Keep client field for potential future use
     fn _client(&self) -> &async_nats::Client {
         &self.client
+    }
+}
+
+/// Concrete implementation of JetStreamConsumer using async-nats
+pub struct NatsJetStreamConsumer {
+    context: jetstream::Context,
+}
+
+impl NatsJetStreamConsumer {
+    pub fn new(context: jetstream::Context) -> Self {
+        Self { context }
+    }
+}
+
+#[async_trait]
+impl JetStreamConsumer for NatsJetStreamConsumer {
+    async fn create_consumer(
+        &self,
+        config: jetstream::consumer::pull::Config,
+        stream_name: &str,
+    ) -> Result<Box<dyn PullConsumer>> {
+        let consumer = self
+            .context
+            .create_consumer_on_stream(config, stream_name)
+            .await
+            .context("Failed to create consumer")?;
+
+        Ok(Box::new(NatsPullConsumer { consumer }))
+    }
+}
+
+/// Concrete implementation of PullConsumer using async-nats
+pub struct NatsPullConsumer {
+    consumer: jetstream::consumer::PullConsumer,
+}
+
+#[async_trait]
+impl PullConsumer for NatsPullConsumer {
+    async fn fetch_messages(
+        &self,
+        max_messages: usize,
+        expires: std::time::Duration,
+    ) -> Result<Vec<jetstream::Message>> {
+        use futures::StreamExt;
+
+        let mut messages = self
+            .consumer
+            .fetch()
+            .max_messages(max_messages)
+            .expires(expires)
+            .messages()
+            .await
+            .context("Failed to fetch messages")?;
+
+        let mut result = Vec::new();
+        while let Some(msg) = messages.next().await {
+            match msg {
+                Ok(message) => result.push(message),
+                Err(e) => {
+                    error!("Error receiving message: {}", e);
+                    // Continue processing other messages
+                }
+            }
+        }
+        Ok(result)
+    }
+}
+
+/// Concrete implementation of JetStreamPublisher using async-nats
+pub struct NatsJetStreamPublisher {
+    context: jetstream::Context,
+}
+
+impl NatsJetStreamPublisher {
+    pub fn new(context: jetstream::Context) -> Self {
+        Self { context }
+    }
+}
+
+#[async_trait]
+impl JetStreamPublisher for NatsJetStreamPublisher {
+    async fn get_stream(&self, stream_name: &str) -> Result<()> {
+        self.context
+            .get_stream(stream_name)
+            .await
+            .context("Failed to get stream")?;
+        Ok(())
+    }
+
+    async fn create_stream(&self, config: jetstream::stream::Config) -> Result<()> {
+        self.context
+            .create_stream(config)
+            .await
+            .context("Failed to create stream")?;
+        Ok(())
+    }
+
+    async fn publish(&self, subject: String, payload: bytes::Bytes) -> Result<()> {
+        let ack = self
+            .context
+            .publish(subject, payload)
+            .await
+            .context("Failed to publish message to JetStream")?;
+
+        ack.await
+            .context("Failed to receive JetStream acknowledgment")?;
+        Ok(())
     }
 }

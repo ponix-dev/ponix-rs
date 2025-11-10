@@ -57,3 +57,9 @@ pub fn create_processed_envelope_processor() -> BatchProcessor {
         }) as futures::future::BoxFuture<'static, Result<ProcessingResult>>
     })
 }
+
+// Note: Unit tests for this processor would require mocking async_nats::jetstream::Message,
+// which is complex. The processor logic is tested indirectly through:
+// 1. Consumer tests that verify ProcessingResult handling
+// 2. Integration tests with a real NATS server
+// See Phase 6 for potential Message mocking strategies.
