@@ -60,9 +60,10 @@ async fn main() {
     // Using the default ProcessedEnvelope processor from ponix-nats
     let processor = create_processed_envelope_processor();
 
-    // Create consumer
+    // Create consumer using trait-based API
+    let consumer_client = nats_client.create_consumer_client();
     let consumer = match NatsConsumer::new(
-        nats_client.jetstream(),
+        consumer_client,
         &config.nats_stream,
         "ponix-all-in-one",
         &config.nats_subject,
@@ -79,9 +80,10 @@ async fn main() {
         }
     };
 
-    // Create producer
+    // Create producer using trait-based API
+    let publisher_client = nats_client.create_publisher_client();
     let producer = ProcessedEnvelopeProducer::new(
-        nats_client.jetstream().clone(),
+        publisher_client,
         config.nats_stream.clone(),
     );
 
@@ -140,7 +142,7 @@ async fn run_producer_service(
                 // Create ProcessedEnvelope message
                 let envelope = ProcessedEnvelope {
                     end_device_id: id.to_string(),
-                    occurred_at: timestamp.clone(),
+                    occurred_at: timestamp,
                     data: None,
                     processed_at: timestamp,
                     organization_id: "example-org".to_string(),

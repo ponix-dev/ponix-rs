@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
-use async_nats::jetstream::{self, consumer::PullConsumer, Message};
-use futures::{future::BoxFuture, StreamExt};
+use async_nats::jetstream::{self, Message};
+use crate::traits::{JetStreamConsumer, PullConsumer};
+use futures::future::BoxFuture;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -48,7 +50,7 @@ pub type BatchProcessor =
 /// The consumer handles fetching messages, acknowledgments, and error handling
 /// Message deserialization and business logic are delegated to the processor function
 pub struct NatsConsumer {
-    consumer: PullConsumer,
+    consumer: Box<dyn PullConsumer>,
     batch_size: usize,
     max_wait: Duration,
     processor: BatchProcessor,
@@ -56,7 +58,7 @@ pub struct NatsConsumer {
 
 impl NatsConsumer {
     pub async fn new(
-        jetstream: &jetstream::Context,
+        jetstream: Arc<dyn JetStreamConsumer>,
         stream_name: &str,
         consumer_name: &str,
         subject_filter: &str,
@@ -71,18 +73,16 @@ impl NatsConsumer {
             "Creating JetStream consumer"
         );
 
-        // Create or get existing durable consumer
+        let config = jetstream::consumer::pull::Config {
+            name: Some(consumer_name.to_string()),
+            durable_name: Some(consumer_name.to_string()),
+            filter_subject: subject_filter.to_string(),
+            ack_policy: jetstream::consumer::AckPolicy::Explicit,
+            ..Default::default()
+        };
+
         let consumer = jetstream
-            .create_consumer_on_stream(
-                jetstream::consumer::pull::Config {
-                    name: Some(consumer_name.to_string()),
-                    durable_name: Some(consumer_name.to_string()),
-                    filter_subject: subject_filter.to_string(),
-                    ack_policy: jetstream::consumer::AckPolicy::Explicit,
-                    ..Default::default()
-                },
-                stream_name,
-            )
+            .create_consumer(config, stream_name)
             .await
             .context("Failed to create consumer")?;
 
@@ -130,29 +130,11 @@ impl NatsConsumer {
             "Fetching message batch"
         );
 
-        // Fetch batch of messages
-        let mut messages = self
+        // Fetch messages using the trait method
+        let raw_messages = self
             .consumer
-            .fetch()
-            .max_messages(self.batch_size)
-            .expires(self.max_wait)
-            .messages()
-            .await
-            .context("Failed to fetch messages")?;
-
-        let mut raw_messages = Vec::new();
-
-        // Collect messages from stream
-        while let Some(result) = messages.next().await {
-            match result {
-                Ok(msg) => {
-                    raw_messages.push(msg);
-                }
-                Err(e) => {
-                    warn!(error = %e, "Error receiving message from batch");
-                }
-            }
-        }
+            .fetch_messages(self.batch_size, self.max_wait)
+            .await?;
 
         if raw_messages.is_empty() {
             debug!("No messages in batch");
@@ -237,4 +219,144 @@ impl NatsConsumer {
 
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::traits::{MockJetStreamConsumer, MockPullConsumer};
+    use mockall::predicate::*;
+
+    fn create_processor_ack_all() -> BatchProcessor {
+        Box::new(|msgs| {
+            let count = msgs.len();
+            Box::pin(async move { Ok(ProcessingResult::ack_all(count)) })
+        })
+    }
+
+    #[tokio::test]
+    async fn test_consumer_creation_success() {
+        let mut mock_jetstream = MockJetStreamConsumer::new();
+
+        // Set up expectations
+        mock_jetstream
+            .expect_create_consumer()
+            .withf(|config: &jetstream::consumer::pull::Config, stream_name: &str| {
+                config.durable_name.as_ref().unwrap() == "test-consumer"
+                    && stream_name == "test-stream"
+            })
+            .times(1)
+            .returning(|_, _| Ok(Box::new(MockPullConsumer::new())));
+
+        let processor = create_processor_ack_all();
+
+        let result = NatsConsumer::new(
+            Arc::new(mock_jetstream),
+            "test-stream",
+            "test-consumer",
+            "test.subject",
+            10,
+            5,
+            processor,
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_consumer_creation_failure() {
+        let mut mock_jetstream = MockJetStreamConsumer::new();
+
+        mock_jetstream
+            .expect_create_consumer()
+            .times(1)
+            .returning(|_, _| Err(anyhow::anyhow!("Failed to create consumer")));
+
+        let processor = create_processor_ack_all();
+
+        let result = NatsConsumer::new(
+            Arc::new(mock_jetstream),
+            "test-stream",
+            "test-consumer",
+            "test.subject",
+            10,
+            5,
+            processor,
+        )
+        .await;
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        assert!(err.to_string().contains("Failed to create consumer"));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_and_process_empty_batch() {
+        let mut mock_jetstream = MockJetStreamConsumer::new();
+
+        mock_jetstream
+            .expect_create_consumer()
+            .times(1)
+            .returning(|_, _| {
+                let mut mock = MockPullConsumer::new();
+                mock.expect_fetch_messages()
+                    .times(1)
+                    .returning(|_, _| Ok(vec![]));
+                Ok(Box::new(mock))
+            });
+
+        let processor = create_processor_ack_all();
+
+        let consumer = NatsConsumer::new(
+            Arc::new(mock_jetstream),
+            "test-stream",
+            "test-consumer",
+            "test.subject",
+            10,
+            5,
+            processor,
+        )
+        .await
+        .unwrap();
+
+        let result = consumer.fetch_and_process_batch().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_processing_result_ack_all() {
+        let result = ProcessingResult::ack_all(5);
+        assert_eq!(result.ack.len(), 5);
+        assert_eq!(result.nak.len(), 0);
+        assert_eq!(result.ack, vec![0, 1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn test_processing_result_nak_all() {
+        let result = ProcessingResult::nak_all(3, Some("error".to_string()));
+        assert_eq!(result.ack.len(), 0);
+        assert_eq!(result.nak.len(), 3);
+        for (idx, (i, msg)) in result.nak.iter().enumerate() {
+            assert_eq!(*i, idx);
+            assert_eq!(msg.as_ref().unwrap(), "error");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_processing_result_partial() {
+        let result = ProcessingResult::new(
+            vec![0, 2],
+            vec![(1, Some("error".to_string())), (3, None)],
+        );
+        assert_eq!(result.ack, vec![0, 2]);
+        assert_eq!(result.nak.len(), 2);
+        assert_eq!(result.nak[0].0, 1);
+        assert_eq!(result.nak[1].0, 3);
+    }
+
+    // Note: Graceful shutdown test is omitted here as it requires more complex
+    // async mock behavior. This will be addressed in Phase 6 with a proper
+    // Message mocking strategy. The graceful shutdown logic is tested via
+    // integration tests with a real NATS server.
 }
