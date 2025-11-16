@@ -1,8 +1,9 @@
 mod config;
 
 use anyhow::Result;
+use ponix_clickhouse::{ClickHouseClient, EnvelopeStore, MigrationRunner};
 use ponix_nats::{
-    create_processed_envelope_processor, NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
+    create_clickhouse_processor, NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
 };
 use ponix_proto::envelope::v1::ProcessedEnvelope;
 use ponix_runner::Runner;
@@ -25,22 +26,54 @@ async fn main() {
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new(&config.log_level)),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level)),
         )
         .init();
 
     info!("Starting ponix-all-in-one service");
     debug!("Configuration: {:?}", config);
 
-    // Create startup timeout for all initialization operations
     let startup_timeout = Duration::from_secs(config.startup_timeout_secs);
     debug!(
         "Using startup timeout of {:?} for all initialization",
         startup_timeout
     );
 
-    // Connect to NATS (timeout is passed to the client for internal timeout configuration)
+    // PHASE 1: Run ClickHouse migrations
+    info!("Running ClickHouse migrations...");
+    let migration_runner = MigrationRunner::new(
+        config.clickhouse_goose_binary_path.clone(),
+        config.clickhouse_migrations_dir.clone(),
+        config.clickhouse_native_url.clone(), // Use native TCP URL for goose
+        config.clickhouse_database.clone(),
+        config.clickhouse_username.clone(),
+        config.clickhouse_password.clone(),
+    );
+
+    if let Err(e) = migration_runner.run_migrations().await {
+        error!("Failed to run migrations: {}", e);
+        std::process::exit(1);
+    }
+
+    // PHASE 2: Initialize ClickHouse client
+    info!("Connecting to ClickHouse...");
+    let clickhouse_client = ClickHouseClient::new(
+        &config.clickhouse_url,
+        &config.clickhouse_database,
+        &config.clickhouse_username,
+        &config.clickhouse_password,
+    );
+
+    if let Err(e) = clickhouse_client.ping().await {
+        error!("Failed to ping ClickHouse: {}", e);
+        std::process::exit(1);
+    }
+    info!("ClickHouse connection established");
+
+    let envelope_store =
+        EnvelopeStore::new(clickhouse_client.clone(), "processed_envelopes".to_string());
+
+    // PHASE 3: Connect to NATS
     let nats_client = match NatsClient::connect(&config.nats_url, startup_timeout).await {
         Ok(client) => client,
         Err(e) => {
@@ -49,16 +82,16 @@ async fn main() {
         }
     };
 
-    // Ensure stream exists
     if let Err(e) = nats_client.ensure_stream(&config.nats_stream).await {
         error!("Failed to ensure stream exists: {}", e);
         std::process::exit(1);
     }
 
-    // Create the batch processor
-    // The processor defines the custom logic for handling batches of messages
-    // Using the default ProcessedEnvelope processor from ponix-nats
-    let processor = create_processed_envelope_processor();
+    // PHASE 4: Create ClickHouse-enabled processor
+    let processor = create_clickhouse_processor(move |envelopes| {
+        let store = envelope_store.clone();
+        async move { store.store_processed_envelopes(envelopes).await }
+    });
 
     // Create consumer using trait-based API
     let consumer_client = nats_client.create_consumer_client();
@@ -82,10 +115,7 @@ async fn main() {
 
     // Create producer using trait-based API
     let publisher_client = nats_client.create_publisher_client();
-    let producer = ProcessedEnvelopeProducer::new(
-        publisher_client,
-        config.nats_stream.clone(),
-    );
+    let producer = ProcessedEnvelopeProducer::new(publisher_client, config.nats_stream.clone());
 
     // Create runner with producer and consumer processes
     let runner = Runner::new()
@@ -93,9 +123,7 @@ async fn main() {
             let config = config.clone();
             move |ctx| Box::pin(async move { run_producer_service(ctx, config, producer).await })
         })
-        .with_app_process({
-            move |ctx| Box::pin(async move { consumer.run(ctx).await })
-        })
+        .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
         .with_closer(move || {
             Box::pin(async move {
                 info!("Running cleanup tasks...");
@@ -139,11 +167,37 @@ async fn run_producer_service(
                     })
                     .ok();
 
+                // Create sample data for the envelope
+                use prost_types::{value::Kind, Struct, Value};
+                use std::collections::BTreeMap;
+
+                let mut fields = BTreeMap::new();
+                fields.insert(
+                    "temperature".to_string(),
+                    Value {
+                        kind: Some(Kind::NumberValue(72.5)),
+                    },
+                );
+                fields.insert(
+                    "humidity".to_string(),
+                    Value {
+                        kind: Some(Kind::NumberValue(65.0)),
+                    },
+                );
+                fields.insert(
+                    "status".to_string(),
+                    Value {
+                        kind: Some(Kind::StringValue("active".to_string())),
+                    },
+                );
+
+                let data = Some(Struct { fields });
+
                 // Create ProcessedEnvelope message
                 let envelope = ProcessedEnvelope {
                     end_device_id: id.to_string(),
                     occurred_at: timestamp,
-                    data: None,
+                    data,
                     processed_at: timestamp,
                     organization_id: "example-org".to_string(),
                 };

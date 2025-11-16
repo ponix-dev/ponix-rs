@@ -2,6 +2,7 @@
 members = [
     "crates/runner",
     "crates/ponix-nats",
+    "crates/ponix-clickhouse",
     "crates/ponix-all-in-one",
 ]
 resolver = "2"

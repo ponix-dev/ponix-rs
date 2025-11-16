@@ -1,7 +1,7 @@
+use crate::traits::{JetStreamConsumer, JetStreamPublisher, PullConsumer};
 use anyhow::{Context, Result};
 use async_nats::jetstream::{self, stream::Config as StreamConfig};
 use async_trait::async_trait;
-use crate::traits::{JetStreamConsumer, JetStreamPublisher, PullConsumer};
 use std::sync::Arc;
 use tracing::{error, info};
 
