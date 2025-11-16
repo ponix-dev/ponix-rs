@@ -1,7 +1,7 @@
 #[cfg(feature = "processed-envelope")]
-use anyhow::{Context, Result};
-#[cfg(feature = "processed-envelope")]
 use crate::traits::JetStreamPublisher;
+#[cfg(feature = "processed-envelope")]
+use anyhow::{Context, Result};
 #[cfg(feature = "processed-envelope")]
 use ponix_proto::envelope::v1::ProcessedEnvelope;
 #[cfg(feature = "processed-envelope")]
@@ -116,10 +116,7 @@ mod tests {
         // Verify the subject format is correct
         mock_jetstream
             .expect_publish()
-            .with(
-                eq("processed.envelopes.device-123".to_string()),
-                always(),
-            )
+            .with(eq("processed.envelopes.device-123".to_string()), always())
             .times(1)
             .returning(|_, _| Ok(()));
 
@@ -178,7 +175,10 @@ mod tests {
         let result = producer.publish(&envelope).await;
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to publish"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to publish"));
     }
 
     #[tokio::test]

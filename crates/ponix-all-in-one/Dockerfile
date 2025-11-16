@@ -3,9 +3,25 @@
 # Build stage
 FROM rust:1.91-slim-trixie AS builder
 
-# Update ca-certificates in builder stage
+# Update ca-certificates and install build dependencies
 RUN apt-get update && \
-    apt-get install -y ca-certificates
+    apt-get install -y ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Goose binary
+# Using specific version for reproducibility
+# Detect architecture and download appropriate binary
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        GOOSE_ARCH="x86_64"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        GOOSE_ARCH="arm64"; \
+    else \
+        echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    curl -fsSL https://github.com/pressly/goose/releases/download/v3.22.1/goose_linux_${GOOSE_ARCH} \
+    -o /usr/local/bin/goose && \
+    chmod +x /usr/local/bin/goose
 
 WORKDIR /build
 
@@ -25,8 +41,8 @@ RUN --mount=type=secret,id=bsr_token \
         echo "Error: BSR token secret not found" && exit 1; \
     fi
 
-# Runtime stage
-FROM debian:bookworm-slim
+# Runtime stage - use same Debian version as builder to match GLIBC
+FROM debian:trixie-slim
 
 # Install runtime dependencies
 RUN apt-get update && \
@@ -39,15 +55,16 @@ RUN useradd -ms /bin/bash ponix
 # Copy binary from builder
 COPY --from=builder /build/target/release/ponix-all-in-one /home/ponix/ponix-all-in-one
 
+# CRITICAL: Copy goose binary from builder for migrations
+COPY --from=builder /usr/local/bin/goose /usr/local/bin/goose
+
+# Copy migration files
+COPY crates/ponix-clickhouse/migrations /home/ponix/migrations
+
 # Set ownership
 RUN chown -R ponix:ponix /home/ponix
 
 USER ponix
 WORKDIR /home/ponix
-
-# Default environment variables
-ENV PONIX_LOG_LEVEL=info
-ENV PONIX_MESSAGE="ponix-all-in-one in Docker"
-ENV PONIX_INTERVAL_SECS=5
 
 ENTRYPOINT ["./ponix-all-in-one"]

@@ -10,5 +10,27 @@ _.file = '.env'
 [tasks.install-tools]
 run = "mise install && brew install goose && brew tap nats-io/nats-tools && brew install nats-io/nats-tools/nats"
 
+# Test tasks - run from workspace root
 [tasks.test]
+description = "Run all unit tests (fast, no external dependencies)"
 run = "cargo test --workspace"
+
+[tasks."test:unit"]
+description = "Run unit tests only (excludes integration tests)"
+run = "cargo test --workspace --lib --bins"
+
+[tasks."test:integration"]
+description = "Run integration tests (requires Docker for testcontainers)"
+run = "cargo test --workspace --features integration-tests -- --test-threads=1"
+
+[tasks."test:all"]
+description = "Run all tests including integration tests"
+run = "cargo test --workspace --features integration-tests"
+
+[tasks."test:watch"]
+description = "Watch and run unit tests on file changes"
+run = "cargo watch -x 'test --workspace --lib --bins'"
+
+[tasks."test:integration:watch"]
+description = "Watch and run integration tests on file changes"
+run = "cargo watch -x 'test --workspace --features integration-tests -- --test-threads=1'"

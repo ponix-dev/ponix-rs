@@ -48,12 +48,15 @@ use tokio_util::sync::CancellationToken;
 
 /// Type alias for an app process function.
 /// Takes a cancellation token and returns a future that resolves to Result<(), anyhow::Error>
-pub type AppProcess =
-    Box<dyn FnOnce(CancellationToken) -> Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send>> + Send>;
+pub type AppProcess = Box<
+    dyn FnOnce(CancellationToken) -> Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send>>
+        + Send,
+>;
 
 /// Type alias for a closer function.
 /// Returns a future that resolves to Result<(), anyhow::Error>
-pub type Closer = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send>> + Send>;
+pub type Closer =
+    Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send>> + Send>;
 
 /// A concurrent application runner that manages long-running processes with graceful shutdown.
 ///
@@ -102,9 +105,8 @@ impl Runner {
         F: FnOnce(CancellationToken) -> Fut + Send + 'static,
         Fut: Future<Output = Result<(), anyhow::Error>> + Send + 'static,
     {
-        self.app_processes.push(Box::new(|token| {
-            Box::pin(process(token))
-        }));
+        self.app_processes
+            .push(Box::new(|token| Box::pin(process(token))));
         self
     }
 
@@ -193,8 +195,8 @@ impl Runner {
             let sigterm_token = token.clone();
             tokio::spawn(async move {
                 use tokio::signal::unix::{signal, SignalKind};
-                let mut sigterm = signal(SignalKind::terminate())
-                    .expect("Failed to set up SIGTERM handler");
+                let mut sigterm =
+                    signal(SignalKind::terminate()).expect("Failed to set up SIGTERM handler");
                 sigterm.recv().await;
                 tracing::info!("Received SIGTERM signal");
                 sigterm_token.cancel();
@@ -239,10 +241,8 @@ impl Runner {
         if !closers.is_empty() {
             tracing::info!("Running closers with timeout of {:?}", closer_timeout);
 
-            let closer_result = tokio::time::timeout(
-                closer_timeout,
-                Self::run_closers_static(closers),
-            ).await;
+            let closer_result =
+                tokio::time::timeout(closer_timeout, Self::run_closers_static(closers)).await;
 
             match closer_result {
                 Ok(_) => {
@@ -269,9 +269,7 @@ impl Runner {
         let mut closer_set = JoinSet::new();
 
         for closer in closers {
-            closer_set.spawn(async move {
-                closer().await
-            });
+            closer_set.spawn(async move { closer().await });
         }
 
         while let Some(result) = closer_set.join_next().await {

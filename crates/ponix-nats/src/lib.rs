@@ -18,6 +18,8 @@ pub use traits::{JetStreamConsumer, JetStreamPublisher, PullConsumer};
 pub use protobuf::{create_protobuf_processor, DecodedMessage, ProtobufHandler};
 
 #[cfg(feature = "processed-envelope")]
-pub use processed_envelope_processor::create_processed_envelope_processor;
+pub use processed_envelope_processor::{
+    create_clickhouse_processor, create_processed_envelope_processor,
+};
 #[cfg(feature = "processed-envelope")]
 pub use processed_envelope_producer::ProcessedEnvelopeProducer;

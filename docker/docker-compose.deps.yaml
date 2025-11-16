@@ -18,10 +18,33 @@ services:
     networks:
       - ponix
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.10
+    container_name: ponix-clickhouse
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native protocol
+    environment:
+      CLICKHOUSE_DB: ponix
+      CLICKHOUSE_USER: ponix
+      CLICKHOUSE_PASSWORD: ponix
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    restart: unless-stopped
+    networks:
+      - ponix
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
 networks:
   ponix:
     name: ponix
 
 volumes:
   nats-data:
+    driver: local
+  clickhouse-data:
     driver: local

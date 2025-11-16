@@ -1,6 +1,6 @@
+use crate::traits::{JetStreamConsumer, PullConsumer};
 use anyhow::{Context, Result};
 use async_nats::jetstream::{self, Message};
-use crate::traits::{JetStreamConsumer, PullConsumer};
 use futures::future::BoxFuture;
 use std::sync::Arc;
 use std::time::Duration;
@@ -241,10 +241,12 @@ mod tests {
         // Set up expectations
         mock_jetstream
             .expect_create_consumer()
-            .withf(|config: &jetstream::consumer::pull::Config, stream_name: &str| {
-                config.durable_name.as_ref().unwrap() == "test-consumer"
-                    && stream_name == "test-stream"
-            })
+            .withf(
+                |config: &jetstream::consumer::pull::Config, stream_name: &str| {
+                    config.durable_name.as_ref().unwrap() == "test-consumer"
+                        && stream_name == "test-stream"
+                },
+            )
             .times(1)
             .returning(|_, _| Ok(Box::new(MockPullConsumer::new())));
 
@@ -345,10 +347,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_processing_result_partial() {
-        let result = ProcessingResult::new(
-            vec![0, 2],
-            vec![(1, Some("error".to_string())), (3, None)],
-        );
+        let result =
+            ProcessingResult::new(vec![0, 2], vec![(1, Some("error".to_string())), (3, None)]);
         assert_eq!(result.ack, vec![0, 2]);
         assert_eq!(result.nak.len(), 2);
         assert_eq!(result.nak[0].0, 1);

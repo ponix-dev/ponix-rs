@@ -1,6 +1,6 @@
+use crate::{BatchProcessor, ProcessingResult};
 use anyhow::Result;
 use async_nats::jetstream::Message;
-use crate::{BatchProcessor, ProcessingResult};
 use futures::future::BoxFuture;
 use prost::Message as ProstMessage;
 use std::sync::Arc;
@@ -34,7 +34,7 @@ impl<T> DecodedMessage<T> {
 /// The handler receives successfully decoded messages and returns a ProcessingResult
 /// indicating which message indices to ack/nak based on business logic
 pub type ProtobufHandler<T> = Arc<
-    dyn Fn(Vec<DecodedMessage<T>>) -> BoxFuture<'static, Result<ProcessingResult>> + Send + Sync
+    dyn Fn(Vec<DecodedMessage<T>>) -> BoxFuture<'static, Result<ProcessingResult>> + Send + Sync,
 >;
 
 /// Creates a generic batch processor that decodes protobuf messages and delegates
@@ -159,8 +159,12 @@ mod tests {
     #[tokio::test]
     async fn test_all_messages_decode_successfully() {
         // Create test messages
-        let _msg1 = TestMessage { content: "hello".to_string() };
-        let _msg2 = TestMessage { content: "world".to_string() };
+        let _msg1 = TestMessage {
+            content: "hello".to_string(),
+        };
+        let _msg2 = TestMessage {
+            content: "world".to_string(),
+        };
 
         // Create handler that validates it receives decoded messages
         // and returns ack indices
@@ -173,9 +177,7 @@ mod tests {
                 assert_eq!(decoded_messages[1].decoded.content, "world");
 
                 // Build ack indices from the decoded messages
-                let ack_indices: Vec<usize> = decoded_messages.iter()
-                    .map(|dm| dm.index)
-                    .collect();
+                let ack_indices: Vec<usize> = decoded_messages.iter().map(|dm| dm.index).collect();
 
                 Ok(ProcessingResult::new(ack_indices, vec![]))
             })
@@ -218,9 +220,7 @@ mod tests {
     async fn test_handler_error_propagates() {
         // Test that errors from the business handler propagate correctly
         let handler: ProtobufHandler<TestMessage> = Arc::new(|_decoded_messages| {
-            Box::pin(async move {
-                Err(anyhow::anyhow!("Handler error"))
-            })
+            Box::pin(async move { Err(anyhow::anyhow!("Handler error")) })
         });
 
         let _processor = create_protobuf_processor(handler);

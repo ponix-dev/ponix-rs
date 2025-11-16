@@ -8,17 +8,30 @@ services:
     image: ponix-all-in-one:latest
     container_name: ponix-all-in-one
     environment:
+      # Service configuration
       PONIX_LOG_LEVEL: debug
       PONIX_MESSAGE: "Hello from ponix-rs!"
       PONIX_INTERVAL_SECS: "3"
+      PONIX_STARTUP_TIMEOUT_SECS: "30"
+
+      # NATS configuration
       PONIX_NATS_URL: "nats://ponix-nats:4222"
       PONIX_NATS_STREAM: "processed_envelopes"
       PONIX_NATS_SUBJECT: "processed_envelopes.>"
       PONIX_NATS_BATCH_SIZE: "30"
       PONIX_NATS_BATCH_WAIT_SECS: "5"
-      PONIX_STARTUP_TIMEOUT_SECS: "30"
+
+      # ClickHouse configuration
+      PONIX_CLICKHOUSE_URL: "http://ponix-clickhouse:8123"
+      PONIX_CLICKHOUSE_NATIVE_URL: "ponix-clickhouse:9000"
+      PONIX_CLICKHOUSE_DATABASE: "ponix"
+      PONIX_CLICKHOUSE_USERNAME: "ponix"
+      PONIX_CLICKHOUSE_PASSWORD: "ponix"
+      PONIX_CLICKHOUSE_MIGRATIONS_DIR: "/home/ponix/migrations"
+      PONIX_CLICKHOUSE_GOOSE_BINARY_PATH: "/usr/local/bin/goose"
     depends_on:
       - nats
+      - clickhouse
     restart: unless-stopped
     networks:
       - ponix

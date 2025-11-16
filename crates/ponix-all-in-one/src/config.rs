@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use config::{Config, ConfigError, Environment};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ServiceConfig {
@@ -39,6 +39,35 @@ pub struct ServiceConfig {
     /// Startup timeout for initialization operations in seconds
     #[serde(default = "default_startup_timeout_secs")]
     pub startup_timeout_secs: u64,
+
+    // ClickHouse configuration
+    /// ClickHouse HTTP URL (for client connections)
+    #[serde(default = "default_clickhouse_url")]
+    pub clickhouse_url: String,
+
+    /// ClickHouse native TCP URL (for migrations with goose)
+    #[serde(default = "default_clickhouse_native_url")]
+    pub clickhouse_native_url: String,
+
+    /// ClickHouse database name
+    #[serde(default = "default_clickhouse_database")]
+    pub clickhouse_database: String,
+
+    /// ClickHouse username
+    #[serde(default = "default_clickhouse_username")]
+    pub clickhouse_username: String,
+
+    /// ClickHouse password
+    #[serde(default = "default_clickhouse_password")]
+    pub clickhouse_password: String,
+
+    /// Path to migrations directory
+    #[serde(default = "default_clickhouse_migrations_dir")]
+    pub clickhouse_migrations_dir: String,
+
+    /// Path to goose binary
+    #[serde(default = "default_clickhouse_goose_binary_path")]
+    pub clickhouse_goose_binary_path: String,
 }
 
 fn default_message() -> String {
@@ -76,6 +105,35 @@ fn default_nats_batch_wait_secs() -> u64 {
 
 fn default_startup_timeout_secs() -> u64 {
     30
+}
+
+// ClickHouse defaults
+fn default_clickhouse_url() -> String {
+    "http://localhost:8123".to_string()
+}
+
+fn default_clickhouse_native_url() -> String {
+    "localhost:9000".to_string()
+}
+
+fn default_clickhouse_database() -> String {
+    "ponix".to_string()
+}
+
+fn default_clickhouse_username() -> String {
+    "ponix".to_string()
+}
+
+fn default_clickhouse_password() -> String {
+    "ponix".to_string()
+}
+
+fn default_clickhouse_migrations_dir() -> String {
+    "/home/ponix/migrations".to_string()
+}
+
+fn default_clickhouse_goose_binary_path() -> String {
+    "goose".to_string()
 }
 
 impl ServiceConfig {

@@ -1,6 +1,6 @@
+use anyhow::Result;
 use async_nats::jetstream;
 use async_trait::async_trait;
-use anyhow::Result;
 
 /// Trait for JetStream consumer operations
 /// Abstracts the operations needed to create and use a NATS JetStream consumer
