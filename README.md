@@ -1,17 +1,19 @@
-# Ponix RS
+# ponix-rs
 
-A Rust-based event processing service demonstrating NATS JetStream and ClickHouse integration with graceful lifecycle management.
+A Rust-based IoT data ingestion platform
 
 ## Overview
 
-`ponix-all-in-one` is a full-featured service that:
-- Publishes ProcessedEnvelope messages to NATS JetStream
-- Consumes and batches messages from NATS
-- Stores envelopes in ClickHouse with automatic schema migrations
-- Handles graceful startup and shutdown with proper resource cleanup
+ponix-rs is an IoT data ingestion platform designed to handle device telemetry at scale. The `ponix-all-in-one` service provides:
+- **Device Management**: Register and track IoT devices with PostgreSQL
+- **Event Ingestion**: Process ProcessedEnvelope messages via NATS JetStream
+- **Analytics Storage**: Batch write telemetry data to ClickHouse for time-series analysis
+- **Graceful Lifecycle**: Coordinated startup/shutdown with proper resource cleanup
 
 **Key Features:**
 - Multi-architecture Docker support (ARM64/AMD64)
+- Multi-database support (ClickHouse for events, PostgreSQL for devices)
+- Generic migration framework supporting multiple database types
 - Environment-based configuration
 - Integration test suite with testcontainers
 - Automated database migrations via goose
@@ -24,12 +26,14 @@ This is a Cargo workspace containing multiple crates:
 ponix-rs/
 ├── Cargo.toml              # Workspace configuration
 ├── docker/                 # Docker Compose configurations
-│   ├── docker-compose.deps.yaml    # Infrastructure (NATS, ClickHouse)
+│   ├── docker-compose.deps.yaml    # Infrastructure (NATS, ClickHouse, PostgreSQL)
 │   └── docker-compose.service.yaml # Application service
 └── crates/
     ├── runner/             # Concurrent application runner
+    ├── goose/              # Generic database migration framework
     ├── ponix-nats/         # NATS JetStream client
     ├── ponix-clickhouse/   # ClickHouse client and migrations
+    ├── ponix-postgres/     # PostgreSQL client and device store
     └── ponix-all-in-one/   # Main service binary
 ```
 
@@ -72,6 +76,7 @@ tilt up
 **Available services:**
 - NATS: `localhost:4222` (monitoring: `localhost:8222`)
 - ClickHouse: HTTP `localhost:8123`, native TCP `localhost:9000`
+- PostgreSQL: `localhost:5432` (database: `ponix`, user: `ponix`, password: `ponix`)
 
 ### Running Tests
 
@@ -99,8 +104,9 @@ cargo test --workspace --features integration-tests -- --test-threads=1
 cargo test --workspace --features integration-tests
 ```
 
-### Viewing Data in ClickHouse
+### Viewing Data
 
+**ClickHouse (event storage):**
 ```bash
 # Connect to ClickHouse
 docker exec -it ponix-clickhouse clickhouse-client -u ponix --password ponix
@@ -110,6 +116,22 @@ SELECT * FROM ponix.processed_envelopes LIMIT 10;
 
 # View JSON data
 SELECT end_device_id, data FROM ponix.processed_envelopes;
+```
+
+**PostgreSQL (device storage):**
+```bash
+# Connect to PostgreSQL
+docker exec -it ponix-postgres psql -U ponix -d ponix
+
+# Query devices
+SELECT * FROM devices;
+
+# List devices by organization
+SELECT * FROM devices WHERE organization_id = 'org-001';
+
+# View device details with timestamps
+SELECT device_id, device_name, organization_id, created_at, updated_at
+FROM devices ORDER BY created_at DESC;
 ```
 
 ## Development
