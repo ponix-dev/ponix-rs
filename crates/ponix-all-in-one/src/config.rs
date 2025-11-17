@@ -158,7 +158,7 @@ fn default_clickhouse_password() -> String {
 }
 
 fn default_clickhouse_migrations_dir() -> String {
-    "/home/ponix/migrations".to_string()
+    "/home/ponix/migrations/clickhouse".to_string()
 }
 
 fn default_clickhouse_goose_binary_path() -> String {
@@ -187,7 +187,7 @@ fn default_postgres_password() -> String {
 }
 
 fn default_postgres_migrations_dir() -> String {
-    "/home/ponix/postgres-migrations".to_string()
+    "/home/ponix/migrations/postgres".to_string()
 }
 
 fn default_postgres_goose_binary_path() -> String {

@@ -58,8 +58,9 @@ COPY --from=builder /build/target/release/ponix-all-in-one /home/ponix/ponix-all
 # CRITICAL: Copy goose binary from builder for migrations
 COPY --from=builder /usr/local/bin/goose /usr/local/bin/goose
 
-# Copy migration files
-COPY crates/ponix-clickhouse/migrations /home/ponix/migrations
+# Copy migration files to organized directories
+COPY crates/ponix-clickhouse/migrations /home/ponix/migrations/clickhouse
+COPY crates/ponix-postgres/migrations /home/ponix/migrations/postgres
 
 # Set ownership
 RUN chown -R ponix:ponix /home/ponix
