@@ -27,11 +27,21 @@ services:
       PONIX_CLICKHOUSE_DATABASE: "ponix"
       PONIX_CLICKHOUSE_USERNAME: "ponix"
       PONIX_CLICKHOUSE_PASSWORD: "ponix"
-      PONIX_CLICKHOUSE_MIGRATIONS_DIR: "/home/ponix/migrations"
+      PONIX_CLICKHOUSE_MIGRATIONS_DIR: "/home/ponix/migrations/clickhouse"
       PONIX_CLICKHOUSE_GOOSE_BINARY_PATH: "/usr/local/bin/goose"
+
+      # PostgreSQL configuration
+      PONIX_POSTGRES_HOST: "ponix-postgres"
+      PONIX_POSTGRES_PORT: "5432"
+      PONIX_POSTGRES_DATABASE: "ponix"
+      PONIX_POSTGRES_USERNAME: "ponix"
+      PONIX_POSTGRES_PASSWORD: "ponix"
+      PONIX_POSTGRES_MIGRATIONS_DIR: "/home/ponix/migrations/postgres"
+      PONIX_POSTGRES_GOOSE_BINARY_PATH: "/usr/local/bin/goose"
     depends_on:
       - nats
       - clickhouse
+      - postgres
     restart: unless-stopped
     networks:
       - ponix

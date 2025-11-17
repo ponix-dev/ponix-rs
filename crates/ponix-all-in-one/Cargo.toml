@@ -13,6 +13,7 @@ path = "src/main.rs"
 ponix-runner = { path = "../runner" }
 ponix-nats = { path = "../ponix-nats", features = ["processed-envelope"] }
 ponix-clickhouse = { path = "../ponix-clickhouse" }
+ponix-postgres = { path = "../ponix-postgres" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

@@ -68,6 +68,35 @@ pub struct ServiceConfig {
     /// Path to goose binary
     #[serde(default = "default_clickhouse_goose_binary_path")]
     pub clickhouse_goose_binary_path: String,
+
+    // PostgreSQL configuration
+    /// PostgreSQL host
+    #[serde(default = "default_postgres_host")]
+    pub postgres_host: String,
+
+    /// PostgreSQL port
+    #[serde(default = "default_postgres_port")]
+    pub postgres_port: u16,
+
+    /// PostgreSQL database name
+    #[serde(default = "default_postgres_database")]
+    pub postgres_database: String,
+
+    /// PostgreSQL username
+    #[serde(default = "default_postgres_username")]
+    pub postgres_username: String,
+
+    /// PostgreSQL password
+    #[serde(default = "default_postgres_password")]
+    pub postgres_password: String,
+
+    /// Path to PostgreSQL migrations directory
+    #[serde(default = "default_postgres_migrations_dir")]
+    pub postgres_migrations_dir: String,
+
+    /// Path to goose binary for PostgreSQL (usually same as ClickHouse)
+    #[serde(default = "default_postgres_goose_binary_path")]
+    pub postgres_goose_binary_path: String,
 }
 
 fn default_message() -> String {
@@ -129,10 +158,39 @@ fn default_clickhouse_password() -> String {
 }
 
 fn default_clickhouse_migrations_dir() -> String {
-    "/home/ponix/migrations".to_string()
+    "/home/ponix/migrations/clickhouse".to_string()
 }
 
 fn default_clickhouse_goose_binary_path() -> String {
+    "goose".to_string()
+}
+
+// PostgreSQL defaults
+fn default_postgres_host() -> String {
+    "localhost".to_string()
+}
+
+fn default_postgres_port() -> u16 {
+    5432
+}
+
+fn default_postgres_database() -> String {
+    "ponix".to_string()
+}
+
+fn default_postgres_username() -> String {
+    "ponix".to_string()
+}
+
+fn default_postgres_password() -> String {
+    "ponix".to_string()
+}
+
+fn default_postgres_migrations_dir() -> String {
+    "/home/ponix/migrations/postgres".to_string()
+}
+
+fn default_postgres_goose_binary_path() -> String {
     "goose".to_string()
 }
 

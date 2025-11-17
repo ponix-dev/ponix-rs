@@ -44,8 +44,12 @@ impl Image for ClickHouse24 {
 
     fn env_vars(
         &self,
-    ) -> impl IntoIterator<Item = (impl Into<std::borrow::Cow<'_, str>>, impl Into<std::borrow::Cow<'_, str>>)>
-    {
+    ) -> impl IntoIterator<
+        Item = (
+            impl Into<std::borrow::Cow<'_, str>>,
+            impl Into<std::borrow::Cow<'_, str>>,
+        ),
+    > {
         self.inner.env_vars()
     }
 
@@ -94,13 +98,15 @@ async fn test_migrations_and_batch_write() {
     // PHASE 1: Run migrations
     // Use CARGO_MANIFEST_DIR to get absolute path to migrations directory
     let migrations_dir = format!("{}/migrations", env!("CARGO_MANIFEST_DIR"));
+    let dsn = format!(
+        "clickhouse://default:@{}/default?allow_experimental_json_type=1",
+        native_url
+    );
     let migration_runner = MigrationRunner::new(
         "goose".to_string(),
         migrations_dir,
-        native_url,
-        "default".to_string(),
-        "default".to_string(),
-        "".to_string(),
+        "clickhouse".to_string(),
+        dsn,
     );
 
     migration_runner
@@ -213,13 +219,15 @@ async fn test_large_batch_write() {
     // Run migrations first
     // Use CARGO_MANIFEST_DIR to get absolute path to migrations directory
     let migrations_dir = format!("{}/migrations", env!("CARGO_MANIFEST_DIR"));
+    let dsn = format!(
+        "clickhouse://default:@{}/default?allow_experimental_json_type=1",
+        native_url
+    );
     let migration_runner = MigrationRunner::new(
         "goose".to_string(),
         migrations_dir,
-        native_url,
-        "default".to_string(),
-        "default".to_string(),
-        "".to_string(),
+        "clickhouse".to_string(),
+        dsn,
     );
 
     migration_runner

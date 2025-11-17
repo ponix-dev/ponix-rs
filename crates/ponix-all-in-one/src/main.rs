@@ -1,7 +1,7 @@
 mod config;
 
 use anyhow::Result;
-use ponix_clickhouse::{ClickHouseClient, EnvelopeStore, MigrationRunner};
+use ponix_clickhouse::{ClickHouseClient, EnvelopeStore};
 use ponix_nats::{
     create_clickhouse_processor, NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
 };
@@ -39,23 +39,50 @@ async fn main() {
         startup_timeout
     );
 
-    // PHASE 1: Run ClickHouse migrations
-    info!("Running ClickHouse migrations...");
-    let migration_runner = MigrationRunner::new(
-        config.clickhouse_goose_binary_path.clone(),
-        config.clickhouse_migrations_dir.clone(),
-        config.clickhouse_native_url.clone(), // Use native TCP URL for goose
-        config.clickhouse_database.clone(),
-        config.clickhouse_username.clone(),
-        config.clickhouse_password.clone(),
+    // PHASE 1: Run PostgreSQL migrations
+    info!("Running PostgreSQL migrations...");
+    let postgres_dsn = format!(
+        "postgres://{}:{}@{}:{}/{}?sslmode=disable",
+        config.postgres_username,
+        config.postgres_password,
+        config.postgres_host,
+        config.postgres_port,
+        config.postgres_database
+    );
+    let postgres_migration_runner = ponix_postgres::MigrationRunner::new(
+        config.postgres_goose_binary_path.clone(),
+        config.postgres_migrations_dir.clone(),
+        "postgres".to_string(),
+        postgres_dsn,
     );
 
-    if let Err(e) = migration_runner.run_migrations().await {
-        error!("Failed to run migrations: {}", e);
+    if let Err(e) = postgres_migration_runner.run_migrations().await {
+        error!("Failed to run PostgreSQL migrations: {}", e);
         std::process::exit(1);
     }
 
-    // PHASE 2: Initialize ClickHouse client
+    // PHASE 2: Run ClickHouse migrations
+    info!("Running ClickHouse migrations...");
+    let clickhouse_dsn = format!(
+        "clickhouse://{}:{}@{}/{}?allow_experimental_json_type=1",
+        config.clickhouse_username,
+        config.clickhouse_password,
+        config.clickhouse_native_url,
+        config.clickhouse_database
+    );
+    let clickhouse_migration_runner = ponix_clickhouse::MigrationRunner::new(
+        config.clickhouse_goose_binary_path.clone(),
+        config.clickhouse_migrations_dir.clone(),
+        "clickhouse".to_string(),
+        clickhouse_dsn,
+    );
+
+    if let Err(e) = clickhouse_migration_runner.run_migrations().await {
+        error!("Failed to run ClickHouse migrations: {}", e);
+        std::process::exit(1);
+    }
+
+    // PHASE 3: Initialize ClickHouse client
     info!("Connecting to ClickHouse...");
     let clickhouse_client = ClickHouseClient::new(
         &config.clickhouse_url,
@@ -73,7 +100,7 @@ async fn main() {
     let envelope_store =
         EnvelopeStore::new(clickhouse_client.clone(), "processed_envelopes".to_string());
 
-    // PHASE 3: Connect to NATS
+    // PHASE 4: Connect to NATS
     let nats_client = match NatsClient::connect(&config.nats_url, startup_timeout).await {
         Ok(client) => client,
         Err(e) => {
@@ -87,7 +114,7 @@ async fn main() {
         std::process::exit(1);
     }
 
-    // PHASE 4: Create ClickHouse-enabled processor
+    // PHASE 5: Create ClickHouse-enabled processor
     let processor = create_clickhouse_processor(move |envelopes| {
         let store = envelope_store.clone();
         async move { store.store_processed_envelopes(envelopes).await }
