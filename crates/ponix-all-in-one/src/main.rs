@@ -41,13 +41,18 @@ async fn main() {
 
     // PHASE 1: Run ClickHouse migrations
     info!("Running ClickHouse migrations...");
+    let dsn = format!(
+        "clickhouse://{}:{}@{}/{}?allow_experimental_json_type=1",
+        config.clickhouse_username,
+        config.clickhouse_password,
+        config.clickhouse_native_url,
+        config.clickhouse_database
+    );
     let migration_runner = MigrationRunner::new(
         config.clickhouse_goose_binary_path.clone(),
         config.clickhouse_migrations_dir.clone(),
-        config.clickhouse_native_url.clone(), // Use native TCP URL for goose
-        config.clickhouse_database.clone(),
-        config.clickhouse_username.clone(),
-        config.clickhouse_password.clone(),
+        "clickhouse".to_string(),
+        dsn,
     );
 
     if let Err(e) = migration_runner.run_migrations().await {
