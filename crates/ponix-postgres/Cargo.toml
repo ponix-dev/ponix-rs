@@ -1,0 +1,40 @@
+[package]
+name = "ponix-postgres"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# PostgreSQL client
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
+# Connection pooling
+deadpool-postgres = "0.14"
+
+# Async runtime
+tokio.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Migration runner
+goose = { path = "../goose" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["postgres"] }
+
+[features]
+default = []
+integration-tests = []

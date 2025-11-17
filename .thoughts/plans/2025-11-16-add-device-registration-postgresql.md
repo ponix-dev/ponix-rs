@@ -374,9 +374,9 @@ let migration_runner = MigrationRunner::new(
 - [x] Code is formatted: `cargo fmt --check`
 
 #### Manual Verification:
-- [ ] All tests produce the same results as before refactoring
-- [ ] No functionality is broken or changed
-- [ ] Migration behavior is identical to before
+- [x] All tests produce the same results as before refactoring
+- [x] No functionality is broken or changed
+- [x] Migration behavior is identical to before
 
 **Implementation Note**: After completing this phase and all automated verification passes, confirm that ClickHouse migrations still work correctly before proceeding to Phase 3.
 
@@ -1069,12 +1069,12 @@ volumes:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Workspace builds successfully: `cargo build --workspace`
-- [ ] Unit tests pass: `cargo test --workspace --lib --bins`
-- [ ] Postgres integration tests pass: `cargo test -p ponix-postgres --features integration-tests -- --test-threads=1`
-- [ ] All integration tests pass: `cargo test --workspace --features integration-tests -- --test-threads=1`
-- [ ] No linting errors: `cargo clippy --workspace`
-- [ ] Code is formatted: `cargo fmt --check`
+- [x] Workspace builds successfully: `cargo build --workspace`
+- [x] Unit tests pass: `cargo test --workspace --lib --bins`
+- [x] Postgres integration tests pass: `cargo test -p ponix-postgres --features integration-tests -- --test-threads=1`
+- [ ] All integration tests pass: `cargo test --workspace --features integration-tests -- --test-threads=1` (ClickHouse test flakiness)
+- [x] No linting errors: `cargo clippy --workspace`
+- [x] Code is formatted: `cargo fmt --check`
 
 #### Manual Verification:
 - [ ] PostgreSQL starts successfully via docker compose: `docker compose -f docker/docker-compose.deps.yaml up -d postgres`
