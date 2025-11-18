@@ -1,4 +1,4 @@
-use ponix_domain::{CreateDeviceInput, DeviceRepository, GetDeviceInput, ListDevicesInput};
+use ponix_domain::{CreateDeviceInputWithId, DeviceRepository, GetDeviceInput, ListDevicesInput};
 use ponix_postgres::{MigrationRunner, PostgresClient, PostgresDeviceRepository};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
@@ -43,7 +43,7 @@ async fn setup_test_db() -> (ContainerAsync<Postgres>, PostgresDeviceRepository)
 async fn test_create_and_get_device() {
     let (_container, repo) = setup_test_db().await;
 
-    let input = CreateDeviceInput {
+    let input = CreateDeviceInputWithId {
         device_id: "test-device-123".to_string(),
         organization_id: "test-org-456".to_string(),
         name: "Test Device".to_string(),
@@ -86,7 +86,7 @@ async fn test_list_devices_by_organization() {
 
     // Create multiple devices
     for i in 1..=3 {
-        let input = CreateDeviceInput {
+        let input = CreateDeviceInputWithId {
             device_id: format!("device-{}", i),
             organization_id: "test-org".to_string(),
             name: format!("Device {}", i),
@@ -122,7 +122,7 @@ async fn test_list_devices_for_empty_organization() {
 async fn test_create_duplicate_device() {
     let (_container, repo) = setup_test_db().await;
 
-    let input = CreateDeviceInput {
+    let input = CreateDeviceInputWithId {
         device_id: "duplicate-device".to_string(),
         organization_id: "test-org".to_string(),
         name: "Original Device".to_string(),

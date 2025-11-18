@@ -17,12 +17,9 @@ impl DeviceService {
     }
 
     /// Create a new device with business logic validation
+    /// Generates a unique device_id using xid
     pub async fn create_device(&self, input: CreateDeviceInput) -> DomainResult<Device> {
         // Business logic: validate inputs
-        if input.device_id.is_empty() {
-            return Err(DomainError::InvalidDeviceId("Device ID cannot be empty".to_string()));
-        }
-
         if input.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId("Organization ID cannot be empty".to_string()));
         }
@@ -31,9 +28,19 @@ impl DeviceService {
             return Err(DomainError::InvalidDeviceName("Device name cannot be empty".to_string()));
         }
 
-        debug!(device_id = %input.device_id, organization_id = %input.organization_id, "Creating device");
+        // Generate unique device ID
+        let device_id = xid::new().to_string();
 
-        let device = self.repository.create_device(input).await?;
+        debug!(device_id = %device_id, organization_id = %input.organization_id, "Creating device");
+
+        // Create input with generated ID for repository
+        let repo_input = crate::types::CreateDeviceInputWithId {
+            device_id,
+            organization_id: input.organization_id,
+            name: input.name,
+        };
+
+        let device = self.repository.create_device(repo_input).await?;
 
         info!(device_id = %device.device_id, "Device created successfully");
         Ok(device)
@@ -87,8 +94,8 @@ mod tests {
 
         mock_repo
             .expect_create_device()
-            .withf(|input: &CreateDeviceInput| {
-                input.device_id == "device-123"
+            .withf(|input: &crate::types::CreateDeviceInputWithId| {
+                !input.device_id.is_empty() // ID is generated
                     && input.organization_id == "org-456"
                     && input.name == "Test Device"
             })
@@ -98,7 +105,6 @@ mod tests {
         let service = DeviceService::new(Arc::new(mock_repo));
 
         let input = CreateDeviceInput {
-            device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Device".to_string(),
         };
@@ -107,24 +113,23 @@ mod tests {
         assert!(result.is_ok());
 
         let device = result.unwrap();
-        assert_eq!(device.device_id, "device-123");
+        assert!(!device.device_id.is_empty()); // ID was generated
         assert_eq!(device.name, "Test Device");
     }
 
     #[tokio::test]
-    async fn test_create_device_empty_id() {
+    async fn test_create_device_empty_name() {
         let mock_repo = MockDeviceRepository::new();
         let service = DeviceService::new(Arc::new(mock_repo));
 
         let input = CreateDeviceInput {
-            device_id: "".to_string(),
             organization_id: "org-456".to_string(),
-            name: "Test Device".to_string(),
+            name: "".to_string(),
         };
 
         let result = service.create_device(input).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DomainError::InvalidDeviceId(_)));
+        assert!(matches!(result.unwrap_err(), DomainError::InvalidDeviceName(_)));
     }
 
     #[tokio::test]

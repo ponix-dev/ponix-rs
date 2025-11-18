@@ -3,7 +3,7 @@ use chrono::Utc;
 use tracing::debug;
 
 use ponix_domain::{
-    CreateDeviceInput, Device, DeviceRepository, DomainError, DomainResult,
+    CreateDeviceInputWithId, Device, DeviceRepository, DomainError, DomainResult,
     GetDeviceInput, ListDevicesInput,
 };
 
@@ -24,7 +24,7 @@ impl PostgresDeviceRepository {
 
 #[async_trait]
 impl DeviceRepository for PostgresDeviceRepository {
-    async fn create_device(&self, input: CreateDeviceInput) -> DomainResult<Device> {
+    async fn create_device(&self, input: CreateDeviceInputWithId) -> DomainResult<Device> {
         let conn = self.client.get_connection().await
             .map_err(DomainError::RepositoryError)?;
 

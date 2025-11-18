@@ -15,6 +15,7 @@ ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "
 prost-types = { workspace = true }
 chrono = "0.4"
 tracing = { workspace = true }
+xid = { workspace = true }
 
 [dev-dependencies]
 mockall = "0.13"
