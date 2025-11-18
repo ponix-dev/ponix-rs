@@ -2,6 +2,7 @@
 github-cli = "latest"
 tilt = "latest"
 rust = "latest"
+grpcurl = "latest"
 
 # all envs should be set in a .env file
 [env]

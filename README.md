@@ -5,7 +5,7 @@ A Rust-based IoT data ingestion platform
 ## Overview
 
 ponix-rs is an IoT data ingestion platform designed to handle device telemetry at scale. The `ponix-all-in-one` service provides:
-- **Device Management**: Register and track IoT devices with PostgreSQL
+- **Device Management API**: gRPC API for registering and managing IoT devices with PostgreSQL
 - **Event Ingestion**: Process ProcessedEnvelope messages via NATS JetStream
 - **Analytics Storage**: Batch write telemetry data to ClickHouse for time-series analysis
 - **Graceful Lifecycle**: Coordinated startup/shutdown with proper resource cleanup
@@ -33,7 +33,9 @@ ponix-rs/
     ├── goose/              # Generic database migration framework
     ├── ponix-nats/         # NATS JetStream client
     ├── ponix-clickhouse/   # ClickHouse client and migrations
-    ├── ponix-postgres/     # PostgreSQL client and device store
+    ├── ponix-postgres/     # PostgreSQL device repository implementation
+    ├── ponix-domain/       # Domain layer (business logic and repository trait)
+    ├── ponix-grpc/         # gRPC API handlers for device management
     └── ponix-all-in-one/   # Main service binary
 ```
 
@@ -77,6 +79,7 @@ tilt up
 - NATS: `localhost:4222` (monitoring: `localhost:8222`)
 - ClickHouse: HTTP `localhost:8123`, native TCP `localhost:9000`
 - PostgreSQL: `localhost:5432` (database: `ponix`, user: `ponix`, password: `ponix`)
+- gRPC API: `localhost:50051` (device management)
 
 ### Running Tests
 
@@ -102,6 +105,50 @@ cargo test --workspace --features integration-tests -- --test-threads=1
 
 # All tests
 cargo test --workspace --features integration-tests
+```
+
+## API Usage
+
+### gRPC Device Management API
+
+The service exposes a gRPC API for device management on port `50051` (configurable via `PONIX_GRPC_PORT`).
+
+**Available endpoints:**
+- `CreateEndDevice` - Create a new device (device_id generated server-side)
+- `GetEndDevice` - Retrieve a device by ID
+- `ListEndDevices` - List all devices for an organization
+
+**Using grpcurl:**
+
+```bash
+# Install grpcurl
+brew install grpcurl
+
+# List available services
+grpcurl -plaintext localhost:50051 list
+
+# Create a device
+grpcurl -plaintext -d '{
+  "organization_id": "org-001",
+  "name": "Sensor Alpha"
+}' localhost:50051 ponix.end_device.v1.EndDeviceService/CreateEndDevice
+
+# Get a device
+grpcurl -plaintext -d '{
+  "device_id": "cm3rnbgek0000j5d37r63jnmn"
+}' localhost:50051 ponix.end_device.v1.EndDeviceService/GetEndDevice
+
+# List devices for an organization
+grpcurl -plaintext -d '{
+  "organization_id": "org-001"
+}' localhost:50051 ponix.end_device.v1.EndDeviceService/ListEndDevices
+```
+
+**Configuration:**
+```bash
+# Environment variables
+PONIX_GRPC_HOST=0.0.0.0  # Default: 0.0.0.0
+PONIX_GRPC_PORT=50051    # Default: 50051
 ```
 
 ### Viewing Data

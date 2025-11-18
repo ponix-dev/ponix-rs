@@ -6,6 +6,8 @@ members = [
     "crates/ponix-all-in-one",
     "crates/goose",
     "crates/ponix-postgres",
+    "crates/ponix-domain",
+    "crates/ponix-grpc",
 ]
 resolver = "2"
 

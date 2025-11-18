@@ -97,6 +97,15 @@ pub struct ServiceConfig {
     /// Path to goose binary for PostgreSQL (usually same as ClickHouse)
     #[serde(default = "default_postgres_goose_binary_path")]
     pub postgres_goose_binary_path: String,
+
+    // gRPC configuration
+    /// gRPC server host
+    #[serde(default = "default_grpc_host")]
+    pub grpc_host: String,
+
+    /// gRPC server port
+    #[serde(default = "default_grpc_port")]
+    pub grpc_port: u16,
 }
 
 fn default_message() -> String {
@@ -192,6 +201,15 @@ fn default_postgres_migrations_dir() -> String {
 
 fn default_postgres_goose_binary_path() -> String {
     "goose".to_string()
+}
+
+// gRPC defaults
+fn default_grpc_host() -> String {
+    "0.0.0.0".to_string()
+}
+
+fn default_grpc_port() -> u16 {
+    50051
 }
 
 impl ServiceConfig {

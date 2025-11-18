@@ -2,12 +2,16 @@ mod config;
 
 use anyhow::Result;
 use ponix_clickhouse::{ClickHouseClient, EnvelopeStore};
+use ponix_domain::DeviceService;
+use ponix_grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_nats::{
     create_clickhouse_processor, NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
 };
+use ponix_postgres::{PostgresClient, PostgresDeviceRepository};
 use ponix_proto::envelope::v1::ProcessedEnvelope;
 use ponix_runner::Runner;
 use prost_types::Timestamp;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, error, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -60,6 +64,29 @@ async fn main() {
         error!("Failed to run PostgreSQL migrations: {}", e);
         std::process::exit(1);
     }
+
+    // Initialize PostgreSQL client for device repository
+    info!("Connecting to PostgreSQL...");
+    let postgres_client = match PostgresClient::new(
+        &config.postgres_host,
+        config.postgres_port,
+        &config.postgres_database,
+        &config.postgres_username,
+        &config.postgres_password,
+        5, // max connections
+    ) {
+        Ok(client) => client,
+        Err(e) => {
+            error!("Failed to create PostgreSQL client: {}", e);
+            std::process::exit(1);
+        }
+    };
+    info!("PostgreSQL connection established");
+
+    // Initialize device repository and domain service
+    let device_repository = PostgresDeviceRepository::new(postgres_client);
+    let device_service = Arc::new(DeviceService::new(Arc::new(device_repository)));
+    info!("Device service initialized");
 
     // PHASE 2: Run ClickHouse migrations
     info!("Running ClickHouse migrations...");
@@ -144,13 +171,23 @@ async fn main() {
     let publisher_client = nats_client.create_publisher_client();
     let producer = ProcessedEnvelopeProducer::new(publisher_client, config.nats_stream.clone());
 
-    // Create runner with producer and consumer processes
+    // Create gRPC server configuration
+    let grpc_config = GrpcServerConfig {
+        host: config.grpc_host.clone(),
+        port: config.grpc_port,
+    };
+
+    // Create runner with producer, consumer, and gRPC server processes
     let runner = Runner::new()
         .with_app_process({
             let config = config.clone();
             move |ctx| Box::pin(async move { run_producer_service(ctx, config, producer).await })
         })
         .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
+        .with_app_process({
+            let service = device_service.clone();
+            move |ctx| Box::pin(async move { run_grpc_server(grpc_config, service, ctx).await })
+        })
         .with_closer(move || {
             Box::pin(async move {
                 info!("Running cleanup tasks...");

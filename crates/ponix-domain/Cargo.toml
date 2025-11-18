@@ -1,0 +1,22 @@
+[package]
+name = "ponix-domain"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+async-trait = "0.1"
+
+# Protobuf types for domain models
+ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf" }
+prost-types = { workspace = true }
+chrono = "0.4"
+tracing = { workspace = true }
+xid = { workspace = true }
+
+[dev-dependencies]
+mockall = "0.13"
+tokio = { workspace = true }

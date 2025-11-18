@@ -14,6 +14,8 @@ ponix-runner = { path = "../runner" }
 ponix-nats = { path = "../ponix-nats", features = ["processed-envelope"] }
 ponix-clickhouse = { path = "../ponix-clickhouse" }
 ponix-postgres = { path = "../ponix-postgres" }
+ponix-domain = { path = "../ponix-domain" }
+ponix-grpc = { path = "../ponix-grpc", features = ["device"] }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
