@@ -13,6 +13,15 @@ pub enum PayloadError {
 
     #[error("json serialization error: {0}")]
     JsonError(#[from] serde_json::Error),
+
+    #[error("CEL compilation error: {0}")]
+    CelCompilationError(String),
+
+    #[error("CEL execution error: {0}")]
+    CelExecutionError(String),
+
+    #[error("invalid JSON output from CEL expression")]
+    InvalidJsonOutput,
 }
 
 pub type Result<T> = std::result::Result<T, PayloadError>;
