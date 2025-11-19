@@ -1,8 +1,8 @@
-mod error;
 pub mod cayenne_lpp;
+mod error;
 
-pub use error::{PayloadError, Result};
 pub use cayenne_lpp::CayenneLppDecoder;
+pub use error::{PayloadError, Result};
 
 /// Trait for decoding binary payload formats to JSON
 pub trait PayloadDecoder {

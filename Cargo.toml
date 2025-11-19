@@ -30,3 +30,4 @@ prost-types = "0.13"
 xid = "1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+chrono = "0.4"
