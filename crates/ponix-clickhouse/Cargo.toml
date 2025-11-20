@@ -14,6 +14,7 @@ integration-tests = []
 clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
 tokio = { workspace = true }
 anyhow = { workspace = true }
+async-trait = "0.1"
 tracing = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -23,6 +24,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # Protobuf dependencies for ProcessedEnvelope
 ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf" }
 prost-types = { workspace = true }
+
+# Domain layer dependency
+ponix-domain = { path = "../ponix-domain" }
 
 # Migration runner
 goose = { path = "../goose" }

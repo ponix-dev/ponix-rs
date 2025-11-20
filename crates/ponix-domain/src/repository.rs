@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use crate::error::DomainResult;
-use crate::types::{CreateDeviceInputWithId, Device, GetDeviceInput, ListDevicesInput};
+use crate::types::{CreateDeviceInputWithId, Device, GetDeviceInput, ListDevicesInput, StoreEnvelopesInput};
 
 /// Repository trait for device storage operations
 /// Infrastructure layer (e.g., ponix-postgres) implements this trait
@@ -15,4 +15,15 @@ pub trait DeviceRepository: Send + Sync {
 
     /// List all devices for an organization
     async fn list_devices(&self, input: ListDevicesInput) -> DomainResult<Vec<Device>>;
+}
+
+/// Repository trait for processed envelope storage operations
+/// Infrastructure layer (e.g., ponix-clickhouse) implements this trait
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait ProcessedEnvelopeRepository: Send + Sync {
+    /// Store a batch of processed envelopes
+    /// Implementations should handle chunking if needed for large batches
+    /// Failure handling: entire batch fails atomically (all-or-nothing)
+    async fn store_batch(&self, input: StoreEnvelopesInput) -> DomainResult<()>;
 }

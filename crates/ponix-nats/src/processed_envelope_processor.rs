@@ -1,94 +1,102 @@
 #[cfg(feature = "processed-envelope")]
-use crate::{create_protobuf_processor, BatchProcessor, ProcessingResult, ProtobufHandler};
+use crate::{ BatchProcessor, ProcessingResult};
 #[cfg(feature = "processed-envelope")]
-use ponix_proto::envelope::v1::ProcessedEnvelope;
+use anyhow::Result;
+#[cfg(feature = "processed-envelope")]
+use futures::future::BoxFuture;
+#[cfg(feature = "processed-envelope")]
+use ponix_domain::{ProcessedEnvelopeService, types::StoreEnvelopesInput};
+#[cfg(feature = "processed-envelope")]
+use ponix_proto::envelope::v1::ProcessedEnvelope as ProtoEnvelope;
 #[cfg(feature = "processed-envelope")]
 use std::sync::Arc;
 #[cfg(feature = "processed-envelope")]
-use tracing::{error, info};
+use tracing::{debug, error};
 
-/// Creates the default batch processor for ProcessedEnvelope messages
-/// This processor uses the generic protobuf processor with business logic
-/// that logs envelope details
 #[cfg(feature = "processed-envelope")]
-pub fn create_processed_envelope_processor() -> BatchProcessor {
-    // Define business logic handler that works with decoded messages
-    let handler: ProtobufHandler<ProcessedEnvelope> = Arc::new(|decoded_messages| {
+use crate::conversions::proto_to_domain_envelope;
+
+/// Create a batch processor that converts protobuf envelopes to domain types
+/// and stores them via the domain service
+#[cfg(feature = "processed-envelope")]
+pub fn create_domain_processor(
+    service: Arc<ProcessedEnvelopeService>,
+) -> BatchProcessor {
+    Box::new(move |messages: &[async_nats::jetstream::Message]| {
+        let service = service.clone();
+
+        // Decode protobuf messages immediately (while we still have access to the slice)
+        use prost::Message as ProstMessage;
+
+        let mut decoded_envelopes = Vec::new();
+        let mut decode_errors = Vec::new();
+
+        for (index, msg) in messages.iter().enumerate() {
+            match ProtoEnvelope::decode(&msg.payload[..]) {
+                Ok(proto_envelope) => decoded_envelopes.push((index, proto_envelope)),
+                Err(e) => {
+                    error!("Failed to decode protobuf message at index {}: {}", index, e);
+                    decode_errors.push((index, Some(format!("Decode error: {}", e))));
+                }
+            }
+        }
+
         Box::pin(async move {
-            // Collect indices of all messages to ack
-            let mut ack_indices = Vec::new();
-
-            // Process each successfully decoded envelope
-            for decoded_msg in decoded_messages {
-                let envelope = &decoded_msg.decoded;
-
-                info!(
-                    end_device_id = %envelope.end_device_id,
-                    organization_id = %envelope.organization_id,
-                    occurred_at = ?envelope.occurred_at,
-                    processed_at = ?envelope.processed_at,
-                    "Processed envelope from NATS"
-                );
-
-                // All envelopes are successfully processed, ack them
-                ack_indices.push(decoded_msg.index);
+            if decoded_envelopes.is_empty() {
+                debug!("No ProcessedEnvelope messages to process");
+                // Nak all messages that failed to decode
+                return Ok(ProcessingResult::new(vec![], decode_errors));
             }
 
-            // Return processing result with all acks, no naks
-            Ok(ProcessingResult::new(ack_indices, vec![]))
-        })
-    });
-
-    // Create processor using generic protobuf processor
-    create_protobuf_processor(handler)
-}
-
-/// Creates a batch processor that writes ProcessedEnvelope messages to ClickHouse
-/// This is a generic handler that can be used with any storage implementation
-#[cfg(feature = "processed-envelope")]
-pub fn create_clickhouse_processor<F, Fut>(store_fn: F) -> BatchProcessor
-where
-    F: Fn(Vec<ProcessedEnvelope>) -> Fut + Send + Sync + 'static,
-    Fut: std::future::Future<Output = anyhow::Result<()>> + Send + 'static,
-{
-    let store_fn = Arc::new(store_fn);
-
-    let handler: ProtobufHandler<ProcessedEnvelope> = Arc::new(move |decoded_messages| {
-        let store_fn = Arc::clone(&store_fn);
-        Box::pin(async move {
-            // Extract envelopes from decoded messages
-            let envelopes: Vec<ProcessedEnvelope> = decoded_messages
+            // Convert protobuf to domain types
+            let domain_envelopes: Result<Vec<_>> = decoded_envelopes
                 .iter()
-                .map(|msg| msg.decoded.clone())
+                .map(|(_, proto)| proto_to_domain_envelope(proto.clone()))
                 .collect();
 
-            let message_count = envelopes.len();
+            let domain_envelopes = match domain_envelopes {
+                Ok(envelopes) => envelopes,
+                Err(e) => {
+                    error!("Failed to convert protobuf to domain: {}", e);
+                    // Nak all messages that failed conversion
+                    let mut nak_indices: Vec<(usize, Option<String>)> = decoded_envelopes
+                        .iter()
+                        .map(|(idx, _)| (*idx, Some(format!("Conversion error: {}", e))))
+                        .collect();
+                    nak_indices.extend(decode_errors);
+                    return Ok(ProcessingResult::new(vec![], nak_indices));
+                }
+            };
 
-            // Store to ClickHouse
-            match store_fn(envelopes).await {
-                Ok(_) => {
-                    info!(
-                        "Successfully stored {} envelopes to ClickHouse",
-                        message_count
+            // Call domain service
+            let input = StoreEnvelopesInput {
+                envelopes: domain_envelopes,
+            };
+
+            match service.store_batch(input).await {
+                Ok(()) => {
+                    debug!(
+                        envelope_count = decoded_envelopes.len(),
+                        "Successfully processed envelope batch"
                     );
-                    // Ack all messages on success
-                    let ack_indices: Vec<usize> =
-                        decoded_messages.iter().map(|msg| msg.index).collect();
-                    Ok(ProcessingResult::new(ack_indices, vec![]))
+                    // Ack all successfully processed messages
+                    let ack_indices: Vec<usize> = decoded_envelopes
+                        .iter()
+                        .map(|(idx, _)| *idx)
+                        .collect();
+                    Ok(ProcessingResult::new(ack_indices, decode_errors))
                 }
                 Err(e) => {
-                    error!("Failed to store envelopes to ClickHouse: {}", e);
-                    // Nack all messages on failure so they can be retried
-                    let error_msg = format!("ClickHouse error: {}", e);
-                    let nak_indices: Vec<(usize, Option<String>)> = decoded_messages
+                    error!("Failed to store envelopes: {}", e);
+                    // Nak all messages that failed storage
+                    let mut nak_indices: Vec<(usize, Option<String>)> = decoded_envelopes
                         .iter()
-                        .map(|msg| (msg.index, Some(error_msg.clone())))
+                        .map(|(idx, _)| (*idx, Some(format!("Storage error: {}", e))))
                         .collect();
+                    nak_indices.extend(decode_errors);
                     Ok(ProcessingResult::new(vec![], nak_indices))
                 }
             }
-        })
-    });
-
-    create_protobuf_processor(handler)
+        }) as BoxFuture<'static, Result<ProcessingResult>>
+    })
 }
