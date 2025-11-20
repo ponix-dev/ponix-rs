@@ -1,11 +1,11 @@
 mod config;
 
 use anyhow::Result;
-use ponix_clickhouse::{ClickHouseClient, EnvelopeStore};
-use ponix_domain::DeviceService;
+use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository};
+use ponix_domain::{DeviceService, ProcessedEnvelopeService};
 use ponix_grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_nats::{
-    create_clickhouse_processor, NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
+    create_domain_processor, NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
 };
 use ponix_postgres::{PostgresClient, PostgresDeviceRepository};
 use ponix_proto::envelope::v1::ProcessedEnvelope;
@@ -124,8 +124,18 @@ async fn main() {
     }
     info!("ClickHouse connection established");
 
-    let envelope_store =
-        EnvelopeStore::new(clickhouse_client.clone(), "processed_envelopes".to_string());
+    // Initialize ProcessedEnvelope domain layer
+    info!("Initializing processed envelope domain service");
+
+    // Create repository (infrastructure layer)
+    let envelope_repository = ClickHouseEnvelopeRepository::new(
+        clickhouse_client.clone(),
+        "processed_envelopes".to_string(),
+    );
+
+    // Create domain service with repository
+    let envelope_service = Arc::new(ProcessedEnvelopeService::new(Arc::new(envelope_repository)));
+    info!("Processed envelope service initialized");
 
     // PHASE 4: Connect to NATS
     let nats_client = match NatsClient::connect(&config.nats_url, startup_timeout).await {
@@ -141,11 +151,8 @@ async fn main() {
         std::process::exit(1);
     }
 
-    // PHASE 5: Create ClickHouse-enabled processor
-    let processor = create_clickhouse_processor(move |envelopes| {
-        let store = envelope_store.clone();
-        async move { store.store_processed_envelopes(envelopes).await }
-    });
+    // PHASE 5: Create processor using domain service
+    let processor = create_domain_processor(envelope_service.clone());
 
     // Create consumer using trait-based API
     let consumer_client = nats_client.create_consumer_client();

@@ -6,6 +6,8 @@ mod traits;
 mod protobuf;
 
 #[cfg(feature = "processed-envelope")]
+mod conversions;
+#[cfg(feature = "processed-envelope")]
 mod processed_envelope_processor;
 #[cfg(feature = "processed-envelope")]
 mod processed_envelope_producer;
@@ -18,8 +20,10 @@ pub use traits::{JetStreamConsumer, JetStreamPublisher, PullConsumer};
 pub use protobuf::{create_protobuf_processor, DecodedMessage, ProtobufHandler};
 
 #[cfg(feature = "processed-envelope")]
+pub use conversions::proto_to_domain_envelope;
+#[cfg(feature = "processed-envelope")]
 pub use processed_envelope_processor::{
-    create_clickhouse_processor, create_processed_envelope_processor,
+    create_domain_processor
 };
 #[cfg(feature = "processed-envelope")]
 pub use processed_envelope_producer::ProcessedEnvelopeProducer;

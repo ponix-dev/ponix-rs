@@ -1,7 +1,6 @@
 use chrono::Utc;
-use ponix_clickhouse::{ClickHouseClient, EnvelopeStore, MigrationRunner};
-use ponix_proto::envelope::v1::ProcessedEnvelope;
-use prost_types::Timestamp;
+use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository, MigrationRunner};
+use ponix_domain::{ProcessedEnvelopeRepository, types::{ProcessedEnvelope as DomainEnvelope, StoreEnvelopesInput}};
 use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::Image;
@@ -114,7 +113,7 @@ async fn test_migrations_and_batch_write() {
         .await
         .expect("Migrations should run successfully");
 
-    // PHASE 2: Create client and store
+    // PHASE 2: Create client and repository
     let client = ClickHouseClient::new(&url_with_scheme, "default", "default", "");
 
     client
@@ -122,73 +121,38 @@ async fn test_migrations_and_batch_write() {
         .await
         .expect("Should be able to ping ClickHouse after migrations");
 
-    let store = EnvelopeStore::new(client.clone(), "processed_envelopes".to_string());
+    let repository = ClickHouseEnvelopeRepository::new(client.clone(), "processed_envelopes".to_string());
 
-    // PHASE 3: Create test envelopes
-    let now_timestamp = {
-        let now = Utc::now();
-        Timestamp {
-            seconds: now.timestamp(),
-            nanos: now.timestamp_subsec_nanos() as i32,
-        }
-    };
+    // PHASE 3: Create test domain envelopes
+    let now = Utc::now();
 
     let envelopes = vec![
-        ProcessedEnvelope {
+        DomainEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-001".to_string(),
-            occurred_at: Some(now_timestamp.clone()),
-            processed_at: Some(now_timestamp.clone()),
-            data: Some(prost_types::Struct {
-                fields: [
-                    (
-                        "temperature".to_string(),
-                        prost_types::Value {
-                            kind: Some(prost_types::value::Kind::NumberValue(25.5)),
-                        },
-                    ),
-                    (
-                        "humidity".to_string(),
-                        prost_types::Value {
-                            kind: Some(prost_types::value::Kind::NumberValue(60.0)),
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-            }),
+            occurred_at: now,
+            processed_at: now,
+            data: serde_json::Map::from_iter([
+                ("temperature".to_string(), serde_json::json!(25.5)),
+                ("humidity".to_string(), serde_json::json!(60.0)),
+            ]),
         },
-        ProcessedEnvelope {
+        DomainEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-002".to_string(),
-            occurred_at: Some(now_timestamp.clone()),
-            processed_at: Some(now_timestamp.clone()),
-            data: Some(prost_types::Struct {
-                fields: [
-                    (
-                        "status".to_string(),
-                        prost_types::Value {
-                            kind: Some(prost_types::value::Kind::StringValue("online".to_string())),
-                        },
-                    ),
-                    (
-                        "battery".to_string(),
-                        prost_types::Value {
-                            kind: Some(prost_types::value::Kind::NumberValue(87.5)),
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-            }),
+            occurred_at: now,
+            processed_at: now,
+            data: serde_json::Map::from_iter([
+                ("status".to_string(), serde_json::json!("online")),
+                ("battery".to_string(), serde_json::json!(87.5)),
+            ]),
         },
     ];
 
-    // PHASE 4: Write envelopes to ClickHouse
-    store
-        .store_processed_envelopes(envelopes)
+    // PHASE 4: Write envelopes to ClickHouse using repository
+    let input = StoreEnvelopesInput { envelopes };
+    repository
+        .store_batch(input)
         .await
         .expect("Should be able to write envelopes");
 
@@ -235,51 +199,31 @@ async fn test_large_batch_write() {
         .await
         .expect("Migrations should run successfully");
 
-    // Create client and store
+    // Create client and repository
     let client = ClickHouseClient::new(&url_with_scheme, "default", "default", "");
-    let store = EnvelopeStore::new(client.clone(), "processed_envelopes".to_string());
+    let repository = ClickHouseEnvelopeRepository::new(client.clone(), "processed_envelopes".to_string());
 
-    // Create a large batch of test envelopes (1000 envelopes)
-    let now_timestamp = {
-        let now = Utc::now();
-        Timestamp {
-            seconds: now.timestamp(),
-            nanos: now.timestamp_subsec_nanos() as i32,
-        }
-    };
+    // Create a large batch of test domain envelopes (1000 envelopes)
+    let now = Utc::now();
 
     let mut envelopes = Vec::with_capacity(1000);
     for i in 0..1000 {
-        envelopes.push(ProcessedEnvelope {
+        envelopes.push(DomainEnvelope {
             organization_id: format!("org-{}", i % 10), // 10 different orgs
             end_device_id: format!("device-{:04}", i),
-            occurred_at: Some(now_timestamp.clone()),
-            processed_at: Some(now_timestamp.clone()),
-            data: Some(prost_types::Struct {
-                fields: [
-                    (
-                        "index".to_string(),
-                        prost_types::Value {
-                            kind: Some(prost_types::value::Kind::NumberValue(i as f64)),
-                        },
-                    ),
-                    (
-                        "batch_test".to_string(),
-                        prost_types::Value {
-                            kind: Some(prost_types::value::Kind::BoolValue(true)),
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-            }),
+            occurred_at: now,
+            processed_at: now,
+            data: serde_json::Map::from_iter([
+                ("index".to_string(), serde_json::json!(i)),
+                ("batch_test".to_string(), serde_json::json!(true)),
+            ]),
         });
     }
 
-    // Write large batch
-    store
-        .store_processed_envelopes(envelopes)
+    // Write large batch using repository
+    let input = StoreEnvelopesInput { envelopes };
+    repository
+        .store_batch(input)
         .await
         .expect("Should be able to write 1000 envelopes");
 
