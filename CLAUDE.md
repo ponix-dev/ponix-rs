@@ -99,12 +99,15 @@ This is a multi-crate Cargo workspace with the following crates:
   - All app processes run concurrently; if any fails, all are cancelled
 
 - **`ponix-domain`**: Domain layer (business logic)
-  - Core domain types: `Device`, `CreateDeviceInput`, `GetDeviceInput`, `ListDevicesInput`
-  - Business logic: `DeviceService` with input validation and ID generation
-  - Repository trait: `DeviceRepository` defines interface for device storage
-  - Domain errors: `DomainError` enum for business logic errors
+  - Core domain types: `Device`, `RawEnvelope`, `ProcessedEnvelope`, and input types
+  - Business logic services:
+    - `DeviceService`: Device management with input validation and ID generation
+    - `EnvelopeService`: Raw → Processed envelope conversion with CEL transformations
+  - Repository traits: `DeviceRepository`, `ProcessedEnvelopeProducer`
+  - Converter traits: `PayloadConverter` for CEL-based payload transformation
+  - Domain errors: `DomainError` enum including `PayloadConversionError`, `MissingCelExpression`
   - Uses `xid` crate for generating unique device IDs
-  - Tested with Mockall mocks
+  - Comprehensive unit and integration tests with Mockall mocks
 
 - **`ponix-grpc`**: gRPC API layer
   - Service handlers implementing Tonic-generated traits
@@ -125,9 +128,18 @@ This is a multi-crate Cargo workspace with the following crates:
 - **`ponix-nats`**: NATS JetStream client library
   - Generic batch consumer with fine-grained Ack/Nak control per message
   - Stream management and JetStream context access
-  - Feature flag `processed-envelope` for ProcessedEnvelope-specific functionality
+  - Feature flag `processed-envelope` for ProcessedEnvelope-specific functionality:
+    - `ProcessedEnvelopeProducer`: Implements domain trait for publishing envelopes
+    - Domain ↔ Protobuf conversions for seamless type translation
+    - `run_demo_producer()`: Reusable demo producer for testing
   - `ProcessingResult` type allows individual message Ack/Nak decisions
   - Supports both generic message processing and protobuf-based workflows
+
+- **`ponix-payload`**: CEL-based payload conversion
+  - `CelPayloadConverter`: Implements `PayloadConverter` trait from domain layer
+  - Executes CEL expressions on binary payloads to produce JSON
+  - Built-in Cayenne LPP decoder and base64 encoding functions
+  - Comprehensive test coverage for CEL transformations
 
 - **`ponix-clickhouse`**: ClickHouse client and migrations
   - Async batch writer for ProcessedEnvelope messages
@@ -146,17 +158,40 @@ This is a multi-crate Cargo workspace with the following crates:
 ### Key Architectural Patterns
 
 #### Domain-Driven Design (DDD)
-The device management system follows DDD principles with three layers:
-- **Domain Layer** (`ponix-domain`): Business logic, domain types, and repository trait
-- **Infrastructure Layer** (`ponix-postgres`): Repository implementation with database access
+The system follows DDD principles with clear layer separation:
+- **Domain Layer** (`ponix-domain`): Business logic, domain types, and repository/converter traits
+- **Infrastructure Layer** (`ponix-postgres`, `ponix-nats`, `ponix-clickhouse`): Trait implementations
+- **Payload Layer** (`ponix-payload`): CEL-based payload transformation logic
 - **API Layer** (`ponix-grpc`): Protocol translation between gRPC and domain types
 
 Key patterns:
-- **Repository Pattern**: `DeviceRepository` trait with infrastructure implementations
+- **Repository Pattern**: `DeviceRepository` and `ProcessedEnvelopeProducer` traits with infrastructure implementations
+- **Strategy Pattern**: `PayloadConverter` trait allows different payload conversion strategies
 - **Dependency Inversion**: Domain layer defines interfaces, infrastructure implements them
+- **Service Orchestration**: `EnvelopeService` coordinates device lookup, conversion, and publishing
 - **ID Generation**: Domain service generates unique IDs using `xid` (not at API layer)
 - **Two-Type Pattern**: `CreateDeviceInput` (external) vs `CreateDeviceInputWithId` (internal)
 - **Error Mapping**: Domain errors (`DomainError`) mapped to gRPC Status codes
+
+#### Raw Envelope Conversion Flow
+```
+RawEnvelope (binary payload)
+    ↓
+EnvelopeService.process_raw_envelope()
+    ↓
+├─> DeviceRepository: Fetch device with CEL expression
+├─> Validate CEL expression exists
+├─> PayloadConverter: Execute CEL transformation on binary data
+├─> Validate output is a JSON object
+└─> ProcessedEnvelopeProducer: Publish to NATS
+    ↓
+ProcessedEnvelope (structured JSON) → ClickHouse
+```
+
+This flow demonstrates:
+- **Separation of Concerns**: Each step has a single responsibility
+- **Testability**: Each component can be mocked independently
+- **Error Handling**: Clear error variants for each failure scenario
 
 #### Runner Pattern
 The `ponix-runner` crate implements a process lifecycle management pattern:

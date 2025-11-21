@@ -1,211 +1,191 @@
-# ponix-rs
+# Ponix
 
-A Rust-based IoT data ingestion platform
+An IoT data insights platform that transforms raw device telemetry into actionable data.
 
-## Overview
+## What is Ponix?
 
-ponix-rs is an IoT data ingestion platform designed to handle device telemetry at scale. The `ponix-all-in-one` service provides:
-- **Device Management API**: gRPC API for registering and managing IoT devices with PostgreSQL
-- **Event Ingestion**: Process ProcessedEnvelope messages via NATS JetStream
-- **Analytics Storage**: Batch write telemetry data to ClickHouse for time-series analysis
-- **Graceful Lifecycle**: Coordinated startup/shutdown with proper resource cleanup
+Ponix is designed to solve a common IoT challenge: devices send raw binary payloads, but you need structured, queryable data. Ponix sits between your IoT devices and your analytics tools, automatically transforming device payloads into clean JSON that's ready for analysis.
 
-**Key Features:**
-- Multi-architecture Docker support (ARM64/AMD64)
-- Multi-database support (ClickHouse for events, PostgreSQL for devices)
-- Generic migration framework supporting multiple database types
-- Environment-based configuration
-- Integration test suite with testcontainers
-- Automated database migrations via goose
+**The Problem:**
+- Your temperature sensor sends `[0x01, 0x67, 0x01, 0x10]`
+- You need `{"temperature": 27.2, "unit": "celsius"}`
 
-## Project Structure
+**The Solution:**
+Ponix uses CEL (Common Expression Language) to transform device payloads on-the-fly, storing the results for real-time queries and historical analysis.
 
-This is a Cargo workspace containing multiple crates:
+## Key Features
 
-```
-ponix-rs/
-├── Cargo.toml              # Workspace configuration
-├── docker/                 # Docker Compose configurations
-│   ├── docker-compose.deps.yaml    # Infrastructure (NATS, ClickHouse, PostgreSQL)
-│   └── docker-compose.service.yaml # Application service
-└── crates/
-    ├── runner/             # Concurrent application runner
-    ├── goose/              # Generic database migration framework
-    ├── ponix-nats/         # NATS JetStream client
-    ├── ponix-clickhouse/   # ClickHouse client and migrations
-    ├── ponix-postgres/     # PostgreSQL device repository implementation
-    ├── ponix-domain/       # Domain layer (business logic and repository trait)
-    ├── ponix-grpc/         # gRPC API handlers for device management
-    └── ponix-all-in-one/   # Main service binary
-```
+### 🔧 Flexible Payload Transformation
+Configure each device with custom CEL expressions to transform binary data into structured JSON. Built-in support for Cayenne LPP and extensible for custom formats.
 
-## Getting Started
+### 📊 Time-Series Analytics
+Automatic storage in ClickHouse provides fast queries across millions of data points with full-text search and aggregations.
+
+### 🎯 Device Management
+Simple gRPC API to register devices, configure transformations, and manage your IoT fleet.
+
+### ⚡ Real-Time Processing
+Event-driven architecture with NATS JetStream ensures low-latency data processing and reliable delivery.
+
+## Quick Start
 
 ### Prerequisites
-
-- Rust 1.70 or later
 - Docker and Docker Compose
-- [mise](https://mise.jdx.dev/) (optional, for task management)
-- Buf Schema Registry token (for protobuf types)
+- (Optional) [mise](https://mise.jdx.dev/) for task management
 
-### BSR Authentication
+### Run Ponix
 
-This project uses protobuf types from the Buf Schema Registry:
-
-1. Ensure BSR_TOKEN is configured in `.mise.toml`
-2. Follow the [BSR Cargo Registry setup guide](https://buf.build/docs/bsr/generated-sdks/cargo/)
-3. Authenticate once per machine:
-   ```bash
-   cargo login --registry buf "Bearer $BSR_TOKEN"
-   ```
-
-### Running Locally
-
-**Start infrastructure services:**
 ```bash
+# Start all services (PostgreSQL, ClickHouse, NATS, and Ponix)
 docker-compose -f docker/docker-compose.deps.yaml up -d
-```
-
-**Build and run the service:**
-```bash
-# With Docker Compose
 docker-compose -f docker/docker-compose.service.yaml up --build
 
-# Or with Tilt (recommended for development)
+# Or use Tilt for development
 tilt up
 ```
 
-**Available services:**
-- NATS: `localhost:4222` (monitoring: `localhost:8222`)
-- ClickHouse: HTTP `localhost:8123`, native TCP `localhost:9000`
-- PostgreSQL: `localhost:5432` (database: `ponix`, user: `ponix`, password: `ponix`)
-- gRPC API: `localhost:50051` (device management)
+**Services will be available at:**
+- gRPC API: `localhost:50051`
+- NATS: `localhost:4222`
+- ClickHouse: `localhost:8123` (HTTP), `localhost:9000` (native)
+- PostgreSQL: `localhost:5432`
 
-### Running Tests
+## Usage Example
 
-**Using mise (recommended):**
-```bash
-# Unit tests only (fast, no Docker required)
-mise run test:unit
-
-# Integration tests (requires Docker)
-mise run test:integration
-
-# All tests
-mise run test:all
-```
-
-**Using cargo:**
-```bash
-# Unit tests
-cargo test --workspace --lib --bins
-
-# Integration tests
-cargo test --workspace --features integration-tests -- --test-threads=1
-
-# All tests
-cargo test --workspace --features integration-tests
-```
-
-## API Usage
-
-### gRPC Device Management API
-
-The service exposes a gRPC API for device management on port `50051` (configurable via `PONIX_GRPC_PORT`).
-
-**Available endpoints:**
-- `CreateEndDevice` - Create a new device (device_id generated server-side)
-- `GetEndDevice` - Retrieve a device by ID
-- `ListEndDevices` - List all devices for an organization
-
-**Using grpcurl:**
+### 1. Register a Device
 
 ```bash
 # Install grpcurl
 brew install grpcurl
 
-# List available services
-grpcurl -plaintext localhost:50051 list
-
-# Create a device
+# Create a temperature sensor with Cayenne LPP payload conversion
 grpcurl -plaintext -d '{
-  "organization_id": "org-001",
-  "name": "Sensor Alpha"
+  "organization_id": "my-org",
+  "name": "Temperature Sensor",
+  "payload_conversion": "cayenne_lpp_decode(input)"
 }' localhost:50051 ponix.end_device.v1.EndDeviceService/CreateEndDevice
-
-# Get a device
-grpcurl -plaintext -d '{
-  "device_id": "cm3rnbgek0000j5d37r63jnmn"
-}' localhost:50051 ponix.end_device.v1.EndDeviceService/GetEndDevice
-
-# List devices for an organization
-grpcurl -plaintext -d '{
-  "organization_id": "org-001"
-}' localhost:50051 ponix.end_device.v1.EndDeviceService/ListEndDevices
 ```
 
-**Configuration:**
-```bash
-# Environment variables
-PONIX_GRPC_HOST=0.0.0.0  # Default: 0.0.0.0
-PONIX_GRPC_PORT=50051    # Default: 50051
-```
+### 2. Send Data
 
-### Viewing Data
+When your device sends a Cayenne LPP payload like `[0x01, 0x67, 0x01, 0x10]`, Ponix automatically:
+1. Looks up the device configuration
+2. Executes the CEL expression: `cayenne_lpp_decode(input)`
+3. Transforms to: `{"temperature_1": 27.2}`
+4. Stores in ClickHouse for querying
 
-**ClickHouse (event storage):**
+### 3. Query Your Data
+
 ```bash
 # Connect to ClickHouse
 docker exec -it ponix-clickhouse clickhouse-client -u ponix --password ponix
 
-# Query envelopes
-SELECT * FROM ponix.processed_envelopes LIMIT 10;
-
-# View JSON data
-SELECT end_device_id, data FROM ponix.processed_envelopes;
+# Query recent sensor data
+SELECT
+  end_device_id,
+  occurred_at,
+  data
+FROM ponix.processed_envelopes
+WHERE end_device_id = 'your-device-id'
+ORDER BY occurred_at DESC
+LIMIT 10;
 ```
 
-**PostgreSQL (device storage):**
+## Advanced Usage
+
+### Custom Transformations
+
+Create sophisticated transformations with CEL:
+
+```javascript
+// Unit conversion and enrichment
+{
+  'temp_c': cayenne_lpp_decode(input).temperature_1,
+  'temp_f': cayenne_lpp_decode(input).temperature_1 * 9.0 / 5.0 + 32.0,
+  'humidity': cayenne_lpp_decode(input).humidity_2,
+  'timestamp': timestamp(now)
+}
+```
+
+### Conditional Logic
+
+```javascript
+// Alert on high temperature
+cayenne_lpp_decode(input).temperature_1 > 30 ?
+  {'status': 'alert', 'message': 'High temperature detected'} :
+  {'status': 'normal', 'temp': cayenne_lpp_decode(input).temperature_1}
+```
+
+### Device Management
+
 ```bash
-# Connect to PostgreSQL
-docker exec -it ponix-postgres psql -U ponix -d ponix
+# List all devices for an organization
+grpcurl -plaintext -d '{
+  "organization_id": "my-org"
+}' localhost:50051 ponix.end_device.v1.EndDeviceService/ListEndDevices
 
-# Query devices
-SELECT * FROM devices;
-
-# List devices by organization
-SELECT * FROM devices WHERE organization_id = 'org-001';
-
-# View device details with timestamps
-SELECT device_id, device_name, organization_id, created_at, updated_at
-FROM devices ORDER BY created_at DESC;
+# Get device details
+grpcurl -plaintext -d '{
+  "device_id": "device-id-here"
+}' localhost:50051 ponix.end_device.v1.EndDeviceService/GetEndDevice
 ```
+
+## How It Works
+
+```
+IoT Device → Raw Payload → Ponix → Structured Data → Analytics
+             [0x01...]      ↓      {"temp": 27.2}
+                            CEL
+                        Transformation
+```
+
+1. **Device Registration**: Configure each device with a CEL expression
+2. **Data Ingestion**: Raw binary payloads arrive via NATS
+3. **Transformation**: CEL engine converts binary to JSON based on device config
+4. **Storage**: Structured data is stored in ClickHouse
+5. **Query**: Run SQL queries on your IoT data
+
+## Built-In Functions
+
+- `cayenne_lpp_decode(input)` - Decode Cayenne Low Power Payload format
+- `base64_encode(bytes)` - Encode bytes to base64
+- Standard CEL operators and functions
 
 ## Development
 
-### Building
+### Running Tests
 
 ```bash
-# Debug build
-cargo build
+# Unit tests (fast, no Docker required)
+cargo test --workspace --lib --bins
 
-# Release build
-cargo build --release
+# Integration tests (requires Docker)
+cargo test --workspace --features integration-tests -- --test-threads=1
 ```
 
-### Adding a New Crate
+### Project Structure
 
-1. Create a new directory under `crates/`
-2. Add the crate path to `Cargo.toml` workspace members
-3. Create the crate with `cargo init --lib` or `cargo init --bin`
+Ponix is built as a Rust workspace with clean separation of concerns:
+- **Domain layer** - Business logic and data transformations
+- **Infrastructure** - Database clients, message queues
+- **API** - gRPC service handlers
 
-### Workspace Dependencies
+See [CLAUDE.md](CLAUDE.md) for detailed development documentation.
 
-Common dependencies are defined in the workspace `Cargo.toml`:
+## Configuration
 
-```toml
-[dependencies]
-tokio.workspace = true
+Configure via environment variables:
+
+```bash
+# Database connections
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+CLICKHOUSE_URL=http://localhost:8123
+NATS_URL=nats://localhost:4222
+
+# gRPC API
+PONIX_GRPC_HOST=0.0.0.0
+PONIX_GRPC_PORT=50051
 ```
 
 ## License
