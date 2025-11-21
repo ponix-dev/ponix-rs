@@ -17,6 +17,12 @@ pub enum DomainError {
     #[error("Invalid device name: {0}")]
     InvalidDeviceName(String),
 
+    #[error("Payload conversion error: {0}")]
+    PayloadConversionError(String),
+
+    #[error("Missing CEL expression for device: {0}")]
+    MissingCelExpression(String),
+
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
 }

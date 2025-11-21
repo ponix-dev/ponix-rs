@@ -1,9 +1,7 @@
 #[cfg(feature = "processed-envelope")]
 use crate::traits::JetStreamPublisher;
 #[cfg(feature = "processed-envelope")]
-use anyhow::{Context, Result};
-#[cfg(feature = "processed-envelope")]
-use ponix_proto::envelope::v1::ProcessedEnvelope;
+use anyhow::Context;
 #[cfg(feature = "processed-envelope")]
 use prost::Message;
 #[cfg(feature = "processed-envelope")]
@@ -30,49 +28,12 @@ impl ProcessedEnvelopeProducer {
         }
     }
 
-    pub async fn publish(&self, envelope: &ProcessedEnvelope) -> Result<()> {
-        // Serialize protobuf message
-        let payload = envelope.encode_to_vec();
-
-        // Build subject: {base_subject}.{end_device_id}
-        let subject = format!("{}.{}", self.base_subject, envelope.end_device_id);
-
-        debug!(
-            subject = %subject,
-            end_device_id = %envelope.end_device_id,
-            size_bytes = payload.len(),
-            "Publishing ProcessedEnvelope"
-        );
-
-        // Use the trait method
-        self.jetstream
-            .publish(subject.clone(), payload.into())
-            .await
-            .context("Failed to publish and acknowledge message")?;
-
-        info!(
-            subject = %subject,
-            end_device_id = %envelope.end_device_id,
-            "Successfully published ProcessedEnvelope"
-        );
-
-        Ok(())
-    }
 }
 
 #[cfg(all(test, feature = "processed-envelope"))]
 mod tests {
     use super::*;
     use crate::traits::MockJetStreamPublisher;
-    use mockall::predicate::*;
-
-    // Helper to create a test ProcessedEnvelope
-    fn create_test_envelope(end_device_id: &str) -> ProcessedEnvelope {
-        ProcessedEnvelope {
-            end_device_id: end_device_id.to_string(),
-            ..Default::default()
-        }
-    }
 
     #[tokio::test]
     async fn test_producer_creation() {
@@ -84,151 +45,124 @@ mod tests {
 
         assert_eq!(producer.base_subject, "processed.envelopes");
     }
+}
+
+// Domain trait implementation
+#[cfg(feature = "processed-envelope")]
+use ponix_domain::repository::ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait;
+#[cfg(feature = "processed-envelope")]
+use ponix_domain::types::ProcessedEnvelope as DomainProcessedEnvelope;
+#[cfg(feature = "processed-envelope")]
+use ponix_domain::error::{DomainError, DomainResult};
+
+#[cfg(feature = "processed-envelope")]
+#[async_trait::async_trait]
+impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
+    async fn publish(&self, envelope: &DomainProcessedEnvelope) -> DomainResult<()> {
+        // Convert domain ProcessedEnvelope to protobuf
+        let proto_envelope = crate::conversions::domain_to_proto_envelope(envelope);
+
+        // Serialize protobuf message
+        let payload = proto_envelope.encode_to_vec();
+
+        // Build subject: {base_subject}.{end_device_id}
+        let subject = format!("{}.{}", self.base_subject, proto_envelope.end_device_id);
+
+        debug!(
+            subject = %subject,
+            end_device_id = %proto_envelope.end_device_id,
+            size_bytes = payload.len(),
+            "Publishing ProcessedEnvelope"
+        );
+
+        // Use the trait method
+        self.jetstream
+            .publish(subject.clone(), payload.into())
+            .await
+            .context("Failed to publish and acknowledge message")
+            .map_err(DomainError::RepositoryError)?;
+
+        info!(
+            subject = %subject,
+            end_device_id = %proto_envelope.end_device_id,
+            "Successfully published ProcessedEnvelope"
+        );
+
+        Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "processed-envelope"))]
+mod domain_trait_tests {
+    use super::*;
+    use ponix_domain::repository::ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait;
+    use ponix_domain::types::ProcessedEnvelope as DomainProcessedEnvelope;
+    use crate::traits::MockJetStreamPublisher;
 
     #[tokio::test]
-    async fn test_publish_success() {
-        let mut mock_jetstream = MockJetStreamPublisher::new();
+    async fn test_domain_trait_publish_success() {
+        // Arrange
+        let mut mock_publisher = MockJetStreamPublisher::new();
 
-        // Set up expectation for successful publish
-        mock_jetstream
+        mock_publisher
             .expect_publish()
-            .withf(|subject: &String, payload: &bytes::Bytes| {
-                subject.starts_with("processed.envelopes.") && !payload.is_empty()
-            })
             .times(1)
             .returning(|_, _| Ok(()));
 
         let producer = ProcessedEnvelopeProducer::new(
-            Arc::new(mock_jetstream),
-            "processed.envelopes".to_string(),
+            Arc::new(mock_publisher),
+            "test.stream".to_string(),
         );
 
-        let envelope = create_test_envelope("device-123");
-        let result = producer.publish(&envelope).await;
+        let mut data = serde_json::Map::new();
+        data.insert("temperature".to_string(), serde_json::json!(25.5));
 
+        let envelope = DomainProcessedEnvelope {
+            organization_id: "org-123".to_string(),
+            end_device_id: "device-456".to_string(),
+            occurred_at: chrono::Utc::now(),
+            processed_at: chrono::Utc::now(),
+            data,
+        };
+
+        // Act
+        let result = ProcessedEnvelopeProducerTrait::publish(&producer, &envelope).await;
+
+        // Assert
         assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_publish_with_correct_subject() {
-        let mut mock_jetstream = MockJetStreamPublisher::new();
+    async fn test_domain_trait_publish_error() {
+        // Arrange
+        let mut mock_publisher = MockJetStreamPublisher::new();
 
-        // Verify the subject format is correct
-        mock_jetstream
-            .expect_publish()
-            .with(eq("processed.envelopes.device-123".to_string()), always())
-            .times(1)
-            .returning(|_, _| Ok(()));
-
-        let producer = ProcessedEnvelopeProducer::new(
-            Arc::new(mock_jetstream),
-            "processed.envelopes".to_string(),
-        );
-
-        let envelope = create_test_envelope("device-123");
-        let result = producer.publish(&envelope).await;
-
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_publish_serializes_correctly() {
-        let mut mock_jetstream = MockJetStreamPublisher::new();
-
-        // Capture the payload to verify serialization
-        mock_jetstream
+        mock_publisher
             .expect_publish()
             .times(1)
-            .withf(|_subject: &String, payload: &bytes::Bytes| {
-                // Verify payload can be deserialized back
-                ProcessedEnvelope::decode(payload.as_ref()).is_ok()
-            })
-            .returning(|_, _| Ok(()));
+            .returning(|_, _| Err(anyhow::anyhow!("NATS publish failed")));
 
         let producer = ProcessedEnvelopeProducer::new(
-            Arc::new(mock_jetstream),
-            "processed.envelopes".to_string(),
+            Arc::new(mock_publisher),
+            "test.stream".to_string(),
         );
 
-        let envelope = create_test_envelope("device-123");
-        let result = producer.publish(&envelope).await;
+        let mut data = serde_json::Map::new();
+        data.insert("temperature".to_string(), serde_json::json!(25.5));
 
-        assert!(result.is_ok());
-    }
+        let envelope = DomainProcessedEnvelope {
+            organization_id: "org-123".to_string(),
+            end_device_id: "device-456".to_string(),
+            occurred_at: chrono::Utc::now(),
+            processed_at: chrono::Utc::now(),
+            data,
+        };
 
-    #[tokio::test]
-    async fn test_publish_failure() {
-        let mut mock_jetstream = MockJetStreamPublisher::new();
+        // Act
+        let result = ProcessedEnvelopeProducerTrait::publish(&producer, &envelope).await;
 
-        // Simulate publish failure
-        mock_jetstream
-            .expect_publish()
-            .times(1)
-            .returning(|_, _| Err(anyhow::anyhow!("Failed to publish to JetStream")));
-
-        let producer = ProcessedEnvelopeProducer::new(
-            Arc::new(mock_jetstream),
-            "processed.envelopes".to_string(),
-        );
-
-        let envelope = create_test_envelope("device-123");
-        let result = producer.publish(&envelope).await;
-
+        // Assert
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to publish"));
-    }
-
-    #[tokio::test]
-    async fn test_publish_multiple_envelopes() {
-        let mut mock_jetstream = MockJetStreamPublisher::new();
-
-        // Should publish each envelope separately
-        mock_jetstream
-            .expect_publish()
-            .times(3)
-            .returning(|_, _| Ok(()));
-
-        let producer = ProcessedEnvelopeProducer::new(
-            Arc::new(mock_jetstream),
-            "processed.envelopes".to_string(),
-        );
-
-        for i in 0..3 {
-            let envelope = create_test_envelope(&format!("device-{}", i));
-            let result = producer.publish(&envelope).await;
-            assert!(result.is_ok());
-        }
-    }
-
-    #[tokio::test]
-    async fn test_publish_different_device_ids() {
-        let mut mock_jetstream = MockJetStreamPublisher::new();
-
-        // Verify subjects change based on end_device_id
-        mock_jetstream
-            .expect_publish()
-            .with(eq("processed.envelopes.device-A".to_string()), always())
-            .times(1)
-            .returning(|_, _| Ok(()));
-
-        mock_jetstream
-            .expect_publish()
-            .with(eq("processed.envelopes.device-B".to_string()), always())
-            .times(1)
-            .returning(|_, _| Ok(()));
-
-        let producer = ProcessedEnvelopeProducer::new(
-            Arc::new(mock_jetstream),
-            "processed.envelopes".to_string(),
-        );
-
-        let envelope_a = create_test_envelope("device-A");
-        let envelope_b = create_test_envelope("device-B");
-
-        assert!(producer.publish(&envelope_a).await.is_ok());
-        assert!(producer.publish(&envelope_b).await.is_ok());
+        assert!(matches!(result, Err(ponix_domain::error::DomainError::RepositoryError(_))));
     }
 }

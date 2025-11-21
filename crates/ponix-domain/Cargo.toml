@@ -19,3 +19,4 @@ serde_json = { workspace = true }
 [dev-dependencies]
 mockall = "0.13"
 tokio = { workspace = true }
+ponix-payload = { path = "../ponix-payload" }
