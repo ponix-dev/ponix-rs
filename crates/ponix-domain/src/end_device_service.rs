@@ -38,6 +38,7 @@ impl DeviceService {
             device_id,
             organization_id: input.organization_id,
             name: input.name,
+            payload_conversion: input.payload_conversion,
         };
 
         let device = self.repository.create_device(repo_input).await?;
@@ -88,6 +89,7 @@ mod tests {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Device".to_string(),
+            payload_conversion: "test conversion".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -98,6 +100,7 @@ mod tests {
                 !input.device_id.is_empty() // ID is generated
                     && input.organization_id == "org-456"
                     && input.name == "Test Device"
+                    && input.payload_conversion == "test conversion"
             })
             .times(1)
             .return_once(move |_| Ok(expected_device.clone()));
@@ -107,6 +110,7 @@ mod tests {
         let input = CreateDeviceInput {
             organization_id: "org-456".to_string(),
             name: "Test Device".to_string(),
+            payload_conversion: "test conversion".to_string(),
         };
 
         let result = service.create_device(input).await;
@@ -125,6 +129,7 @@ mod tests {
         let input = CreateDeviceInput {
             organization_id: "org-456".to_string(),
             name: "".to_string(),
+            payload_conversion: "test conversion".to_string(),
         };
 
         let result = service.create_device(input).await;
@@ -140,6 +145,7 @@ mod tests {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Device".to_string(),
+            payload_conversion: "test conversion".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -189,6 +195,7 @@ mod tests {
                 device_id: "device-1".to_string(),
                 organization_id: "org-456".to_string(),
                 name: "Device 1".to_string(),
+                payload_conversion: "conversion 1".to_string(),
                 created_at: None,
                 updated_at: None,
             },
@@ -196,6 +203,7 @@ mod tests {
                 device_id: "device-2".to_string(),
                 organization_id: "org-456".to_string(),
                 name: "Device 2".to_string(),
+                payload_conversion: "conversion 2".to_string(),
                 created_at: None,
                 updated_at: None,
             },

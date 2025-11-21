@@ -32,12 +32,13 @@ impl DeviceRepository for PostgresDeviceRepository {
 
         // Execute insert
         let result = conn.execute(
-            "INSERT INTO devices (device_id, organization_id, device_name, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO devices (device_id, organization_id, device_name, payload_conversion, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6)",
             &[
                 &input.device_id,
                 &input.organization_id,
                 &input.name, // Map name -> device_name
+                &input.payload_conversion,
                 &now,
                 &now,
             ],
@@ -63,6 +64,7 @@ impl DeviceRepository for PostgresDeviceRepository {
             device_id: input.device_id,
             organization_id: input.organization_id,
             name: input.name,
+            payload_conversion: input.payload_conversion,
             created_at: Some(now),
             updated_at: Some(now),
         })
@@ -74,7 +76,7 @@ impl DeviceRepository for PostgresDeviceRepository {
 
         let row = conn
             .query_opt(
-                "SELECT device_id, organization_id, device_name, created_at, updated_at
+                "SELECT device_id, organization_id, device_name, payload_conversion, created_at, updated_at
                  FROM devices
                  WHERE device_id = $1",
                 &[&input.device_id],
@@ -88,8 +90,9 @@ impl DeviceRepository for PostgresDeviceRepository {
                     device_id: row.get(0),
                     organization_id: row.get(1),
                     device_name: row.get(2),
-                    created_at: row.get(3),
-                    updated_at: row.get(4),
+                    payload_conversion: row.get(3),
+                    created_at: row.get(4),
+                    updated_at: row.get(5),
                 };
                 Ok(Some(device_row.into()))
             }
@@ -103,7 +106,7 @@ impl DeviceRepository for PostgresDeviceRepository {
 
         let rows = conn
             .query(
-                "SELECT device_id, organization_id, device_name, created_at, updated_at
+                "SELECT device_id, organization_id, device_name, payload_conversion, created_at, updated_at
                  FROM devices
                  WHERE organization_id = $1
                  ORDER BY created_at DESC",
@@ -119,8 +122,9 @@ impl DeviceRepository for PostgresDeviceRepository {
                     device_id: row.get(0),
                     organization_id: row.get(1),
                     device_name: row.get(2),
-                    created_at: row.get(3),
-                    updated_at: row.get(4),
+                    payload_conversion: row.get(3),
+                    created_at: row.get(4),
+                    updated_at: row.get(5),
                 };
                 device_row.into()
             })

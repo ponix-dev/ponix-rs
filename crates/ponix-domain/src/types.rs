@@ -5,6 +5,7 @@ pub struct Device {
     pub device_id: String,
     pub organization_id: String,
     pub name: String,
+    pub payload_conversion: String,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -15,6 +16,7 @@ pub struct Device {
 pub struct CreateDeviceInput {
     pub organization_id: String,
     pub name: String,
+    pub payload_conversion: String,
 }
 
 /// Internal input for creating a new device (used by domain service -> repository)
@@ -24,6 +26,7 @@ pub struct CreateDeviceInputWithId {
     pub device_id: String,
     pub organization_id: String,
     pub name: String,
+    pub payload_conversion: String,
 }
 
 /// Input for retrieving a device

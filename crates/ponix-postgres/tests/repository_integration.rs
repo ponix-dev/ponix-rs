@@ -47,12 +47,14 @@ async fn test_create_and_get_device() {
         device_id: "test-device-123".to_string(),
         organization_id: "test-org-456".to_string(),
         name: "Test Device".to_string(),
+        payload_conversion: "test conversion".to_string(),
     };
 
     // Create device
     let created = repo.create_device(input.clone()).await.unwrap();
     assert_eq!(created.device_id, "test-device-123");
     assert_eq!(created.name, "Test Device");
+    assert_eq!(created.payload_conversion, "test conversion");
     assert!(created.created_at.is_some());
 
     // Get device
@@ -65,6 +67,7 @@ async fn test_create_and_get_device() {
     let device = retrieved.unwrap();
     assert_eq!(device.device_id, "test-device-123");
     assert_eq!(device.name, "Test Device");
+    assert_eq!(device.payload_conversion, "test conversion");
 }
 
 #[tokio::test]
@@ -90,6 +93,7 @@ async fn test_list_devices_by_organization() {
             device_id: format!("device-{}", i),
             organization_id: "test-org".to_string(),
             name: format!("Device {}", i),
+            payload_conversion: format!("conversion {}", i),
         };
         repo.create_device(input).await.unwrap();
     }
@@ -126,6 +130,7 @@ async fn test_create_duplicate_device() {
         device_id: "duplicate-device".to_string(),
         organization_id: "test-org".to_string(),
         name: "Original Device".to_string(),
+        payload_conversion: "test conversion".to_string(),
     };
 
     // First creation should succeed
