@@ -9,3 +9,5 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 chrono = { workspace = true }
 cel-interpreter = { workspace = true }
+ponix-domain = { path = "../ponix-domain" }
+tracing = { workspace = true }

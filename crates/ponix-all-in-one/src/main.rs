@@ -1,18 +1,16 @@
 mod config;
 
-use anyhow::Result;
 use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository};
 use ponix_domain::{DeviceService, ProcessedEnvelopeService};
 use ponix_grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_nats::{
-    create_domain_processor, NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
+    create_domain_processor, run_demo_producer, DemoProducerConfig,
+    NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
 };
 use ponix_postgres::{PostgresClient, PostgresDeviceRepository};
-use ponix_proto::envelope::v1::ProcessedEnvelope;
 use ponix_runner::Runner;
-use prost_types::Timestamp;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tracing::{debug, error, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -184,12 +182,18 @@ async fn main() {
         port: config.grpc_port,
     };
 
+    // Create demo producer configuration
+    let demo_config = DemoProducerConfig {
+        interval: Duration::from_secs(config.interval_secs),
+        organization_id: "example-org".to_string(),
+        log_message: config.message.clone(),
+    };
+
     // Create runner with producer, consumer, and gRPC server processes
     let runner = Runner::new()
-        .with_app_process({
-            let config = config.clone();
-            move |ctx| Box::pin(async move { run_producer_service(ctx, config, producer).await })
-        })
+        .with_app_process(move |ctx| Box::pin(async move {
+            run_demo_producer(ctx, demo_config, producer).await
+        }))
         .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
         .with_app_process({
             let service = device_service.clone();
@@ -207,94 +211,4 @@ async fn main() {
 
     // Run the service (this will handle the exit)
     runner.run().await;
-}
-
-async fn run_producer_service(
-    ctx: tokio_util::sync::CancellationToken,
-    config: config::ServiceConfig,
-    producer: ProcessedEnvelopeProducer,
-) -> Result<()> {
-    info!("Producer service started successfully");
-
-    let interval = Duration::from_secs(config.interval_secs);
-
-    loop {
-        tokio::select! {
-            _ = ctx.cancelled() => {
-                info!("Received shutdown signal, stopping producer service");
-                break;
-            }
-            _ = tokio::time::sleep(interval) => {
-                // Generate unique ID using xid
-                let id = xid::new();
-
-                // Get current time for timestamps
-                let now = SystemTime::now();
-                let timestamp = now
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .map(|d| Timestamp {
-                        seconds: d.as_secs() as i64,
-                        nanos: d.subsec_nanos() as i32,
-                    })
-                    .ok();
-
-                // Create sample data for the envelope
-                use prost_types::{value::Kind, Struct, Value};
-                use std::collections::BTreeMap;
-
-                let mut fields = BTreeMap::new();
-                fields.insert(
-                    "temperature".to_string(),
-                    Value {
-                        kind: Some(Kind::NumberValue(72.5)),
-                    },
-                );
-                fields.insert(
-                    "humidity".to_string(),
-                    Value {
-                        kind: Some(Kind::NumberValue(65.0)),
-                    },
-                );
-                fields.insert(
-                    "status".to_string(),
-                    Value {
-                        kind: Some(Kind::StringValue("active".to_string())),
-                    },
-                );
-
-                let data = Some(Struct { fields });
-
-                // Create ProcessedEnvelope message
-                let envelope = ProcessedEnvelope {
-                    end_device_id: id.to_string(),
-                    occurred_at: timestamp,
-                    data,
-                    processed_at: timestamp,
-                    organization_id: "example-org".to_string(),
-                };
-
-                // Publish to NATS JetStream
-                match producer.publish(&envelope).await {
-                    Ok(_) => {
-                        debug!(
-                            end_device_id = %envelope.end_device_id,
-                            organization_id = %envelope.organization_id,
-                            "{}",
-                            config.message
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            end_device_id = %envelope.end_device_id,
-                            error = %e,
-                            "Failed to publish envelope"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    info!("Producer service stopped gracefully");
-    Ok(())
 }

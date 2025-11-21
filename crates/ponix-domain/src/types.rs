@@ -58,3 +58,12 @@ pub struct ProcessedEnvelope {
 pub struct StoreEnvelopesInput {
     pub envelopes: Vec<ProcessedEnvelope>,
 }
+
+/// Raw envelope with binary payload before processing
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawEnvelope {
+    pub organization_id: String,
+    pub end_device_id: String,
+    pub occurred_at: chrono::DateTime<chrono::Utc>,
+    pub payload: Vec<u8>,
+}

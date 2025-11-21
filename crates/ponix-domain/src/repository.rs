@@ -27,3 +27,22 @@ pub trait ProcessedEnvelopeRepository: Send + Sync {
     /// Failure handling: entire batch fails atomically (all-or-nothing)
     async fn store_batch(&self, input: StoreEnvelopesInput) -> DomainResult<()>;
 }
+
+/// Trait for publishing processed envelopes to message broker
+///
+/// Implementations should:
+/// - Serialize envelope to appropriate format (protobuf)
+/// - Publish to message broker (NATS JetStream)
+/// - Return error if publish fails
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait ProcessedEnvelopeProducer: Send + Sync {
+    /// Publish a single processed envelope
+    ///
+    /// # Arguments
+    /// * `envelope` - ProcessedEnvelope to publish
+    ///
+    /// # Returns
+    /// () on success, DomainError on failure
+    async fn publish(&self, envelope: &crate::types::ProcessedEnvelope) -> DomainResult<()>;
+}
