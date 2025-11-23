@@ -564,14 +564,14 @@ pub use gateway_service::GatewayService;
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Domain crate compiles: `cargo build -p ponix-domain`
-- [ ] Domain tests pass: `cargo test -p ponix-domain`
-- [ ] No clippy warnings: `cargo clippy -p ponix-domain`
+- [x] Domain crate compiles: `cargo build -p ponix-domain`
+- [x] Domain tests pass: `cargo test -p ponix-domain`
+- [x] No clippy warnings: `cargo clippy -p ponix-domain`
 
 #### Manual Verification:
-- [ ] Service properly validates inputs
-- [ ] Organization existence check works correctly
-- [ ] ID generation produces valid xids
+- [x] Service properly validates inputs
+- [x] Organization existence check works correctly
+- [x] ID generation produces valid xids
 
 ---
 
@@ -882,14 +882,14 @@ pub use gateway_repository::PostgresGatewayRepository;
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] PostgreSQL crate compiles: `cargo build -p ponix-postgres`
-- [ ] No clippy warnings: `cargo clippy -p ponix-postgres`
-- [ ] Type checking passes: `cargo check -p ponix-postgres`
+- [x] PostgreSQL crate compiles: `cargo build -p ponix-postgres`
+- [x] No clippy warnings: `cargo clippy -p ponix-postgres`
+- [x] Type checking passes: `cargo check -p ponix-postgres`
 
 #### Manual Verification:
-- [ ] Repository correctly handles JSONB serialization
-- [ ] Soft delete queries work properly
-- [ ] Foreign key constraints are enforced
+- [x] Repository correctly handles JSONB serialization
+- [x] Soft delete queries work properly
+- [x] Foreign key constraints are enforced
 
 ---
 
@@ -1061,15 +1061,15 @@ mod tests {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Integration tests pass: `cargo test --features integration-tests -p ponix-postgres -- gateway`
-- [ ] All CRUD operations work correctly
-- [ ] Soft delete functionality verified
-- [ ] Unique constraint enforcement verified
+- [x] Integration tests pass: `cargo test --features integration-tests -p ponix-postgres -- gateway`
+- [x] All CRUD operations work correctly
+- [x] Soft delete functionality verified
+- [x] Unique constraint enforcement verified
 
 #### Manual Verification:
-- [ ] Tests run successfully with testcontainers
-- [ ] Database schema is correct after migrations
-- [ ] JSONB data is properly stored and retrieved
+- [x] Tests run successfully with testcontainers
+- [x] Database schema is correct after migrations
+- [x] JSONB data is properly stored and retrieved
 
 ---
 

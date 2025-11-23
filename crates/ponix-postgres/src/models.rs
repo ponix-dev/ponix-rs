@@ -31,3 +31,15 @@ pub struct OrganizationRow {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+/// Gateway row for PostgreSQL storage with timestamp metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayRow {
+    pub gateway_id: String,
+    pub organization_id: String,
+    pub gateway_type: String,
+    pub gateway_config: serde_json::Value,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

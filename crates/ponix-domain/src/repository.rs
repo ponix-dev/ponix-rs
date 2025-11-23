@@ -110,14 +110,14 @@ pub trait GatewayRepository: Send + Sync {
     async fn create_gateway(&self, input: CreateGatewayInputWithId) -> DomainResult<Gateway>;
 
     /// Get a gateway by ID (excludes soft deleted)
-    async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Option<Gateway>>;
+    async fn get_gateway(&self, gateway_id: &str) -> DomainResult<Option<Gateway>>;
 
     /// Update a gateway
     async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway>;
 
     /// Soft delete a gateway
-    async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()>;
+    async fn delete_gateway(&self, gateway_id: &str) -> DomainResult<()>;
 
     /// List gateways by organization (excludes soft deleted)
-    async fn list_gateways(&self, input: ListGatewaysInput) -> DomainResult<Vec<Gateway>>;
+    async fn list_gateways(&self, organization_id: &str) -> DomainResult<Vec<Gateway>>;
 }

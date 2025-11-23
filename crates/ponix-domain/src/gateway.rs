@@ -1,8 +1,7 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 
 /// Gateway entity representing a configured gateway for an organization
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Gateway {
     pub gateway_id: String,
     pub organization_id: String,
@@ -14,7 +13,7 @@ pub struct Gateway {
 }
 
 /// External input for creating a gateway (no ID)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateGatewayInput {
     pub organization_id: String,
     pub gateway_type: String,
@@ -22,7 +21,7 @@ pub struct CreateGatewayInput {
 }
 
 /// Internal input with generated ID
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateGatewayInputWithId {
     pub gateway_id: String,
     pub organization_id: String,
@@ -37,7 +36,7 @@ pub struct GetGatewayInput {
 }
 
 /// Input for updating a gateway
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateGatewayInput {
     pub gateway_id: String,
     pub gateway_type: Option<String>,

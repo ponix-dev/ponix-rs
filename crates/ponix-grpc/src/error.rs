@@ -23,6 +23,14 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::OrganizationDeleted(msg) => Status::failed_precondition(msg),
 
+        DomainError::GatewayNotFound(msg) => Status::not_found(msg),
+
+        DomainError::GatewayAlreadyExists(msg) => Status::already_exists(msg),
+
+        DomainError::InvalidGatewayId(msg)
+        | DomainError::InvalidGatewayType(msg)
+        | DomainError::InvalidGatewayConfig(msg) => Status::invalid_argument(msg),
+
         DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
     }
 }
