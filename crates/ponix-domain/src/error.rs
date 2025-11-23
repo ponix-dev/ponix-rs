@@ -35,6 +35,21 @@ pub enum DomainError {
     #[error("Organization is deleted: {0}")]
     OrganizationDeleted(String),
 
+    #[error("Gateway not found: {0}")]
+    GatewayNotFound(String),
+
+    #[error("Gateway already exists: {0}")]
+    GatewayAlreadyExists(String),
+
+    #[error("Invalid gateway ID: {0}")]
+    InvalidGatewayId(String),
+
+    #[error("Invalid gateway type: {0}")]
+    InvalidGatewayType(String),
+
+    #[error("Invalid gateway configuration: {0}")]
+    InvalidGatewayConfig(String),
+
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
 }
