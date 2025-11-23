@@ -3,17 +3,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ServiceConfig {
-    /// Message to print (placeholder for future config)
-    #[serde(default = "default_message")]
-    pub message: String,
-
     /// Log level (trace, debug, info, warn, error)
     #[serde(default = "default_log_level")]
     pub log_level: String,
-
-    /// Sleep interval in seconds
-    #[serde(default = "default_interval")]
-    pub interval_secs: u64,
 
     // NATS configuration
     /// NATS server URL
@@ -21,12 +13,20 @@ pub struct ServiceConfig {
     pub nats_url: String,
 
     /// NATS JetStream stream name
-    #[serde(default = "default_nats_stream")]
-    pub nats_stream: String,
+    #[serde(default = "default_processed_envelopes_stream")]
+    pub processed_envelopes_stream: String,
 
     /// NATS subject pattern for consumer filter
-    #[serde(default = "default_nats_subject")]
-    pub nats_subject: String,
+    #[serde(default = "default_processed_envelopes_subject")]
+    pub processed_envelopes_subject: String,
+
+    /// NATS JetStream stream name for raw envelopes
+    #[serde(default = "default_nats_raw_stream")]
+    pub nats_raw_stream: String,
+
+    /// NATS subject pattern for raw envelope consumer filter
+    #[serde(default = "default_nats_raw_subject")]
+    pub nats_raw_subject: String,
 
     /// Batch size for consumer
     #[serde(default = "default_nats_batch_size")]
@@ -108,16 +108,8 @@ pub struct ServiceConfig {
     pub grpc_port: u16,
 }
 
-fn default_message() -> String {
-    "ponix-all-in-one service is running".to_string()
-}
-
 fn default_log_level() -> String {
     "info".to_string()
-}
-
-fn default_interval() -> u64 {
-    5
 }
 
 // NATS defaults
@@ -125,12 +117,20 @@ fn default_nats_url() -> String {
     "nats://localhost:4222".to_string()
 }
 
-fn default_nats_stream() -> String {
+fn default_processed_envelopes_stream() -> String {
     "processed_envelopes".to_string()
 }
 
-fn default_nats_subject() -> String {
+fn default_processed_envelopes_subject() -> String {
     "processed_envelopes.>".to_string()
+}
+
+fn default_nats_raw_stream() -> String {
+    "raw_envelopes".to_string()
+}
+
+fn default_nats_raw_subject() -> String {
+    "raw_envelopes.>".to_string()
 }
 
 fn default_nats_batch_size() -> usize {
@@ -234,32 +234,22 @@ mod tests {
         let _lock = TEST_LOCK.lock().unwrap();
 
         // Clear any existing PONIX_ environment variables
-        std::env::remove_var("PONIX_MESSAGE");
         std::env::remove_var("PONIX_LOG_LEVEL");
-        std::env::remove_var("PONIX_INTERVAL_SECS");
 
         let config = ServiceConfig::from_env().unwrap();
-        assert_eq!(config.message, "ponix-all-in-one service is running");
         assert_eq!(config.log_level, "info");
-        assert_eq!(config.interval_secs, 5);
     }
 
     #[test]
     fn test_custom_config() {
         let _lock = TEST_LOCK.lock().unwrap();
 
-        std::env::set_var("PONIX_MESSAGE", "Custom message");
         std::env::set_var("PONIX_LOG_LEVEL", "debug");
-        std::env::set_var("PONIX_INTERVAL_SECS", "10");
 
         let config = ServiceConfig::from_env().unwrap();
-        assert_eq!(config.message, "Custom message");
         assert_eq!(config.log_level, "debug");
-        assert_eq!(config.interval_secs, 10);
 
         // Clean up
-        std::env::remove_var("PONIX_MESSAGE");
         std::env::remove_var("PONIX_LOG_LEVEL");
-        std::env::remove_var("PONIX_INTERVAL_SECS");
     }
 }

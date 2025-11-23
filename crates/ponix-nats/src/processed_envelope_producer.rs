@@ -27,7 +27,6 @@ impl ProcessedEnvelopeProducer {
             base_subject,
         }
     }
-
 }
 
 #[cfg(all(test, feature = "processed-envelope"))]
@@ -49,11 +48,11 @@ mod tests {
 
 // Domain trait implementation
 #[cfg(feature = "processed-envelope")]
+use ponix_domain::error::{DomainError, DomainResult};
+#[cfg(feature = "processed-envelope")]
 use ponix_domain::repository::ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait;
 #[cfg(feature = "processed-envelope")]
 use ponix_domain::types::ProcessedEnvelope as DomainProcessedEnvelope;
-#[cfg(feature = "processed-envelope")]
-use ponix_domain::error::{DomainError, DomainResult};
 
 #[cfg(feature = "processed-envelope")]
 #[async_trait::async_trait]
@@ -95,9 +94,9 @@ impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
 #[cfg(all(test, feature = "processed-envelope"))]
 mod domain_trait_tests {
     use super::*;
+    use crate::traits::MockJetStreamPublisher;
     use ponix_domain::repository::ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait;
     use ponix_domain::types::ProcessedEnvelope as DomainProcessedEnvelope;
-    use crate::traits::MockJetStreamPublisher;
 
     #[tokio::test]
     async fn test_domain_trait_publish_success() {
@@ -109,10 +108,8 @@ mod domain_trait_tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let producer = ProcessedEnvelopeProducer::new(
-            Arc::new(mock_publisher),
-            "test.stream".to_string(),
-        );
+        let producer =
+            ProcessedEnvelopeProducer::new(Arc::new(mock_publisher), "test.stream".to_string());
 
         let mut data = serde_json::Map::new();
         data.insert("temperature".to_string(), serde_json::json!(25.5));
@@ -142,10 +139,8 @@ mod domain_trait_tests {
             .times(1)
             .returning(|_, _| Err(anyhow::anyhow!("NATS publish failed")));
 
-        let producer = ProcessedEnvelopeProducer::new(
-            Arc::new(mock_publisher),
-            "test.stream".to_string(),
-        );
+        let producer =
+            ProcessedEnvelopeProducer::new(Arc::new(mock_publisher), "test.stream".to_string());
 
         let mut data = serde_json::Map::new();
         data.insert("temperature".to_string(), serde_json::json!(25.5));
@@ -163,6 +158,9 @@ mod domain_trait_tests {
 
         // Assert
         assert!(result.is_err());
-        assert!(matches!(result, Err(ponix_domain::error::DomainError::RepositoryError(_))));
+        assert!(matches!(
+            result,
+            Err(ponix_domain::error::DomainError::RepositoryError(_))
+        ));
     }
 }

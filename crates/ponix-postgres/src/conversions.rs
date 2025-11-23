@@ -1,5 +1,5 @@
-use ponix_domain::{CreateDeviceInputWithId, Device as DomainDevice};
 use crate::models::{Device as DbDevice, DeviceRow};
+use ponix_domain::{CreateDeviceInputWithId, Device as DomainDevice};
 
 /// Convert domain CreateDeviceInputWithId to database Device (for insert)
 impl From<&CreateDeviceInputWithId> for DbDevice {

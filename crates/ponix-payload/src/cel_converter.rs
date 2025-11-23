@@ -1,6 +1,6 @@
+use crate::cel::CelEnvironment;
 use ponix_domain::error::{DomainError, DomainResult};
 use ponix_domain::PayloadConverter;
-use crate::cel::CelEnvironment;
 use tracing::{debug, error};
 
 /// Implementation of PayloadConverter using CelEnvironment
@@ -35,16 +35,14 @@ impl PayloadConverter for CelPayloadConverter {
             "Converting payload with CEL expression"
         );
 
-        self.cel_env
-            .execute(expression, payload)
-            .map_err(|e| {
-                error!(
-                    expression = %expression,
-                    error = %e,
-                    "CEL execution failed"
-                );
-                DomainError::PayloadConversionError(e.to_string())
-            })
+        self.cel_env.execute(expression, payload).map_err(|e| {
+            error!(
+                expression = %expression,
+                error = %e,
+                "CEL execution failed"
+            );
+            DomainError::PayloadConversionError(e.to_string())
+        })
     }
 }
 
@@ -83,7 +81,10 @@ mod tests {
         let result = converter.convert("invalid syntax {[", &[]);
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(DomainError::PayloadConversionError(_))));
+        assert!(matches!(
+            result,
+            Err(DomainError::PayloadConversionError(_))
+        ));
     }
 
     #[test]

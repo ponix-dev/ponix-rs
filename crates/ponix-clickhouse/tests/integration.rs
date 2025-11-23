@@ -1,6 +1,9 @@
 use chrono::Utc;
 use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository, MigrationRunner};
-use ponix_domain::{ProcessedEnvelopeRepository, types::{ProcessedEnvelope as DomainEnvelope, StoreEnvelopesInput}};
+use ponix_domain::{
+    types::{ProcessedEnvelope as DomainEnvelope, StoreEnvelopesInput},
+    ProcessedEnvelopeRepository,
+};
 use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::Image;
@@ -121,7 +124,8 @@ async fn test_migrations_and_batch_write() {
         .await
         .expect("Should be able to ping ClickHouse after migrations");
 
-    let repository = ClickHouseEnvelopeRepository::new(client.clone(), "processed_envelopes".to_string());
+    let repository =
+        ClickHouseEnvelopeRepository::new(client.clone(), "processed_envelopes".to_string());
 
     // PHASE 3: Create test domain envelopes
     let now = Utc::now();
@@ -201,7 +205,8 @@ async fn test_large_batch_write() {
 
     // Create client and repository
     let client = ClickHouseClient::new(&url_with_scheme, "default", "default", "");
-    let repository = ClickHouseEnvelopeRepository::new(client.clone(), "processed_envelopes".to_string());
+    let repository =
+        ClickHouseEnvelopeRepository::new(client.clone(), "processed_envelopes".to_string());
 
     // Create a large batch of test domain envelopes (1000 envelopes)
     let now = Utc::now();

@@ -16,9 +16,5 @@ pub trait PayloadConverter: Send + Sync {
     ///
     /// # Returns
     /// JSON value as serde_json::Value on success
-    fn convert(
-        &self,
-        expression: &str,
-        payload: &[u8],
-    ) -> DomainResult<serde_json::Value>;
+    fn convert(&self, expression: &str, payload: &[u8]) -> DomainResult<serde_json::Value>;
 }

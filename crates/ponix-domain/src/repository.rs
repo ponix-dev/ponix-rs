@@ -1,6 +1,8 @@
-use async_trait::async_trait;
 use crate::error::DomainResult;
-use crate::types::{CreateDeviceInputWithId, Device, GetDeviceInput, ListDevicesInput, StoreEnvelopesInput};
+use crate::types::{
+    CreateDeviceInputWithId, Device, GetDeviceInput, ListDevicesInput, StoreEnvelopesInput,
+};
+use async_trait::async_trait;
 
 /// Repository trait for device storage operations
 /// Infrastructure layer (e.g., ponix-postgres) implements this trait
@@ -45,4 +47,23 @@ pub trait ProcessedEnvelopeProducer: Send + Sync {
     /// # Returns
     /// () on success, DomainError on failure
     async fn publish(&self, envelope: &crate::types::ProcessedEnvelope) -> DomainResult<()>;
+}
+
+/// Trait for publishing raw envelopes to message broker
+///
+/// Implementations should:
+/// - Serialize envelope to appropriate format (protobuf)
+/// - Publish to message broker (NATS JetStream)
+/// - Return error if publish fails
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait RawEnvelopeProducer: Send + Sync {
+    /// Publish a single raw envelope
+    ///
+    /// # Arguments
+    /// * `envelope` - RawEnvelope to publish
+    ///
+    /// # Returns
+    /// () on success, DomainError on failure
+    async fn publish(&self, envelope: &crate::types::RawEnvelope) -> DomainResult<()>;
 }

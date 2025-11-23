@@ -12,14 +12,14 @@ use tracing::{debug, error, info};
 /// 2. Convert binary payload using CEL expression
 /// 3. Build ProcessedEnvelope from JSON + metadata
 /// 4. Publish via producer trait
-pub struct EnvelopeService {
+pub struct RawEnvelopeService {
     device_repository: Arc<dyn DeviceRepository>,
     payload_converter: Arc<dyn PayloadConverter>,
     producer: Arc<dyn ProcessedEnvelopeProducer>,
 }
 
-impl EnvelopeService {
-    /// Create a new EnvelopeService with dependencies
+impl RawEnvelopeService {
+    /// Create a new RawEnvelopeService with dependencies
     pub fn new(
         device_repository: Arc<dyn DeviceRepository>,
         payload_converter: Arc<dyn PayloadConverter>,
@@ -115,9 +115,9 @@ impl EnvelopeService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::payload_converter::MockPayloadConverter;
     use crate::repository::MockDeviceRepository;
     use crate::repository::MockProcessedEnvelopeProducer;
-    use crate::payload_converter::MockPayloadConverter;
     use crate::types::Device;
 
     #[tokio::test]
@@ -171,7 +171,7 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(()));
 
-        let service = EnvelopeService::new(
+        let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -196,7 +196,7 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = EnvelopeService::new(
+        let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -237,7 +237,7 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(Some(device)));
 
-        let service = EnvelopeService::new(
+        let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -287,7 +287,7 @@ mod tests {
                 ))
             });
 
-        let service = EnvelopeService::new(
+        let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -304,7 +304,10 @@ mod tests {
         let result = service.process_raw_envelope(raw_envelope).await;
 
         // Assert
-        assert!(matches!(result, Err(DomainError::PayloadConversionError(_))));
+        assert!(matches!(
+            result,
+            Err(DomainError::PayloadConversionError(_))
+        ));
     }
 
     #[tokio::test]
@@ -333,7 +336,7 @@ mod tests {
             .times(1)
             .return_once(|_, _| Ok(serde_json::Value::Number(42.into())));
 
-        let service = EnvelopeService::new(
+        let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -350,7 +353,10 @@ mod tests {
         let result = service.process_raw_envelope(raw_envelope).await;
 
         // Assert
-        assert!(matches!(result, Err(DomainError::PayloadConversionError(_))));
+        assert!(matches!(
+            result,
+            Err(DomainError::PayloadConversionError(_))
+        ));
     }
 
     #[tokio::test]
@@ -385,16 +391,13 @@ mod tests {
             .times(1)
             .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
 
-        mock_producer
-            .expect_publish()
-            .times(1)
-            .return_once(|_| {
-                Err(DomainError::RepositoryError(anyhow::anyhow!(
-                    "NATS publish failed"
-                )))
-            });
+        mock_producer.expect_publish().times(1).return_once(|_| {
+            Err(DomainError::RepositoryError(anyhow::anyhow!(
+                "NATS publish failed"
+            )))
+        });
 
-        let service = EnvelopeService::new(
+        let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),

@@ -183,8 +183,7 @@ impl CelEnvironment {
 
         // Add input variable as bytes
         let input_value = CelValue::Bytes(Arc::new(input.to_vec()));
-        context
-            .add_variable_from_value("input", input_value);
+        context.add_variable_from_value("input", input_value);
 
         // Execute the program with the context
         let result = program
@@ -194,7 +193,6 @@ impl CelEnvironment {
         // Convert CEL value to JSON and validate
         cel_value_to_json(result)
     }
-
 }
 
 impl Default for CelEnvironment {
@@ -212,11 +210,9 @@ fn cel_value_to_json(value: CelValue) -> Result<JsonValue> {
             serde_json::from_str(s.as_ref()).or_else(|_| Ok(JsonValue::String(s.to_string())))
         }
         CelValue::Int(i) => Ok(JsonValue::Number(i.into())),
-        CelValue::UInt(u) => {
-            serde_json::Number::from_f64(u as f64)
-                .map(JsonValue::Number)
-                .ok_or(PayloadError::InvalidJsonOutput)
-        }
+        CelValue::UInt(u) => serde_json::Number::from_f64(u as f64)
+            .map(JsonValue::Number)
+            .ok_or(PayloadError::InvalidJsonOutput),
         CelValue::Float(f) => serde_json::Number::from_f64(f)
             .map(JsonValue::Number)
             .ok_or(PayloadError::InvalidJsonOutput),
@@ -270,8 +266,7 @@ fn json_to_cel_value(json: JsonValue) -> Result<CelValue> {
         }
         JsonValue::String(s) => Ok(CelValue::String(Arc::new(s))),
         JsonValue::Array(arr) => {
-            let cel_list: Result<Vec<CelValue>> =
-                arr.into_iter().map(json_to_cel_value).collect();
+            let cel_list: Result<Vec<CelValue>> = arr.into_iter().map(json_to_cel_value).collect();
             Ok(CelValue::List(Arc::new(cel_list?)))
         }
         JsonValue::Object(obj) => {
@@ -361,10 +356,7 @@ mod tests {
 
         let result = env.execute("invalid syntax here!", &[]);
         assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(PayloadError::CelCompilationError(_))
-        ));
+        assert!(matches!(result, Err(PayloadError::CelCompilationError(_))));
     }
 
     #[test]
@@ -428,7 +420,7 @@ mod tests {
         // Multiple sensors: Temperature + Humidity
         let payload = vec![
             0x00, 0x67, 0x00, 0xFA, // Channel 0, Temperature, 25.0°C
-            0x01, 0x68, 0x78,       // Channel 1, Humidity, 60.0%
+            0x01, 0x68, 0x78, // Channel 1, Humidity, 60.0%
         ];
 
         let result = env.execute("cayenne_lpp_decode(input)", &payload).unwrap();
@@ -470,7 +462,7 @@ mod tests {
         // Greenhouse payload: Temperature on channel 0, Humidity on channel 1
         let payload = vec![
             0x00, 0x67, 0x00, 0xFA, // Channel 0, Temperature, 25.0°C
-            0x01, 0x68, 0x78,       // Channel 1, Humidity, 60.0%
+            0x01, 0x68, 0x78, // Channel 1, Humidity, 60.0%
         ];
 
         // Transform Cayenne LPP output to custom greenhouse format
@@ -501,7 +493,7 @@ mod tests {
         // Multi-sensor payload
         let payload = vec![
             0x00, 0x67, 0x01, 0x10, // Temperature: 27.2°C
-            0x01, 0x68, 0x78,       // Humidity: 60.0%
+            0x01, 0x68, 0x78, // Humidity: 60.0%
         ];
 
         // Transform with unit information and metadata
@@ -576,7 +568,7 @@ mod tests {
         // Greenhouse payload: Temperature on channel 0, Humidity on channel 1
         let payload = vec![
             0x00, 0x67, 0x00, 0xFA, // Channel 0, Temperature, 25.0°C
-            0x01, 0x68, 0x78,       // Channel 1, Humidity, 60.0%
+            0x01, 0x68, 0x78, // Channel 1, Humidity, 60.0%
         ];
 
         // Use map() to bind decoded result to variable and reference it multiple times
