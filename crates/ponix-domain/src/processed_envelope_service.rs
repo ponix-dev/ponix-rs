@@ -81,20 +81,15 @@ mod tests {
         let mut mock_repo = MockProcessedEnvelopeRepository::new();
 
         // Setup mock to return error
-        mock_repo
-            .expect_store_batch()
-            .times(1)
-            .return_once(|_| {
-                Err(DomainError::RepositoryError(anyhow::anyhow!(
-                    "Database connection failed"
-                )))
-            });
+        mock_repo.expect_store_batch().times(1).return_once(|_| {
+            Err(DomainError::RepositoryError(anyhow::anyhow!(
+                "Database connection failed"
+            )))
+        });
 
         let service = ProcessedEnvelopeService::new(Arc::new(mock_repo));
 
-        let input = StoreEnvelopesInput {
-            envelopes: vec![],
-        };
+        let input = StoreEnvelopesInput { envelopes: vec![] };
 
         // Call service
         let result = service.store_batch(input).await;

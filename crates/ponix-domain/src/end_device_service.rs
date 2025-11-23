@@ -21,11 +21,15 @@ impl DeviceService {
     pub async fn create_device(&self, input: CreateDeviceInput) -> DomainResult<Device> {
         // Business logic: validate inputs
         if input.organization_id.is_empty() {
-            return Err(DomainError::InvalidOrganizationId("Organization ID cannot be empty".to_string()));
+            return Err(DomainError::InvalidOrganizationId(
+                "Organization ID cannot be empty".to_string(),
+            ));
         }
 
         if input.name.is_empty() {
-            return Err(DomainError::InvalidDeviceName("Device name cannot be empty".to_string()));
+            return Err(DomainError::InvalidDeviceName(
+                "Device name cannot be empty".to_string(),
+            ));
         }
 
         // Generate unique device ID
@@ -50,12 +54,17 @@ impl DeviceService {
     /// Get a device by ID
     pub async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Device> {
         if input.device_id.is_empty() {
-            return Err(DomainError::InvalidDeviceId("Device ID cannot be empty".to_string()));
+            return Err(DomainError::InvalidDeviceId(
+                "Device ID cannot be empty".to_string(),
+            ));
         }
 
         debug!(device_id = %input.device_id, "Getting device");
 
-        let device = self.repository.get_device(input).await?
+        let device = self
+            .repository
+            .get_device(input)
+            .await?
             .ok_or_else(|| DomainError::DeviceNotFound("Device not found".to_string()))?;
 
         Ok(device)
@@ -64,7 +73,9 @@ impl DeviceService {
     /// List devices for an organization
     pub async fn list_devices(&self, input: ListDevicesInput) -> DomainResult<Vec<Device>> {
         if input.organization_id.is_empty() {
-            return Err(DomainError::InvalidOrganizationId("Organization ID cannot be empty".to_string()));
+            return Err(DomainError::InvalidOrganizationId(
+                "Organization ID cannot be empty".to_string(),
+            ));
         }
 
         debug!(organization_id = %input.organization_id, "Listing devices");
@@ -134,7 +145,10 @@ mod tests {
 
         let result = service.create_device(input).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DomainError::InvalidDeviceName(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DomainError::InvalidDeviceName(_)
+        ));
     }
 
     #[tokio::test]
@@ -183,7 +197,10 @@ mod tests {
 
         let result = service.get_device(input).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DomainError::DeviceNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DomainError::DeviceNotFound(_)
+        ));
     }
 
     #[tokio::test]

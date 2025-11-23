@@ -1,6 +1,8 @@
-use async_trait::async_trait;
 use crate::error::DomainResult;
-use crate::types::{CreateDeviceInputWithId, Device, GetDeviceInput, ListDevicesInput, StoreEnvelopesInput};
+use crate::types::{
+    CreateDeviceInputWithId, Device, GetDeviceInput, ListDevicesInput, StoreEnvelopesInput,
+};
+use async_trait::async_trait;
 
 /// Repository trait for device storage operations
 /// Infrastructure layer (e.g., ponix-postgres) implements this trait

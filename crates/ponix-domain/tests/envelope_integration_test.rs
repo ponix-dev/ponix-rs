@@ -1,21 +1,15 @@
-use ponix_domain::{
-    EnvelopeService,
-    RawEnvelope,
-    DomainError,
-};
+use ponix_domain::{DomainError, RawEnvelope, RawEnvelopeService};
 use ponix_payload::CelPayloadConverter;
 use std::sync::Arc;
 
 // Mock implementations for integration testing
 mod mocks {
-    use ponix_domain::{
-        Device,
-        GetDeviceInput,
-        ProcessedEnvelope,
-        repository::{DeviceRepository, ProcessedEnvelopeProducer},
-        error::DomainResult,
-    };
     use async_trait::async_trait;
+    use ponix_domain::{
+        error::DomainResult,
+        repository::{DeviceRepository, ProcessedEnvelopeProducer},
+        Device, GetDeviceInput, ProcessedEnvelope,
+    };
     use std::sync::{Arc, Mutex};
 
     pub struct InMemoryDeviceRepository {
@@ -102,7 +96,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
-    let service = EnvelopeService::new(
+    let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -146,7 +140,8 @@ async fn test_full_conversion_flow_custom_transformation() {
                 'humidity': cayenne_lpp_decode(input).humidity_2,
                 'status': 'active'
             }
-        "#.to_string(),
+        "#
+        .to_string(),
         created_at: None,
         updated_at: None,
     };
@@ -157,7 +152,7 @@ async fn test_full_conversion_flow_custom_transformation() {
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
-    let service = EnvelopeService::new(
+    let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -170,7 +165,7 @@ async fn test_full_conversion_flow_custom_transformation() {
         occurred_at: chrono::Utc::now(),
         payload: vec![
             0x01, 0x67, 0x01, 0x10, // Channel 1: temperature 27.2°C
-            0x02, 0x68, 0x50,       // Channel 2: humidity 80%
+            0x02, 0x68, 0x50, // Channel 2: humidity 80%
         ],
     };
 
@@ -198,7 +193,7 @@ async fn test_device_not_found() {
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
-    let service = EnvelopeService::new(
+    let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -216,7 +211,10 @@ async fn test_device_not_found() {
 
     // Assert
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), DomainError::DeviceNotFound(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        DomainError::DeviceNotFound(_)
+    ));
     assert_eq!(producer.get_published().len(), 0);
 }
 
@@ -238,7 +236,7 @@ async fn test_invalid_cel_expression() {
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
-    let service = EnvelopeService::new(
+    let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -256,7 +254,10 @@ async fn test_invalid_cel_expression() {
 
     // Assert
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), DomainError::PayloadConversionError(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        DomainError::PayloadConversionError(_)
+    ));
     assert_eq!(producer.get_published().len(), 0);
 }
 
@@ -278,7 +279,7 @@ async fn test_empty_cel_expression() {
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
-    let service = EnvelopeService::new(
+    let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -296,7 +297,10 @@ async fn test_empty_cel_expression() {
 
     // Assert
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), DomainError::MissingCelExpression(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        DomainError::MissingCelExpression(_)
+    ));
     assert_eq!(producer.get_published().len(), 0);
 }
 
@@ -318,7 +322,7 @@ async fn test_cel_expression_returns_non_object() {
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
-    let service = EnvelopeService::new(
+    let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -336,6 +340,9 @@ async fn test_cel_expression_returns_non_object() {
 
     // Assert
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), DomainError::PayloadConversionError(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        DomainError::PayloadConversionError(_)
+    ));
     assert_eq!(producer.get_published().len(), 0);
 }
