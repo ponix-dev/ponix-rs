@@ -22,10 +22,10 @@ async-trait = "0.1"
 ponix-domain = { path = "../ponix-domain" }
 
 # Protobuf types (prost)
-ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251121014924-bbe747bf8fab.1", registry = "buf", optional = true }
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251123173225-7646bc8e52d9.1", registry = "buf", optional = true }
 
 # Protobuf service definitions (tonic)
-ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.4.1-20251121014924-bbe747bf8fab.1", registry = "buf", optional = true }
+ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.4.1-20251123173225-7646bc8e52d9.1", registry = "buf", optional = true }
 
 prost-types = { workspace = true }
 chrono = "0.4"

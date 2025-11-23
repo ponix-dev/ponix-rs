@@ -1,14 +1,14 @@
 mod config;
 
 use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository};
-use ponix_domain::{DeviceService, ProcessedEnvelopeService, RawEnvelopeService};
+use ponix_domain::{DeviceService, OrganizationService, ProcessedEnvelopeService, RawEnvelopeService};
 use ponix_grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_nats::{
     create_domain_processor, create_raw_envelope_domain_processor, NatsClient, NatsConsumer,
     ProcessedEnvelopeProducer,
 };
 use ponix_payload::CelPayloadConverter;
-use ponix_postgres::{PostgresClient, PostgresDeviceRepository};
+use ponix_postgres::{PostgresClient, PostgresDeviceRepository, PostgresOrganizationRepository};
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
@@ -83,9 +83,14 @@ async fn main() {
     info!("PostgreSQL connection established");
 
     // Initialize device repository and domain service
-    let device_repository = Arc::new(PostgresDeviceRepository::new(postgres_client));
+    let device_repository = Arc::new(PostgresDeviceRepository::new(postgres_client.clone()));
     let device_service = Arc::new(DeviceService::new(device_repository.clone()));
     info!("Device service initialized");
+
+    // Initialize organization repository and domain service
+    let organization_repository = Arc::new(PostgresOrganizationRepository::new(postgres_client));
+    let organization_service = Arc::new(OrganizationService::new(organization_repository));
+    info!("Organization service initialized");
 
     // PHASE 2: Run ClickHouse migrations
     info!("Running ClickHouse migrations...");
@@ -239,8 +244,11 @@ async fn main() {
         .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
         .with_app_process(move |ctx| Box::pin(async move { raw_consumer.run(ctx).await }))
         .with_app_process({
-            let service = device_service.clone();
-            move |ctx| Box::pin(async move { run_grpc_server(grpc_config, service, ctx).await })
+            let device_svc = device_service.clone();
+            let org_svc = organization_service.clone();
+            move |ctx| {
+                Box::pin(async move { run_grpc_server(grpc_config, device_svc, org_svc, ctx).await })
+            }
         })
         .with_closer(move || {
             Box::pin(async move {

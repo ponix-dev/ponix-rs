@@ -4,10 +4,12 @@ use tokio_util::sync::CancellationToken;
 use tonic::transport::Server;
 use tracing::{error, info};
 
-use ponix_domain::DeviceService;
+use ponix_domain::{DeviceService, OrganizationService};
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceServiceServer;
+use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationServiceServer;
 
 use crate::device_handler::DeviceServiceHandler;
+use crate::organization_handler::OrganizationServiceHandler;
 
 /// gRPC server configuration
 pub struct GrpcServerConfig {
@@ -27,7 +29,8 @@ impl Default for GrpcServerConfig {
 /// Run the gRPC server with graceful shutdown
 pub async fn run_grpc_server(
     config: GrpcServerConfig,
-    domain_service: Arc<DeviceService>,
+    device_service: Arc<DeviceService>,
+    organization_service: Arc<OrganizationService>,
     cancellation_token: CancellationToken,
 ) -> Result<(), anyhow::Error> {
     let addr: SocketAddr = format!("{}:{}", config.host, config.port)
@@ -36,12 +39,14 @@ pub async fn run_grpc_server(
 
     info!("Starting gRPC server on {}", addr);
 
-    // Create handler
-    let handler = DeviceServiceHandler::new(domain_service);
+    // Create handlers
+    let device_handler = DeviceServiceHandler::new(device_service);
+    let organization_handler = OrganizationServiceHandler::new(organization_service);
 
     // Build server with graceful shutdown
     let server = Server::builder()
-        .add_service(EndDeviceServiceServer::new(handler))
+        .add_service(EndDeviceServiceServer::new(device_handler))
+        .add_service(OrganizationServiceServer::new(organization_handler))
         .serve_with_shutdown(addr, async move {
             cancellation_token.cancelled().await;
             info!("gRPC server shutdown signal received");
