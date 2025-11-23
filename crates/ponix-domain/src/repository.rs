@@ -1,6 +1,7 @@
 use crate::end_device::*;
 use crate::envelope::*;
 use crate::error::DomainResult;
+use crate::gateway::*;
 use crate::organization::*;
 use async_trait::async_trait;
 
@@ -99,4 +100,24 @@ pub trait RawEnvelopeProducer: Send + Sync {
     /// # Returns
     /// () on success, DomainError on failure
     async fn publish(&self, envelope: &RawEnvelope) -> DomainResult<()>;
+}
+
+/// Repository trait for gateway persistence operations
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait GatewayRepository: Send + Sync {
+    /// Create a new gateway
+    async fn create_gateway(&self, input: CreateGatewayInputWithId) -> DomainResult<Gateway>;
+
+    /// Get a gateway by ID (excludes soft deleted)
+    async fn get_gateway(&self, gateway_id: &str) -> DomainResult<Option<Gateway>>;
+
+    /// Update a gateway
+    async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway>;
+
+    /// Soft delete a gateway
+    async fn delete_gateway(&self, gateway_id: &str) -> DomainResult<()>;
+
+    /// List gateways by organization (excludes soft deleted)
+    async fn list_gateways(&self, organization_id: &str) -> DomainResult<Vec<Gateway>>;
 }

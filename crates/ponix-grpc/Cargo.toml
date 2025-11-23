@@ -29,6 +29,7 @@ ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", versi
 
 prost-types = { workspace = true }
 chrono = "0.4"
+serde_json = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

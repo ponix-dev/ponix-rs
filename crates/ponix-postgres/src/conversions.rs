@@ -1,5 +1,5 @@
-use crate::models::{Device as DbDevice, DeviceRow};
-use ponix_domain::{CreateDeviceInputWithId, Device as DomainDevice};
+use crate::models::{Device as DbDevice, DeviceRow, GatewayRow};
+use ponix_domain::{CreateDeviceInputWithId, Device as DomainDevice, Gateway};
 
 /// Convert domain CreateDeviceInputWithId to database Device (for insert)
 impl From<&CreateDeviceInputWithId> for DbDevice {
@@ -37,6 +37,21 @@ impl From<DbDevice> for DomainDevice {
             payload_conversion: device.payload_conversion,
             created_at: None,
             updated_at: None,
+        }
+    }
+}
+
+/// Convert database GatewayRow to domain Gateway
+impl From<GatewayRow> for Gateway {
+    fn from(row: GatewayRow) -> Self {
+        Gateway {
+            gateway_id: row.gateway_id,
+            organization_id: row.organization_id,
+            gateway_type: row.gateway_type,
+            gateway_config: row.gateway_config,
+            deleted_at: row.deleted_at,
+            created_at: Some(row.created_at),
+            updated_at: Some(row.updated_at),
         }
     }
 }
