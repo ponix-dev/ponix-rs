@@ -93,7 +93,7 @@ async fn main() {
     ));
     info!("Device service initialized");
 
-    let organization_service = Arc::new(OrganizationService::new(organization_repository));
+    let organization_service = Arc::new(OrganizationService::new(organization_repository.clone()));
     info!("Organization service initialized");
 
     // PHASE 2: Run ClickHouse migrations
@@ -208,6 +208,7 @@ async fn main() {
     // Create RawEnvelopeService
     let raw_envelope_service = Arc::new(RawEnvelopeService::new(
         device_repository.clone(),
+        organization_repository.clone(),
         payload_converter,
         processed_envelope_producer,
     ));

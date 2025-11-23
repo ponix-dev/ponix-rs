@@ -15,6 +15,7 @@ use ponix_nats::{
 use ponix_payload::CelPayloadConverter;
 use ponix_postgres::{
     MigrationRunner as PostgresMigrationRunner, PostgresClient, PostgresDeviceRepository,
+    PostgresOrganizationRepository,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -226,9 +227,10 @@ async fn initialize_services(
 
     let pg_client = PostgresClient::new(host, port, "postgres", "postgres", "postgres", 5)?;
     let device_repo = Arc::new(PostgresDeviceRepository::new(pg_client.clone()));
+    let org_repo = Arc::new(PostgresOrganizationRepository::new(pg_client.clone()));
 
     // Device service
-    let device_service = Arc::new(DeviceService::new(device_repo.clone()));
+    let device_service = Arc::new(DeviceService::new(device_repo.clone(), org_repo.clone()));
 
     // ClickHouse client and repository
     let ch_client = ClickHouseClient::new(clickhouse_http_url, "default", "default", "");
@@ -263,6 +265,7 @@ async fn initialize_services(
     // Raw envelope service
     let raw_envelope_service = Arc::new(RawEnvelopeService::new(
         device_repo,
+        org_repo,
         payload_converter,
         processed_producer,
     ));

@@ -7,8 +7,8 @@ mod mocks {
     use async_trait::async_trait;
     use ponix_domain::{
         error::DomainResult,
-        repository::{DeviceRepository, ProcessedEnvelopeProducer},
-        Device, GetDeviceInput, ProcessedEnvelope,
+        repository::{DeviceRepository, OrganizationRepository, ProcessedEnvelopeProducer},
+        Device, GetDeviceInput, GetOrganizationInput, Organization, ProcessedEnvelope,
     };
     use std::sync::{Arc, Mutex};
 
@@ -47,6 +47,62 @@ mod mocks {
             &self,
             _input: ponix_domain::ListDevicesInput,
         ) -> DomainResult<Vec<Device>> {
+            unimplemented!("Not needed for envelope tests")
+        }
+    }
+
+    pub struct InMemoryOrganizationRepository {
+        organizations: Mutex<std::collections::HashMap<String, Organization>>,
+    }
+
+    impl InMemoryOrganizationRepository {
+        pub fn new() -> Self {
+            Self {
+                organizations: Mutex::new(std::collections::HashMap::new()),
+            }
+        }
+
+        pub fn add_organization(&self, org: Organization) {
+            let mut orgs = self.organizations.lock().unwrap();
+            orgs.insert(org.id.clone(), org);
+        }
+    }
+
+    #[async_trait]
+    impl OrganizationRepository for InMemoryOrganizationRepository {
+        async fn create_organization(
+            &self,
+            _input: ponix_domain::CreateOrganizationInputWithId,
+        ) -> DomainResult<Organization> {
+            unimplemented!("Not needed for envelope tests")
+        }
+
+        async fn get_organization(
+            &self,
+            input: GetOrganizationInput,
+        ) -> DomainResult<Option<Organization>> {
+            let orgs = self.organizations.lock().unwrap();
+            Ok(orgs.get(&input.organization_id).cloned())
+        }
+
+        async fn delete_organization(
+            &self,
+            _input: ponix_domain::DeleteOrganizationInput,
+        ) -> DomainResult<()> {
+            unimplemented!("Not needed for envelope tests")
+        }
+
+        async fn update_organization(
+            &self,
+            _input: ponix_domain::UpdateOrganizationInput,
+        ) -> DomainResult<Organization> {
+            unimplemented!("Not needed for envelope tests")
+        }
+
+        async fn list_organizations(
+            &self,
+            _input: ponix_domain::ListOrganizationsInput,
+        ) -> DomainResult<Vec<Organization>> {
             unimplemented!("Not needed for envelope tests")
         }
     }
@@ -90,14 +146,26 @@ async fn test_full_conversion_flow_cayenne_lpp() {
         updated_at: None,
     };
 
+    let org = ponix_domain::Organization {
+        id: "org-123".to_string(),
+        name: "Test Org".to_string(),
+        deleted_at: None,
+        created_at: None,
+        updated_at: None,
+    };
+
     let device_repo = mocks::InMemoryDeviceRepository::new();
     device_repo.add_device(device);
+
+    let org_repo = mocks::InMemoryOrganizationRepository::new();
+    org_repo.add_organization(org);
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
+        Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
     );
@@ -146,14 +214,26 @@ async fn test_full_conversion_flow_custom_transformation() {
         updated_at: None,
     };
 
+    let org = ponix_domain::Organization {
+        id: "org-456".to_string(),
+        name: "Test Org".to_string(),
+        deleted_at: None,
+        created_at: None,
+        updated_at: None,
+    };
+
     let device_repo = mocks::InMemoryDeviceRepository::new();
     device_repo.add_device(device);
+
+    let org_repo = mocks::InMemoryOrganizationRepository::new();
+    org_repo.add_organization(org);
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
+        Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
     );
@@ -190,11 +270,13 @@ async fn test_full_conversion_flow_custom_transformation() {
 async fn test_device_not_found() {
     // Arrange: Empty device repository
     let device_repo = mocks::InMemoryDeviceRepository::new();
+    let org_repo = mocks::InMemoryOrganizationRepository::new();
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
+        Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
     );
@@ -230,14 +312,26 @@ async fn test_invalid_cel_expression() {
         updated_at: None,
     };
 
+    let org = ponix_domain::Organization {
+        id: "org-789".to_string(),
+        name: "Test Org".to_string(),
+        deleted_at: None,
+        created_at: None,
+        updated_at: None,
+    };
+
     let device_repo = mocks::InMemoryDeviceRepository::new();
     device_repo.add_device(device);
+
+    let org_repo = mocks::InMemoryOrganizationRepository::new();
+    org_repo.add_organization(org);
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
+        Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
     );
@@ -273,14 +367,26 @@ async fn test_empty_cel_expression() {
         updated_at: None,
     };
 
+    let org = ponix_domain::Organization {
+        id: "org-000".to_string(),
+        name: "Test Org".to_string(),
+        deleted_at: None,
+        created_at: None,
+        updated_at: None,
+    };
+
     let device_repo = mocks::InMemoryDeviceRepository::new();
     device_repo.add_device(device);
+
+    let org_repo = mocks::InMemoryOrganizationRepository::new();
+    org_repo.add_organization(org);
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
+        Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
     );
@@ -316,14 +422,26 @@ async fn test_cel_expression_returns_non_object() {
         updated_at: None,
     };
 
+    let org = ponix_domain::Organization {
+        id: "org-scalar".to_string(),
+        name: "Test Org".to_string(),
+        deleted_at: None,
+        created_at: None,
+        updated_at: None,
+    };
+
     let device_repo = mocks::InMemoryDeviceRepository::new();
     device_repo.add_device(device);
+
+    let org_repo = mocks::InMemoryOrganizationRepository::new();
+    org_repo.add_organization(org);
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
+        Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
     );
