@@ -21,3 +21,13 @@ pub struct DeviceRow {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+/// Organization row for PostgreSQL storage with timestamp metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrganizationRow {
+    pub id: String,
+    pub name: String,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
