@@ -5,7 +5,7 @@ use anyhow::Result;
 #[cfg(feature = "processed-envelope")]
 use futures::future::BoxFuture;
 #[cfg(feature = "processed-envelope")]
-use ponix_domain::{types::StoreEnvelopesInput, ProcessedEnvelopeService};
+use ponix_domain::{ProcessedEnvelopeService, StoreEnvelopesInput};
 #[cfg(feature = "processed-envelope")]
 use ponix_proto::envelope::v1::ProcessedEnvelope as ProtoEnvelope;
 #[cfg(feature = "processed-envelope")]

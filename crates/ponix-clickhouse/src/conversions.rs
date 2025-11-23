@@ -1,4 +1,4 @@
-use ponix_domain::types::ProcessedEnvelope as DomainEnvelope;
+use ponix_domain::ProcessedEnvelope as DomainEnvelope;
 
 use crate::models::ProcessedEnvelopeRow;
 

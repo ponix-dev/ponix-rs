@@ -4,7 +4,7 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use testcontainers_modules::postgres::Postgres;
 
-async fn setup_test_db() -> (ContainerAsync<Postgres>, PostgresDeviceRepository) {
+async fn setup_test_db() -> (ContainerAsync<Postgres>, PostgresDeviceRepository, PostgresClient) {
     let postgres = Postgres::default().start().await.unwrap();
     let host = postgres.get_host().await.unwrap();
     let port = postgres.get_host_port_ipv4(5432).await.unwrap();
@@ -40,15 +40,24 @@ async fn setup_test_db() -> (ContainerAsync<Postgres>, PostgresDeviceRepository)
     )
     .expect("Failed to create client");
 
-    let repository = PostgresDeviceRepository::new(client);
+    let repository = PostgresDeviceRepository::new(client.clone());
 
-    (postgres, repository)
+    (postgres, repository, client)
 }
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_create_and_get_device() {
-    let (_container, repo) = setup_test_db().await;
+    let (_container, repo, client) = setup_test_db().await;
+
+    // Create organization first
+    let conn = client.get_connection().await.unwrap();
+    conn.execute(
+        "INSERT INTO organizations (id, name) VALUES ($1, $2)",
+        &[&"test-org-456", &"Test Organization"],
+    )
+    .await
+    .unwrap();
 
     let input = CreateDeviceInputWithId {
         device_id: "test-device-123".to_string(),
@@ -80,7 +89,7 @@ async fn test_create_and_get_device() {
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_get_nonexistent_device() {
-    let (_container, repo) = setup_test_db().await;
+    let (_container, repo, _client) = setup_test_db().await;
 
     let get_input = GetDeviceInput {
         device_id: "nonexistent-device".to_string(),
@@ -92,7 +101,16 @@ async fn test_get_nonexistent_device() {
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_list_devices_by_organization() {
-    let (_container, repo) = setup_test_db().await;
+    let (_container, repo, client) = setup_test_db().await;
+
+    // Create organization first
+    let conn = client.get_connection().await.unwrap();
+    conn.execute(
+        "INSERT INTO organizations (id, name) VALUES ($1, $2)",
+        &[&"test-org", &"Test Organization"],
+    )
+    .await
+    .unwrap();
 
     // Create multiple devices
     for i in 1..=3 {
@@ -118,7 +136,7 @@ async fn test_list_devices_by_organization() {
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_list_devices_for_empty_organization() {
-    let (_container, repo) = setup_test_db().await;
+    let (_container, repo, _client) = setup_test_db().await;
 
     let list_input = ListDevicesInput {
         organization_id: "empty-org".to_string(),
@@ -131,7 +149,16 @@ async fn test_list_devices_for_empty_organization() {
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_create_duplicate_device() {
-    let (_container, repo) = setup_test_db().await;
+    let (_container, repo, client) = setup_test_db().await;
+
+    // Create organization first
+    let conn = client.get_connection().await.unwrap();
+    conn.execute(
+        "INSERT INTO organizations (id, name) VALUES ($1, $2)",
+        &[&"test-org", &"Test Organization"],
+    )
+    .await
+    .unwrap();
 
     let input = CreateDeviceInputWithId {
         device_id: "duplicate-device".to_string(),

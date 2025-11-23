@@ -7,7 +7,11 @@ pub mod error;
 #[cfg(feature = "device")]
 pub mod server;
 
+pub mod organization_conversions;
+pub mod organization_handler;
+
 #[cfg(feature = "device")]
 pub use device_handler::DeviceServiceHandler;
+pub use organization_handler::OrganizationServiceHandler;
 #[cfg(feature = "device")]
 pub use server::{run_grpc_server, GrpcServerConfig};

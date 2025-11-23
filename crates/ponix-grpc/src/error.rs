@@ -10,11 +10,18 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::InvalidDeviceId(msg)
         | DomainError::InvalidOrganizationId(msg)
-        | DomainError::InvalidDeviceName(msg) => Status::invalid_argument(msg),
+        | DomainError::InvalidDeviceName(msg)
+        | DomainError::InvalidOrganizationName(msg) => Status::invalid_argument(msg),
 
         DomainError::PayloadConversionError(msg) => Status::invalid_argument(msg),
 
         DomainError::MissingCelExpression(msg) => Status::failed_precondition(msg),
+
+        DomainError::OrganizationNotFound(msg) => Status::not_found(msg),
+
+        DomainError::OrganizationAlreadyExists(msg) => Status::already_exists(msg),
+
+        DomainError::OrganizationDeleted(msg) => Status::failed_precondition(msg),
 
         DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
     }

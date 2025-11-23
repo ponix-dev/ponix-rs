@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use ponix_domain::types::RawEnvelope as DomainRawEnvelope;
+use ponix_domain::RawEnvelope as DomainRawEnvelope;
 use ponix_proto::envelope::v1::RawEnvelope as ProtoRawEnvelope;
 use prost_types::Timestamp;
 

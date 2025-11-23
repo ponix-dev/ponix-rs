@@ -2,7 +2,7 @@ use crate::traits::JetStreamPublisher;
 use anyhow::Context;
 use async_trait::async_trait;
 use ponix_domain::error::{DomainError, DomainResult};
-use ponix_domain::types::RawEnvelope as DomainRawEnvelope;
+use ponix_domain::RawEnvelope as DomainRawEnvelope;
 use ponix_domain::RawEnvelopeProducer as RawEnvelopeProducerTrait;
 use prost::Message as ProstMessage;
 use std::sync::Arc;
