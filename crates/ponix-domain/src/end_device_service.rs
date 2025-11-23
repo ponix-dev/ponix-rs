@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use tracing::{debug, info};
 
+use crate::end_device::*;
 use crate::error::{DomainError, DomainResult};
 use crate::repository::DeviceRepository;
-use crate::types::{CreateDeviceInput, Device, GetDeviceInput, ListDevicesInput};
 
 /// Domain service for device management business logic
 /// This is the orchestration layer that handlers call
@@ -38,7 +38,7 @@ impl DeviceService {
         debug!(device_id = %device_id, organization_id = %input.organization_id, "Creating device");
 
         // Create input with generated ID for repository
-        let repo_input = crate::types::CreateDeviceInputWithId {
+        let repo_input = CreateDeviceInputWithId {
             device_id,
             organization_id: input.organization_id,
             name: input.name,
@@ -107,7 +107,7 @@ mod tests {
 
         mock_repo
             .expect_create_device()
-            .withf(|input: &crate::types::CreateDeviceInputWithId| {
+            .withf(|input: &CreateDeviceInputWithId| {
                 !input.device_id.is_empty() // ID is generated
                     && input.organization_id == "org-456"
                     && input.name == "Test Device"

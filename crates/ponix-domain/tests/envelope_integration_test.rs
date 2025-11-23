@@ -33,7 +33,7 @@ mod mocks {
     impl DeviceRepository for InMemoryDeviceRepository {
         async fn create_device(
             &self,
-            _input: ponix_domain::types::CreateDeviceInputWithId,
+            _input: ponix_domain::CreateDeviceInputWithId,
         ) -> DomainResult<Device> {
             unimplemented!("Not needed for envelope tests")
         }
@@ -45,7 +45,7 @@ mod mocks {
 
         async fn list_devices(
             &self,
-            _input: ponix_domain::types::ListDevicesInput,
+            _input: ponix_domain::ListDevicesInput,
         ) -> DomainResult<Vec<Device>> {
             unimplemented!("Not needed for envelope tests")
         }

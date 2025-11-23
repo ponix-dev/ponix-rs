@@ -23,6 +23,18 @@ pub enum DomainError {
     #[error("Missing CEL expression for device: {0}")]
     MissingCelExpression(String),
 
+    #[error("Organization not found: {0}")]
+    OrganizationNotFound(String),
+
+    #[error("Organization already exists: {0}")]
+    OrganizationAlreadyExists(String),
+
+    #[error("Invalid organization name: {0}")]
+    InvalidOrganizationName(String),
+
+    #[error("Organization is deleted: {0}")]
+    OrganizationDeleted(String),
+
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
 }

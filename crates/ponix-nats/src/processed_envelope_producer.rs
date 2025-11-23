@@ -52,7 +52,7 @@ use ponix_domain::error::{DomainError, DomainResult};
 #[cfg(feature = "processed-envelope")]
 use ponix_domain::repository::ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait;
 #[cfg(feature = "processed-envelope")]
-use ponix_domain::types::ProcessedEnvelope as DomainProcessedEnvelope;
+use ponix_domain::ProcessedEnvelope as DomainProcessedEnvelope;
 
 #[cfg(feature = "processed-envelope")]
 #[async_trait::async_trait]
@@ -96,7 +96,7 @@ mod domain_trait_tests {
     use super::*;
     use crate::traits::MockJetStreamPublisher;
     use ponix_domain::repository::ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait;
-    use ponix_domain::types::ProcessedEnvelope as DomainProcessedEnvelope;
+    use ponix_domain::ProcessedEnvelope as DomainProcessedEnvelope;
 
     #[tokio::test]
     async fn test_domain_trait_publish_success() {

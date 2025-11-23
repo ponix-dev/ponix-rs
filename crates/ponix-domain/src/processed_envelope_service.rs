@@ -1,5 +1,5 @@
+use crate::envelope::*;
 use crate::repository::ProcessedEnvelopeRepository;
-use crate::types::StoreEnvelopesInput;
 use crate::DomainResult;
 use std::sync::Arc;
 use tracing::debug;
@@ -33,7 +33,7 @@ impl ProcessedEnvelopeService {
 mod tests {
     use super::*;
     use crate::repository::MockProcessedEnvelopeRepository;
-    use crate::types::ProcessedEnvelope;
+    // ProcessedEnvelope already imported via use super::*;
     use chrono::Utc;
 
     #[tokio::test]

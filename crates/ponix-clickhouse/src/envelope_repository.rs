@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ponix_domain::types::StoreEnvelopesInput;
+use ponix_domain::StoreEnvelopesInput;
 use ponix_domain::{DomainError, DomainResult, ProcessedEnvelopeRepository};
 use tracing::{debug, error};
 

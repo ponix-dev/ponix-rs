@@ -1,7 +1,8 @@
+use crate::end_device::*;
+use crate::envelope::*;
 use crate::error::{DomainError, DomainResult};
 use crate::payload_converter::PayloadConverter;
 use crate::repository::{DeviceRepository, ProcessedEnvelopeProducer};
-use crate::types::{GetDeviceInput, ProcessedEnvelope, RawEnvelope};
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
@@ -118,7 +119,7 @@ mod tests {
     use crate::payload_converter::MockPayloadConverter;
     use crate::repository::MockDeviceRepository;
     use crate::repository::MockProcessedEnvelopeProducer;
-    use crate::types::Device;
+    // Device already imported via use super::*;
 
     #[tokio::test]
     async fn test_process_raw_envelope_success() {

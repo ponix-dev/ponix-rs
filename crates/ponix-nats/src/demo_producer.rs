@@ -1,6 +1,6 @@
 use anyhow::Result;
 use ponix_domain::repository::ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait;
-use ponix_domain::types::ProcessedEnvelope;
+use ponix_domain::ProcessedEnvelope;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
