@@ -213,6 +213,7 @@ async fn initialize_services(
     Arc<RawEnvelopeService>,
     Arc<ProcessedEnvelopeService>,
     Arc<NatsClient>,
+    PostgresClient,
 )> {
     // PostgreSQL client and repository
     // Parse postgres URL to extract connection details
@@ -224,7 +225,7 @@ async fn initialize_services(
     let port: u16 = host_port[1].parse()?;
 
     let pg_client = PostgresClient::new(host, port, "postgres", "postgres", "postgres", 5)?;
-    let device_repo = Arc::new(PostgresDeviceRepository::new(pg_client));
+    let device_repo = Arc::new(PostgresDeviceRepository::new(pg_client.clone()));
 
     // Device service
     let device_service = Arc::new(DeviceService::new(device_repo.clone()));
@@ -271,11 +272,21 @@ async fn initialize_services(
         raw_envelope_service,
         processed_envelope_service,
         nats_client,
+        pg_client,
     ))
 }
 
-/// Create a test device with CEL expression for Cayenne LPP transformation
-async fn create_test_device(device_service: &DeviceService) -> Result<Device> {
+/// Create a test organization and device with CEL expression for Cayenne LPP transformation
+async fn create_test_device(device_service: &DeviceService, pg_client: &PostgresClient) -> Result<Device> {
+    // First, create the test organization directly in the database
+    // (OrganizationService not yet implemented in Phase 1)
+    let conn = pg_client.get_connection().await?;
+    conn.execute(
+        "INSERT INTO organizations (id, name) VALUES ($1, $2)",
+        &[&"test-org-123", &"Test Organization"],
+    )
+    .await?;
+
     // CEL expression that decodes Cayenne LPP and renames fields
     let cel_expression = r#"{
         'sensor_data': cayenne_lpp_decode(input),
@@ -528,10 +539,10 @@ async fn test_end_to_end_raw_to_processed_pipeline() -> Result<()> {
     println!("   - NATS: {}", nats_url);
 
     // Phase 3: Initialize services and create device
-    let (device_service, raw_envelope_service, processed_envelope_service, nats_client) =
+    let (device_service, raw_envelope_service, processed_envelope_service, nats_client, pg_client) =
         initialize_services(&postgres_url, &clickhouse_http_url, &nats_url).await?;
 
-    let device = create_test_device(&device_service).await?;
+    let device = create_test_device(&device_service, &pg_client).await?;
 
     println!("✅ Phase 3 completed: Services initialized and device created");
     println!("   - Device ID: {}", device.device_id);
