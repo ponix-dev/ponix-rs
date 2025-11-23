@@ -11,7 +11,9 @@ pub use error::{DomainError, DomainResult};
 pub use payload_converter::PayloadConverter;
 pub use processed_envelope_service::ProcessedEnvelopeService;
 pub use raw_envelope_service::RawEnvelopeService;
-pub use repository::{DeviceRepository, ProcessedEnvelopeProducer, ProcessedEnvelopeRepository};
+pub use repository::{
+    DeviceRepository, ProcessedEnvelopeProducer, ProcessedEnvelopeRepository, RawEnvelopeProducer,
+};
 pub use types::{
     CreateDeviceInput, CreateDeviceInputWithId, Device, GetDeviceInput, ListDevicesInput,
     ProcessedEnvelope, RawEnvelope, StoreEnvelopesInput,

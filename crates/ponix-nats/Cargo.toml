@@ -20,7 +20,7 @@ serde_json = { version = "1.0", optional = true }
 chrono = { version = "0.4", optional = true }
 
 # ProcessedEnvelope-specific dependencies (optional)
-ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf", optional = true }
+ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251121014924-bbe747bf8fab.1", registry = "buf", optional = true }
 ponix-domain = { path = "../ponix-domain", optional = true }
 xid = { version = "1.1", optional = true }
 
@@ -30,6 +30,8 @@ default = []
 protobuf = ["prost"]
 # Enable ProcessedEnvelope-specific producer and processor
 processed-envelope = ["ponix-proto", "protobuf", "xid", "ponix-domain", "prost-types", "serde_json", "chrono"]
+# Enable RawEnvelope-specific producer and processor
+raw-envelope = ["ponix-proto", "protobuf", "ponix-domain", "prost-types", "chrono", "xid"]
 
 [dev-dependencies]
 mockall = "0.13"

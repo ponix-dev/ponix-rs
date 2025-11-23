@@ -1,11 +1,11 @@
 #[cfg(feature = "processed-envelope")]
-use crate::{ BatchProcessor, ProcessingResult};
+use crate::{BatchProcessor, ProcessingResult};
 #[cfg(feature = "processed-envelope")]
 use anyhow::Result;
 #[cfg(feature = "processed-envelope")]
 use futures::future::BoxFuture;
 #[cfg(feature = "processed-envelope")]
-use ponix_domain::{ProcessedEnvelopeService, types::StoreEnvelopesInput};
+use ponix_domain::{types::StoreEnvelopesInput, ProcessedEnvelopeService};
 #[cfg(feature = "processed-envelope")]
 use ponix_proto::envelope::v1::ProcessedEnvelope as ProtoEnvelope;
 #[cfg(feature = "processed-envelope")]
@@ -19,9 +19,7 @@ use crate::conversions::proto_to_domain_envelope;
 /// Create a batch processor that converts protobuf envelopes to domain types
 /// and stores them via the domain service
 #[cfg(feature = "processed-envelope")]
-pub fn create_domain_processor(
-    service: Arc<ProcessedEnvelopeService>,
-) -> BatchProcessor {
+pub fn create_domain_processor(service: Arc<ProcessedEnvelopeService>) -> BatchProcessor {
     Box::new(move |messages: &[async_nats::jetstream::Message]| {
         let service = service.clone();
 
@@ -35,7 +33,10 @@ pub fn create_domain_processor(
             match ProtoEnvelope::decode(&msg.payload[..]) {
                 Ok(proto_envelope) => decoded_envelopes.push((index, proto_envelope)),
                 Err(e) => {
-                    error!("Failed to decode protobuf message at index {}: {}", index, e);
+                    error!(
+                        "Failed to decode protobuf message at index {}: {}",
+                        index, e
+                    );
                     decode_errors.push((index, Some(format!("Decode error: {}", e))));
                 }
             }
@@ -80,10 +81,8 @@ pub fn create_domain_processor(
                         "Successfully processed envelope batch"
                     );
                     // Ack all successfully processed messages
-                    let ack_indices: Vec<usize> = decoded_envelopes
-                        .iter()
-                        .map(|(idx, _)| *idx)
-                        .collect();
+                    let ack_indices: Vec<usize> =
+                        decoded_envelopes.iter().map(|(idx, _)| *idx).collect();
                     Ok(ProcessingResult::new(ack_indices, decode_errors))
                 }
                 Err(e) => {

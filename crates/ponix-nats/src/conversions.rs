@@ -1,17 +1,21 @@
 use anyhow::{anyhow, Result};
 use ponix_domain::types::ProcessedEnvelope as DomainEnvelope;
 use ponix_proto::envelope::v1::ProcessedEnvelope as ProtoEnvelope;
-use prost_types::{Timestamp, value::Kind};
+use prost_types::{value::Kind, Timestamp};
 
 /// Convert protobuf ProcessedEnvelope to domain ProcessedEnvelope
 pub fn proto_to_domain_envelope(proto: ProtoEnvelope) -> Result<DomainEnvelope> {
     // Convert timestamps
     let occurred_at = timestamp_to_datetime(
-        proto.occurred_at.ok_or_else(|| anyhow!("Missing occurred_at timestamp"))?
+        proto
+            .occurred_at
+            .ok_or_else(|| anyhow!("Missing occurred_at timestamp"))?,
     )?;
 
     let processed_at = timestamp_to_datetime(
-        proto.processed_at.ok_or_else(|| anyhow!("Missing processed_at timestamp"))?
+        proto
+            .processed_at
+            .ok_or_else(|| anyhow!("Missing processed_at timestamp"))?,
     )?;
 
     // Convert protobuf Struct to serde_json::Map
@@ -44,7 +48,13 @@ fn timestamp_to_datetime(ts: Timestamp) -> Result<chrono::DateTime<chrono::Utc>>
     chrono::Utc
         .timestamp_opt(ts.seconds, ts.nanos as u32)
         .single()
-        .ok_or_else(|| anyhow!("Invalid timestamp: {} seconds, {} nanos", ts.seconds, ts.nanos))
+        .ok_or_else(|| {
+            anyhow!(
+                "Invalid timestamp: {} seconds, {} nanos",
+                ts.seconds,
+                ts.nanos
+            )
+        })
 }
 
 /// Convert protobuf Value to serde_json::Value
@@ -64,11 +74,8 @@ fn prost_value_to_json(value: &prost_types::Value) -> Option<serde_json::Value> 
             serde_json::Value::Object(map)
         }
         Kind::ListValue(list) => {
-            let values: Vec<serde_json::Value> = list
-                .values
-                .iter()
-                .filter_map(prost_value_to_json)
-                .collect();
+            let values: Vec<serde_json::Value> =
+                list.values.iter().filter_map(prost_value_to_json).collect();
             serde_json::Value::Array(values)
         }
     })
@@ -127,9 +134,7 @@ mod tests {
 
 /// Convert domain ProcessedEnvelope to protobuf ProcessedEnvelope
 #[cfg(feature = "processed-envelope")]
-pub fn domain_to_proto_envelope(
-    envelope: &DomainEnvelope,
-) -> ProtoEnvelope {
+pub fn domain_to_proto_envelope(envelope: &DomainEnvelope) -> ProtoEnvelope {
     use prost_types::Timestamp;
 
     ProtoEnvelope {

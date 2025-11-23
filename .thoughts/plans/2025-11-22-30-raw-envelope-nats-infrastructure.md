@@ -204,14 +204,14 @@ pub use repository::RawEnvelopeProducer;
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Domain layer builds: `cargo build -p ponix-domain`
-- [ ] Unit tests pass: `cargo test -p ponix-domain`
-- [ ] Clippy passes: `cargo clippy -p ponix-domain`
-- [ ] Formatting correct: `cargo fmt --check -p ponix-domain`
+- [x] Domain layer builds: `cargo build -p ponix-domain`
+- [x] Unit tests pass: `cargo test -p ponix-domain`
+- [x] Clippy passes: `cargo clippy -p ponix-domain`
+- [x] Formatting correct: `cargo fmt --check -p ponix-domain`
 
 #### Manual Verification:
-- [ ] Mock trait `MockRawEnvelopeProducer` is available for testing
-- [ ] Trait can be used in type signatures
+- [x] Mock trait `MockRawEnvelopeProducer` is available for testing
+- [x] Trait can be used in type signatures
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation before proceeding to Phase 2.
 
@@ -543,11 +543,11 @@ pub use raw_envelope_producer::RawEnvelopeProducer;
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] NATS crate builds with feature: `cargo build -p ponix-nats --features raw-envelope`
-- [ ] NATS crate builds without feature: `cargo build -p ponix-nats`
-- [ ] Unit tests pass: `cargo test -p ponix-nats --features raw-envelope`
-- [ ] Clippy passes: `cargo clippy -p ponix-nats --features raw-envelope`
-- [ ] Formatting correct: `cargo fmt --check -p ponix-nats`
+- [x] NATS crate builds with feature: `cargo build -p ponix-nats --features raw-envelope`
+- [x] NATS crate builds without feature: `cargo build -p ponix-nats`
+- [x] Unit tests pass: `cargo test -p ponix-nats --features raw-envelope`
+- [x] Clippy passes: `cargo clippy -p ponix-nats --features raw-envelope`
+- [x] Formatting correct: `cargo fmt --check -p ponix-nats`
 
 #### Manual Verification:
 - [ ] Producer can be instantiated with NATS client

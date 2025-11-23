@@ -48,3 +48,22 @@ pub trait ProcessedEnvelopeProducer: Send + Sync {
     /// () on success, DomainError on failure
     async fn publish(&self, envelope: &crate::types::ProcessedEnvelope) -> DomainResult<()>;
 }
+
+/// Trait for publishing raw envelopes to message broker
+///
+/// Implementations should:
+/// - Serialize envelope to appropriate format (protobuf)
+/// - Publish to message broker (NATS JetStream)
+/// - Return error if publish fails
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait RawEnvelopeProducer: Send + Sync {
+    /// Publish a single raw envelope
+    ///
+    /// # Arguments
+    /// * `envelope` - RawEnvelope to publish
+    ///
+    /// # Returns
+    /// () on success, DomainError on failure
+    async fn publish(&self, envelope: &crate::types::RawEnvelope) -> DomainResult<()>;
+}
