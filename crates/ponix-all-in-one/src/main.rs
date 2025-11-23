@@ -82,13 +82,17 @@ async fn main() {
     };
     info!("PostgreSQL connection established");
 
-    // Initialize device repository and domain service
+    // Initialize repositories
     let device_repository = Arc::new(PostgresDeviceRepository::new(postgres_client.clone()));
-    let device_service = Arc::new(DeviceService::new(device_repository.clone()));
+    let organization_repository = Arc::new(PostgresOrganizationRepository::new(postgres_client));
+
+    // Initialize domain services
+    let device_service = Arc::new(DeviceService::new(
+        device_repository.clone(),
+        organization_repository.clone(),
+    ));
     info!("Device service initialized");
 
-    // Initialize organization repository and domain service
-    let organization_repository = Arc::new(PostgresOrganizationRepository::new(postgres_client));
     let organization_service = Arc::new(OrganizationService::new(organization_repository));
     info!("Organization service initialized");
 
