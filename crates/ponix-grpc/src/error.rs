@@ -16,8 +16,6 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::MissingCelExpression(msg) => Status::failed_precondition(msg),
 
-        DomainError::RepositoryError(err) => {
-            Status::internal(format!("Internal error: {}", err))
-        }
+        DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
     }
 }

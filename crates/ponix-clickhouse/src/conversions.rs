@@ -6,8 +6,7 @@ use crate::models::ProcessedEnvelopeRow;
 impl From<&DomainEnvelope> for ProcessedEnvelopeRow {
     fn from(envelope: &DomainEnvelope) -> Self {
         // Convert serde_json::Map to JSON string for ClickHouse storage
-        let data_json = serde_json::to_string(&envelope.data)
-            .unwrap_or_else(|_| "{}".to_string());
+        let data_json = serde_json::to_string(&envelope.data).unwrap_or_else(|_| "{}".to_string());
 
         ProcessedEnvelopeRow {
             organization_id: envelope.organization_id.clone(),

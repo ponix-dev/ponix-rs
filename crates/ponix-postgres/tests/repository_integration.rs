@@ -30,8 +30,15 @@ async fn setup_test_db() -> (ContainerAsync<Postgres>, PostgresDeviceRepository)
         .expect("Migrations failed");
 
     // Create client
-    let client = PostgresClient::new(&host.to_string(), port, "postgres", "postgres", "postgres", 5)
-        .expect("Failed to create client");
+    let client = PostgresClient::new(
+        &host.to_string(),
+        port,
+        "postgres",
+        "postgres",
+        "postgres",
+        5,
+    )
+    .expect("Failed to create client");
 
     let repository = PostgresDeviceRepository::new(client);
 

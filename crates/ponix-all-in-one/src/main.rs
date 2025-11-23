@@ -1,12 +1,13 @@
 mod config;
 
 use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository};
-use ponix_domain::{DeviceService, ProcessedEnvelopeService};
+use ponix_domain::{DeviceService, ProcessedEnvelopeService, RawEnvelopeService};
 use ponix_grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_nats::{
-    create_domain_processor, run_demo_producer, DemoProducerConfig,
-    NatsClient, NatsConsumer, ProcessedEnvelopeProducer,
+    create_domain_processor, create_raw_envelope_domain_processor, NatsClient, NatsConsumer,
+    ProcessedEnvelopeProducer,
 };
+use ponix_payload::CelPayloadConverter;
 use ponix_postgres::{PostgresClient, PostgresDeviceRepository};
 use ponix_runner::Runner;
 use std::sync::Arc;
@@ -82,8 +83,8 @@ async fn main() {
     info!("PostgreSQL connection established");
 
     // Initialize device repository and domain service
-    let device_repository = PostgresDeviceRepository::new(postgres_client);
-    let device_service = Arc::new(DeviceService::new(Arc::new(device_repository)));
+    let device_repository = Arc::new(PostgresDeviceRepository::new(postgres_client));
+    let device_service = Arc::new(DeviceService::new(device_repository.clone()));
     info!("Device service initialized");
 
     // PHASE 2: Run ClickHouse migrations
@@ -144,8 +145,16 @@ async fn main() {
         }
     };
 
-    if let Err(e) = nats_client.ensure_stream(&config.nats_stream).await {
+    if let Err(e) = nats_client
+        .ensure_stream(&config.processed_envelopes_stream)
+        .await
+    {
         error!("Failed to ensure stream exists: {}", e);
+        std::process::exit(1);
+    }
+
+    if let Err(e) = nats_client.ensure_stream(&config.nats_raw_stream).await {
+        error!("Failed to ensure raw envelope stream exists: {}", e);
         std::process::exit(1);
     }
 
@@ -156,9 +165,9 @@ async fn main() {
     let consumer_client = nats_client.create_consumer_client();
     let consumer = match NatsConsumer::new(
         consumer_client,
-        &config.nats_stream,
+        &config.processed_envelopes_stream,
         "ponix-all-in-one",
-        &config.nats_subject,
+        &config.processed_envelopes_subject,
         config.nats_batch_size,
         config.nats_batch_wait_secs,
         processor,
@@ -172,9 +181,52 @@ async fn main() {
         }
     };
 
-    // Create producer using trait-based API
+    // Initialize RawEnvelope infrastructure
+    info!("Initializing raw envelope infrastructure");
+
+    // Create shared JetStream publisher for ProcessedEnvelope production
     let publisher_client = nats_client.create_publisher_client();
-    let producer = ProcessedEnvelopeProducer::new(publisher_client, config.nats_stream.clone());
+
+    // Create payload converter (CEL)
+    let payload_converter = Arc::new(CelPayloadConverter::new());
+
+    // Create ProcessedEnvelope producer for RawEnvelopeService
+    let processed_envelope_producer = Arc::new(ProcessedEnvelopeProducer::new(
+        publisher_client,
+        config.processed_envelopes_stream.clone(),
+    ));
+
+    // Create RawEnvelopeService
+    let raw_envelope_service = Arc::new(RawEnvelopeService::new(
+        device_repository.clone(),
+        payload_converter,
+        processed_envelope_producer,
+    ));
+
+    // Create RawEnvelope consumer processor
+    let raw_processor = create_raw_envelope_domain_processor(raw_envelope_service.clone());
+
+    // Create RawEnvelope consumer
+    let raw_consumer_client = nats_client.create_consumer_client();
+    let raw_consumer = match NatsConsumer::new(
+        raw_consumer_client,
+        &config.nats_raw_stream,
+        "ponix-all-in-one-raw",
+        &config.nats_raw_subject,
+        config.nats_batch_size,
+        config.nats_batch_wait_secs,
+        raw_processor,
+    )
+    .await
+    {
+        Ok(consumer) => consumer,
+        Err(e) => {
+            error!("Failed to create raw envelope consumer: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    info!("Raw envelope infrastructure initialized");
 
     // Create gRPC server configuration
     let grpc_config = GrpcServerConfig {
@@ -182,19 +234,10 @@ async fn main() {
         port: config.grpc_port,
     };
 
-    // Create demo producer configuration
-    let demo_config = DemoProducerConfig {
-        interval: Duration::from_secs(config.interval_secs),
-        organization_id: "example-org".to_string(),
-        log_message: config.message.clone(),
-    };
-
-    // Create runner with producer, consumer, and gRPC server processes
+    // Create runner with consumer processes and gRPC server
     let runner = Runner::new()
-        .with_app_process(move |ctx| Box::pin(async move {
-            run_demo_producer(ctx, demo_config, producer).await
-        }))
         .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
+        .with_app_process(move |ctx| Box::pin(async move { raw_consumer.run(ctx).await }))
         .with_app_process({
             let service = device_service.clone();
             move |ctx| Box::pin(async move { run_grpc_server(grpc_config, service, ctx).await })

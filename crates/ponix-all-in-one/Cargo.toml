@@ -11,10 +11,11 @@ path = "src/main.rs"
 
 [dependencies]
 ponix-runner = { path = "../runner" }
-ponix-nats = { path = "../ponix-nats", features = ["processed-envelope"] }
+ponix-nats = { path = "../ponix-nats", features = ["processed-envelope", "raw-envelope"] }
 ponix-clickhouse = { path = "../ponix-clickhouse" }
 ponix-postgres = { path = "../ponix-postgres" }
 ponix-domain = { path = "../ponix-domain" }
+ponix-payload = { path = "../ponix-payload" }
 ponix-grpc = { path = "../ponix-grpc", features = ["device"] }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
@@ -27,3 +28,4 @@ config = { version = "0.14", features = ["toml"] }
 # Protobuf support
 ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf" }
 prost-types = { workspace = true }
+xid.workspace = true

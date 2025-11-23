@@ -3,8 +3,8 @@ use chrono::Utc;
 use tracing::debug;
 
 use ponix_domain::{
-    CreateDeviceInputWithId, Device, DeviceRepository, DomainError, DomainResult,
-    GetDeviceInput, ListDevicesInput,
+    CreateDeviceInputWithId, Device, DeviceRepository, DomainError, DomainResult, GetDeviceInput,
+    ListDevicesInput,
 };
 
 use crate::client::PostgresClient;
@@ -25,7 +25,10 @@ impl PostgresDeviceRepository {
 #[async_trait]
 impl DeviceRepository for PostgresDeviceRepository {
     async fn create_device(&self, input: CreateDeviceInputWithId) -> DomainResult<Device> {
-        let conn = self.client.get_connection().await
+        let conn = self
+            .client
+            .get_connection()
+            .await
             .map_err(DomainError::RepositoryError)?;
 
         let now = Utc::now();
@@ -71,7 +74,10 @@ impl DeviceRepository for PostgresDeviceRepository {
     }
 
     async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Option<Device>> {
-        let conn = self.client.get_connection().await
+        let conn = self
+            .client
+            .get_connection()
+            .await
             .map_err(DomainError::RepositoryError)?;
 
         let row = conn
@@ -101,7 +107,10 @@ impl DeviceRepository for PostgresDeviceRepository {
     }
 
     async fn list_devices(&self, input: ListDevicesInput) -> DomainResult<Vec<Device>> {
-        let conn = self.client.get_connection().await
+        let conn = self
+            .client
+            .get_connection()
+            .await
             .map_err(DomainError::RepositoryError)?;
 
         let rows = conn
