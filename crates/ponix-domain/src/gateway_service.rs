@@ -174,9 +174,8 @@ mod tests {
         let mut mock_gateway_repo = MockGatewayRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
 
-        let test_config = serde_json::json!({
-            "host": "mqtt.example.com",
-            "port": 1883
+        let test_config = crate::GatewayConfig::Emqx(crate::EmqxGatewayConfig {
+            broker_url: "mqtt://mqtt.example.com:1883".to_string(),
         });
 
         mock_org_repo
@@ -243,7 +242,9 @@ mod tests {
         let input = CreateGatewayInput {
             organization_id: "org-999".to_string(),
             gateway_type: "emqx".to_string(),
-            gateway_config: serde_json::json!({}),
+            gateway_config: crate::GatewayConfig::Emqx(crate::EmqxGatewayConfig {
+                broker_url: String::new(),
+            }),
         };
 
         let result = service.create_gateway(input).await;
@@ -273,7 +274,9 @@ mod tests {
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),
             gateway_type: "emqx".to_string(),
-            gateway_config: serde_json::json!({}),
+            gateway_config: crate::GatewayConfig::Emqx(crate::EmqxGatewayConfig {
+                broker_url: String::new(),
+            }),
         };
 
         let result = service.create_gateway(input).await;

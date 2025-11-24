@@ -120,4 +120,7 @@ pub trait GatewayRepository: Send + Sync {
 
     /// List gateways by organization (excludes soft deleted)
     async fn list_gateways(&self, organization_id: &str) -> DomainResult<Vec<Gateway>>;
+
+    /// List all non-deleted gateways across all organizations
+    async fn list_all_gateways(&self) -> DomainResult<Vec<Gateway>>;
 }

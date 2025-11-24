@@ -4,11 +4,13 @@ use ponix_domain::{
         CreateGatewayInput, DeleteGatewayInput, GetGatewayInput, ListGatewaysInput,
         UpdateGatewayInput,
     },
-    Gateway,
+    EmqxGatewayConfig as DomainEmqxConfig, Gateway, GatewayConfig as DomainGatewayConfig,
 };
 use ponix_proto_prost::gateway::v1::{
-    CreateGatewayRequest, DeleteGatewayRequest, Gateway as ProtoGateway, GatewayType,
-    GetGatewayRequest, ListGatewaysRequest, UpdateGatewayRequest,
+    create_gateway_request::Config as CreateConfig, gateway::Config as ProtoGatewayConfig,
+    update_gateway_request::Config as UpdateConfig, CreateGatewayRequest, DeleteGatewayRequest,
+    EmqxGatewayConfig as ProtoEmqxConfig, Gateway as ProtoGateway, GatewayType, GetGatewayRequest,
+    ListGatewaysRequest, UpdateGatewayRequest,
 };
 use prost_types::Timestamp;
 
@@ -16,10 +18,20 @@ use prost_types::Timestamp;
 pub fn to_create_gateway_input(request: CreateGatewayRequest) -> CreateGatewayInput {
     let gateway_type = gateway_type_to_string(request.r#type());
 
-    // The proto only has name and type - we'll store name in the config
-    let gateway_config = serde_json::json!({
-        "name": request.name
-    });
+    // Convert config from protobuf enum to domain enum
+    let gateway_config = match request.config {
+        Some(CreateConfig::EmqxConfig(emqx)) => {
+            DomainGatewayConfig::Emqx(DomainEmqxConfig {
+                broker_url: emqx.broker_url,
+            })
+        }
+        None => {
+            // Default to empty EMQX config if not provided
+            DomainGatewayConfig::Emqx(DomainEmqxConfig {
+                broker_url: String::new(),
+            })
+        }
+    };
 
     CreateGatewayInput {
         organization_id: request.organization_id,
@@ -60,16 +72,23 @@ pub fn to_list_gateways_input(request: ListGatewaysRequest) -> ListGatewaysInput
 
 /// Convert UpdateGatewayRequest to domain UpdateGatewayInput
 pub fn to_update_gateway_input(request: UpdateGatewayRequest) -> UpdateGatewayInput {
-    let gateway_type = request.r#type.map(|t| {
-        gateway_type_to_string(GatewayType::try_from(t).unwrap_or(GatewayType::Unspecified))
-    });
+    let gateway_type = if request.r#type != 0 {
+        Some(gateway_type_to_string(
+            GatewayType::try_from(request.r#type).unwrap_or(GatewayType::Unspecified),
+        ))
+    } else {
+        None
+    };
 
-    // Build config from optional name
-    let gateway_config = request.name.map(|name| {
-        serde_json::json!({
-            "name": name
-        })
-    });
+    // Convert config from protobuf enum to domain enum
+    let gateway_config = match request.config {
+        Some(UpdateConfig::EmqxConfig(emqx)) => Some(DomainGatewayConfig::Emqx(
+            DomainEmqxConfig {
+                broker_url: emqx.broker_url,
+            },
+        )),
+        None => None,
+    };
 
     UpdateGatewayInput {
         gateway_id: request.gateway_id,
@@ -87,18 +106,21 @@ pub fn to_delete_gateway_input(request: DeleteGatewayRequest) -> DeleteGatewayIn
 
 /// Convert domain Gateway to protobuf Gateway
 pub fn to_proto_gateway(gateway: Gateway) -> ProtoGateway {
-    // Extract name from config
-    let name = gateway
-        .gateway_config
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    // Convert domain config enum to protobuf config enum and extract name
+    let (config, name) = match &gateway.gateway_config {
+        DomainGatewayConfig::Emqx(emqx) => (
+            Some(ProtoGatewayConfig::EmqxConfig(ProtoEmqxConfig {
+                broker_url: emqx.broker_url.clone(),
+            })),
+            emqx.broker_url.clone(), // For backwards compatibility, use broker_url as name
+        ),
+    };
 
     ProtoGateway {
         gateway_id: gateway.gateway_id,
         organization_id: gateway.organization_id,
         name,
+        config,
         status: 1, // GATEWAY_STATUS_ACTIVE - we don't track status in domain yet
         r#type: string_to_gateway_type(&gateway.gateway_type) as i32,
         created_at: gateway.created_at.map(datetime_to_timestamp),

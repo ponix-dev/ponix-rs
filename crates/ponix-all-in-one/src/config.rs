@@ -147,6 +147,15 @@ pub struct ServiceConfig {
     /// CDC max retry attempts
     #[serde(default = "default_cdc_max_retry_attempts")]
     pub cdc_max_retry_attempts: u32,
+
+    // Gateway Orchestrator configuration
+    /// Gateway CDC consumer name
+    #[serde(default = "default_gateway_consumer_name")]
+    pub gateway_consumer_name: String,
+
+    /// Gateway CDC filter subject pattern
+    #[serde(default = "default_gateway_filter_subject")]
+    pub gateway_filter_subject: String,
 }
 
 fn default_log_level() -> String {
@@ -292,6 +301,15 @@ fn default_cdc_retry_delay_ms() -> u64 {
 
 fn default_cdc_max_retry_attempts() -> u32 {
     5
+}
+
+// Gateway Orchestrator defaults
+fn default_gateway_consumer_name() -> String {
+    "gateway-orchestrator-consumer".to_string()
+}
+
+fn default_gateway_filter_subject() -> String {
+    "gateways.>".to_string()
 }
 
 impl ServiceConfig {

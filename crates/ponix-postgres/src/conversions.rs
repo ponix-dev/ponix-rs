@@ -1,5 +1,7 @@
 use crate::models::{Device as DbDevice, DeviceRow, GatewayRow};
-use ponix_domain::{CreateDeviceInputWithId, Device as DomainDevice, Gateway};
+use ponix_domain::{
+    CreateDeviceInputWithId, Device as DomainDevice, EmqxGatewayConfig, Gateway, GatewayConfig,
+};
 
 /// Convert domain CreateDeviceInputWithId to database Device (for insert)
 impl From<&CreateDeviceInputWithId> for DbDevice {
@@ -44,14 +46,42 @@ impl From<DbDevice> for DomainDevice {
 /// Convert database GatewayRow to domain Gateway
 impl From<GatewayRow> for Gateway {
     fn from(row: GatewayRow) -> Self {
+        // Convert JSON config to domain GatewayConfig enum
+        let gateway_config = json_to_gateway_config(&row.gateway_config);
+
         Gateway {
             gateway_id: row.gateway_id,
             organization_id: row.organization_id,
             gateway_type: row.gateway_type,
-            gateway_config: row.gateway_config,
+            gateway_config,
             deleted_at: row.deleted_at,
             created_at: Some(row.created_at),
             updated_at: Some(row.updated_at),
+        }
+    }
+}
+
+/// Convert serde_json::Value to domain GatewayConfig
+fn json_to_gateway_config(json: &serde_json::Value) -> GatewayConfig {
+    if let Some(broker_url) = json.get("broker_url").and_then(|v| v.as_str()) {
+        GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: broker_url.to_string(),
+        })
+    } else {
+        // Default to empty EMQX config if broker_url not found
+        GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: String::new(),
+        })
+    }
+}
+
+/// Convert domain GatewayConfig to serde_json::Value
+pub fn gateway_config_to_json(config: &GatewayConfig) -> serde_json::Value {
+    match config {
+        GatewayConfig::Emqx(emqx) => {
+            serde_json::json!({
+                "broker_url": emqx.broker_url
+            })
         }
     }
 }

@@ -2,13 +2,14 @@ mod config;
 
 use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository};
 use ponix_domain::{
-    DeviceService, GatewayService, OrganizationService, ProcessedEnvelopeService,
+    DeviceService, GatewayOrchestrator, GatewayOrchestratorConfig, GatewayService,
+    InMemoryGatewayProcessStore, OrganizationService, ProcessedEnvelopeService,
     RawEnvelopeService,
 };
 use ponix_grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_nats::{
-    create_domain_processor, create_raw_envelope_domain_processor, NatsClient, NatsConsumer,
-    ProcessedEnvelopeProducer,
+    create_domain_processor, create_raw_envelope_domain_processor, GatewayCdcConsumer, NatsClient,
+    NatsConsumer, ProcessedEnvelopeProducer,
 };
 use ponix_payload::CelPayloadConverter;
 use ponix_postgres::{
@@ -93,6 +94,25 @@ async fn main() {
     let organization_repository =
         Arc::new(PostgresOrganizationRepository::new(postgres_client.clone()));
     let gateway_repository = Arc::new(PostgresGatewayRepository::new(postgres_client));
+
+    // Initialize gateway orchestrator
+    info!("Initializing gateway orchestrator");
+    let orchestrator_config = GatewayOrchestratorConfig::default();
+    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
+    let orchestrator_shutdown_token = tokio_util::sync::CancellationToken::new();
+    let gateway_orchestrator = Arc::new(GatewayOrchestrator::new(
+        gateway_repository.clone(),
+        process_store,
+        orchestrator_config,
+        orchestrator_shutdown_token.clone(),
+    ));
+
+    // Start orchestrator to load and start all existing gateways
+    if let Err(e) = gateway_orchestrator.start().await {
+        error!("Failed to start gateway orchestrator: {}", e);
+        std::process::exit(1);
+    }
+    info!("Gateway orchestrator initialized and started");
 
     // Initialize domain services
     let device_service = Arc::new(DeviceService::new(
@@ -260,7 +280,18 @@ async fn main() {
 
     info!("Raw envelope infrastructure initialized");
 
-    // PHASE 6: CDC Setup
+    // PHASE 6: Gateway CDC Consumer Setup
+    info!("Setting up gateway CDC consumer");
+    let gateway_cdc_consumer = GatewayCdcConsumer::new(
+        Arc::clone(&nats_client),
+        config.nats_gateway_stream.clone(),
+        config.gateway_consumer_name.clone(),
+        config.gateway_filter_subject.clone(),
+        Arc::clone(&gateway_orchestrator),
+    );
+    info!("Gateway CDC consumer initialized");
+
+    // PHASE 7: CDC Setup
     info!("Setting up CDC for gateway changes");
 
     // Build CDC configuration from service config
@@ -301,10 +332,11 @@ async fn main() {
             .collect::<Vec<_>>()
     );
 
-    // Create runner with consumer processes, CDC, and gRPC server
+    // Create runner with consumer processes, CDC, gateway orchestrator consumer, and gRPC server
     let runner = Runner::new()
         .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
         .with_app_process(move |ctx| Box::pin(async move { raw_consumer.run(ctx).await }))
+        .with_app_process(move |ctx| Box::pin(async move { gateway_cdc_consumer.run(ctx).await }))
         .with_app_process({
             let cdc_config = cdc_config.clone();
             let nats_for_cdc = Arc::clone(&nats_client);
@@ -326,9 +358,15 @@ async fn main() {
         })
         .with_closer({
             let nats_for_close = Arc::clone(&nats_client);
+            let orchestrator_token = orchestrator_shutdown_token.clone();
             move || {
                 Box::pin(async move {
                     info!("Running cleanup tasks...");
+
+                    // Signal orchestrator to shutdown gateway processes
+                    info!("Shutting down gateway orchestrator");
+                    orchestrator_token.cancel();
+
                     // Try to unwrap Arc to get ownership for close()
                     if let Ok(client) = Arc::try_unwrap(nats_for_close) {
                         client.close().await;

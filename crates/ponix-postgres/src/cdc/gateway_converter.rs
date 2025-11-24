@@ -1,7 +1,9 @@
 use crate::cdc::traits::CdcConverter;
 use async_trait::async_trait;
 use bytes::Bytes;
-use ponix_ponix_community_neoeinstein_prost::gateway::v1::{Gateway, GatewayStatus, GatewayType};
+use ponix_ponix_community_neoeinstein_prost::gateway::v1::{
+    gateway::Config, EmqxGatewayConfig, Gateway, GatewayStatus, GatewayType,
+};
 use prost::Message;
 use serde_json::Value;
 
@@ -53,6 +55,16 @@ impl GatewayConverter {
             .unwrap_or("")
             .to_string();
 
+        // Extract broker_url from config and create Config oneof
+        let config = gateway_config
+            .get("broker_url")
+            .and_then(|v| v.as_str())
+            .map(|broker_url| {
+                Config::EmqxConfig(EmqxGatewayConfig {
+                    broker_url: broker_url.to_string(),
+                })
+            });
+
         // Default status to ACTIVE
         let status = GatewayStatus::Active as i32;
 
@@ -76,6 +88,7 @@ impl GatewayConverter {
             gateway_id,
             organization_id,
             name,
+            config,
             status,
             r#type,
             created_at,

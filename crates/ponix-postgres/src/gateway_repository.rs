@@ -33,6 +33,9 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let now = Utc::now();
 
+        // Convert domain GatewayConfig to JSON for storage
+        let gateway_config_json = crate::conversions::gateway_config_to_json(&input.gateway_config);
+
         let result = conn
             .execute(
                 "INSERT INTO gateways (gateway_id, organization_id, gateway_type, gateway_config, created_at, updated_at)
@@ -41,7 +44,7 @@ impl GatewayRepository for PostgresGatewayRepository {
                     &input.gateway_id,
                     &input.organization_id,
                     &input.gateway_type,
-                    &input.gateway_config,
+                    &gateway_config_json,
                     &now,
                     &now,
                 ],
@@ -116,6 +119,12 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let now = Utc::now();
 
+        // Convert domain GatewayConfig to JSON if provided
+        let gateway_config_json = input
+            .gateway_config
+            .as_ref()
+            .map(|c| crate::conversions::gateway_config_to_json(c));
+
         // Build dynamic UPDATE query based on provided fields
         let mut query = String::from("UPDATE gateways SET updated_at = $1");
         let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![&now];
@@ -127,9 +136,9 @@ impl GatewayRepository for PostgresGatewayRepository {
             param_idx += 1;
         }
 
-        if let Some(ref gateway_config) = input.gateway_config {
+        if let Some(ref config_json) = gateway_config_json {
             query.push_str(&format!(", gateway_config = ${}", param_idx));
-            params.push(gateway_config);
+            params.push(config_json);
             param_idx += 1;
         }
 
@@ -229,6 +238,46 @@ impl GatewayRepository for PostgresGatewayRepository {
             .collect();
 
         info!(count = gateways.len(), "Listed gateways from database");
+        Ok(gateways)
+    }
+
+    async fn list_all_gateways(&self) -> DomainResult<Vec<Gateway>> {
+        debug!("Listing all non-deleted gateways from database");
+
+        let conn = self
+            .client
+            .get_connection()
+            .await
+            .map_err(DomainError::RepositoryError)?;
+
+        let rows = conn
+            .query(
+                "SELECT gateway_id, organization_id, gateway_type, gateway_config, deleted_at, created_at, updated_at
+                 FROM gateways
+                 WHERE deleted_at IS NULL
+                 ORDER BY created_at DESC",
+                &[],
+            )
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        let gateways: Vec<Gateway> = rows
+            .into_iter()
+            .map(|row| {
+                let gateway_row = GatewayRow {
+                    gateway_id: row.get(0),
+                    organization_id: row.get(1),
+                    gateway_type: row.get(2),
+                    gateway_config: row.get(3),
+                    deleted_at: row.get(4),
+                    created_at: row.get(5),
+                    updated_at: row.get(6),
+                };
+                gateway_row.into()
+            })
+            .collect();
+
+        info!(count = gateways.len(), "Listed all gateways from database");
         Ok(gateways)
     }
 }
