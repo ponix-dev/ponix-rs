@@ -7,7 +7,7 @@ use etl_postgres::types::TableSchema;
 use ponix_nats::JetStreamPublisher;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tracing::{error, info, warn};
 
 /// NATS sink for ETL replication events.
@@ -16,15 +16,20 @@ use tracing::{error, info, warn};
 /// CDC events to NATS JetStream with configurable entity-based routing.
 pub struct NatsSink {
     publisher: Arc<dyn JetStreamPublisher>,
-    configs: Arc<HashMap<TableId, EntityConfig>>,
-    table_schemas: Arc<HashMap<TableId, TableSchema>>,
+    /// Maps table names to entity configurations (set at initialization)
+    configs_by_name: Arc<HashMap<String, Arc<EntityConfig>>>,
+    /// Maps table IDs to entity configurations (populated from Relation events)
+    configs_by_id: Arc<RwLock<HashMap<TableId, Arc<EntityConfig>>>>,
+    /// Maps table IDs to table schemas (populated from Relation events)
+    table_schemas: Arc<RwLock<HashMap<TableId, TableSchema>>>,
 }
 
 impl Clone for NatsSink {
     fn clone(&self) -> Self {
         Self {
             publisher: Arc::clone(&self.publisher),
-            configs: Arc::clone(&self.configs),
+            configs_by_name: Arc::clone(&self.configs_by_name),
+            configs_by_id: Arc::clone(&self.configs_by_id),
             table_schemas: Arc::clone(&self.table_schemas),
         }
     }
@@ -34,13 +39,25 @@ impl NatsSink {
     /// Creates a new NATS sink with the given publisher and entity configurations.
     ///
     /// The sink will route events based on table names matched to entity configs.
-    pub fn new(publisher: Arc<dyn JetStreamPublisher>, _configs: Vec<EntityConfig>) -> Self {
-        // We'll populate table IDs when we receive Relation events
-        // TODO: Store configs and map them to table IDs when Relation events are received
+    /// Table IDs are mapped when Relation events are received.
+    pub fn new(publisher: Arc<dyn JetStreamPublisher>, configs: Vec<EntityConfig>) -> Self {
+        // Create a HashMap of table names to configs (wrapped in Arc for cloning)
+        let configs_by_name: HashMap<String, Arc<EntityConfig>> = configs
+            .into_iter()
+            .map(|config| (config.table_name.clone(), Arc::new(config)))
+            .collect();
+
+        info!(
+            "Initialized NatsSink with {} entity configurations: {:?}",
+            configs_by_name.len(),
+            configs_by_name.keys().collect::<Vec<_>>()
+        );
+
         Self {
             publisher,
-            configs: Arc::new(HashMap::new()),
-            table_schemas: Arc::new(HashMap::new()),
+            configs_by_name: Arc::new(configs_by_name),
+            configs_by_id: Arc::new(RwLock::new(HashMap::new())),
+            table_schemas: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -51,8 +68,12 @@ impl NatsSink {
 
     /// Converts a TableRow to a JSON Value using the table schema.
     fn table_row_to_json(&self, table_id: &TableId, table_row: &TableRow) -> EtlResult<Value> {
-        let schema = self
+        let schemas = self
             .table_schemas
+            .read()
+            .map_err(|e| etl_error!(ErrorKind::MissingTableSchema, "Failed to acquire lock", e.to_string()))?;
+
+        let schema = schemas
             .get(table_id)
             .ok_or_else(|| etl_error!(ErrorKind::MissingTableSchema, "Table schema not found"))?;
 
@@ -70,14 +91,22 @@ impl NatsSink {
 
     /// Handles an insert event by converting and publishing to NATS.
     async fn handle_insert(&self, event: InsertEvent) -> EtlResult<()> {
-        let config = match self.configs.get(&event.table_id) {
-            Some(c) => c,
-            None => {
-                warn!(
-                    "No CDC config for table {:?}, skipping insert event",
-                    event.table_id
-                );
-                return Ok(());
+        // Clone the Arc to avoid holding the lock across await
+        let config = {
+            let configs = self
+                .configs_by_id
+                .read()
+                .map_err(|e| etl_error!(ErrorKind::ConversionError, "Failed to acquire config lock", e.to_string()))?;
+
+            match configs.get(&event.table_id) {
+                Some(c) => Arc::clone(c),
+                None => {
+                    warn!(
+                        "No CDC config for table {:?}, skipping insert event",
+                        event.table_id
+                    );
+                    return Ok(());
+                }
             }
         };
 
@@ -110,14 +139,22 @@ impl NatsSink {
 
     /// Handles an update event by converting and publishing to NATS.
     async fn handle_update(&self, event: UpdateEvent) -> EtlResult<()> {
-        let config = match self.configs.get(&event.table_id) {
-            Some(c) => c,
-            None => {
-                warn!(
-                    "No CDC config for table {:?}, skipping update event",
-                    event.table_id
-                );
-                return Ok(());
+        // Clone the Arc to avoid holding the lock across await
+        let config = {
+            let configs = self
+                .configs_by_id
+                .read()
+                .map_err(|e| etl_error!(ErrorKind::ConversionError, "Failed to acquire config lock", e.to_string()))?;
+
+            match configs.get(&event.table_id) {
+                Some(c) => Arc::clone(c),
+                None => {
+                    warn!(
+                        "No CDC config for table {:?}, skipping update event",
+                        event.table_id
+                    );
+                    return Ok(());
+                }
             }
         };
 
@@ -155,14 +192,22 @@ impl NatsSink {
 
     /// Handles a delete event by converting and publishing to NATS.
     async fn handle_delete(&self, event: DeleteEvent) -> EtlResult<()> {
-        let config = match self.configs.get(&event.table_id) {
-            Some(c) => c,
-            None => {
-                warn!(
-                    "No CDC config for table {:?}, skipping delete event",
-                    event.table_id
-                );
-                return Ok(());
+        // Clone the Arc to avoid holding the lock across await
+        let config = {
+            let configs = self
+                .configs_by_id
+                .read()
+                .map_err(|e| etl_error!(ErrorKind::ConversionError, "Failed to acquire config lock", e.to_string()))?;
+
+            match configs.get(&event.table_id) {
+                Some(c) => Arc::clone(c),
+                None => {
+                    warn!(
+                        "No CDC config for table {:?}, skipping delete event",
+                        event.table_id
+                    );
+                    return Ok(());
+                }
             }
         };
 
@@ -232,12 +277,34 @@ impl Destination for NatsSink {
         for event in events {
             match event {
                 Event::Relation(rel_event) => {
-                    // This is a mutable operation, but we need to make NatsSink mutable
-                    // For now, we'll track schemas differently
+                    let table_name = &rel_event.table_schema.name.name;
+                    let table_id = rel_event.table_schema.id;
+
                     info!(
                         "Received relation event for table: {} (ID: {:?})",
-                        rel_event.table_schema.name, rel_event.table_schema.id
+                        table_name, table_id
                     );
+
+                    // Store the table schema
+                    if let Ok(mut schemas) = self.table_schemas.write() {
+                        schemas.insert(table_id, rel_event.table_schema.clone());
+                    } else {
+                        error!("Failed to acquire write lock for table_schemas");
+                    }
+
+                    // Map table ID to config if we have one for this table name
+                    if let Some(config) = self.configs_by_name.get(table_name) {
+                        info!(
+                            "Mapping table '{}' (ID: {:?}) to entity '{}'",
+                            table_name, table_id, config.entity_name
+                        );
+
+                        if let Ok(mut configs) = self.configs_by_id.write() {
+                            configs.insert(table_id, Arc::clone(config));
+                        } else {
+                            error!("Failed to acquire write lock for configs_by_id");
+                        }
+                    }
                 }
                 Event::Insert(insert_event) => {
                     if let Err(e) = self.handle_insert(insert_event).await {

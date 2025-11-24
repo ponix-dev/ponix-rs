@@ -1,7 +1,4 @@
-use crate::cdc::{
-    config::CdcConfig, gateway_converter::GatewayConverter, nats_sink::NatsSink,
-    traits::EntityConfig,
-};
+use crate::cdc::{config::CdcConfig, nats_sink::NatsSink, traits::EntityConfig};
 use anyhow::Result;
 use etl::config::{BatchConfig, PgConnectionConfig, PipelineConfig, TlsConfig};
 use etl::pipeline::Pipeline;
@@ -14,6 +11,7 @@ use tracing::{error, info};
 pub struct CdcProcess {
     config: CdcConfig,
     nats_client: Arc<NatsClient>,
+    entity_configs: Vec<EntityConfig>,
     cancellation_token: CancellationToken,
 }
 
@@ -21,32 +19,28 @@ impl CdcProcess {
     pub fn new(
         config: CdcConfig,
         nats_client: Arc<NatsClient>,
+        entity_configs: Vec<EntityConfig>,
         cancellation_token: CancellationToken,
     ) -> Self {
         Self {
             config,
             nats_client,
+            entity_configs,
             cancellation_token,
         }
     }
 
     pub async fn run(self) -> Result<()> {
-        info!("Starting CDC process");
+        info!("Starting CDC process with {} entity configurations", self.entity_configs.len());
 
         // Create NATS publisher
         let publisher = self.nats_client.create_publisher_client();
 
-        // Configure gateway CDC
-        let gateway_config = EntityConfig {
-            entity_name: "gateway".to_string(),
-            table_name: "gateways".to_string(),
-            converter: Box::new(GatewayConverter::new()),
-        };
-
-        // Create NATS sink
-        let destination = NatsSink::new(publisher, vec![gateway_config]);
+        // Create NATS sink with provided entity configurations
+        let destination = NatsSink::new(publisher, self.entity_configs);
 
         // Create in-memory store for state/schema management
+        // TODO: we should probably understand what this does more when scaling to multiple instances
         let store = MemoryStore::new();
 
         // Configure PostgreSQL connection
@@ -56,6 +50,7 @@ impl CdcProcess {
             name: self.config.pg_database.clone(),
             username: self.config.pg_user.clone(),
             password: Some(self.config.pg_password.clone().into()),
+            // TODO: support TLS configuration
             tls: TlsConfig {
                 enabled: false,
                 trusted_root_certs: String::new(),

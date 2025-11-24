@@ -28,6 +28,14 @@ pub struct ServiceConfig {
     #[serde(default = "default_nats_raw_subject")]
     pub nats_raw_subject: String,
 
+    /// NATS JetStream stream name for gateway CDC events
+    #[serde(default = "default_nats_gateway_stream")]
+    pub nats_gateway_stream: String,
+
+    /// NATS subject pattern for gateway CDC events
+    #[serde(default = "default_nats_gateway_subject")]
+    pub nats_gateway_subject: String,
+
     /// Batch size for consumer
     #[serde(default = "default_nats_batch_size")]
     pub nats_batch_size: usize,
@@ -106,6 +114,15 @@ pub struct ServiceConfig {
     /// gRPC server port
     #[serde(default = "default_grpc_port")]
     pub grpc_port: u16,
+
+    // CDC configuration
+    /// CDC entity name for gateway events
+    #[serde(default = "default_cdc_gateway_entity_name")]
+    pub cdc_gateway_entity_name: String,
+
+    /// CDC table name for gateway events
+    #[serde(default = "default_cdc_gateway_table_name")]
+    pub cdc_gateway_table_name: String,
 }
 
 fn default_log_level() -> String {
@@ -131,6 +148,14 @@ fn default_nats_raw_stream() -> String {
 
 fn default_nats_raw_subject() -> String {
     "raw_envelopes.>".to_string()
+}
+
+fn default_nats_gateway_stream() -> String {
+    "gateways".to_string()
+}
+
+fn default_nats_gateway_subject() -> String {
+    "gateways.>".to_string()
 }
 
 fn default_nats_batch_size() -> usize {
@@ -210,6 +235,15 @@ fn default_grpc_host() -> String {
 
 fn default_grpc_port() -> u16 {
     50051
+}
+
+// CDC defaults
+fn default_cdc_gateway_entity_name() -> String {
+    "gateways".to_string()
+}
+
+fn default_cdc_gateway_table_name() -> String {
+    "gateways".to_string()
 }
 
 impl ServiceConfig {

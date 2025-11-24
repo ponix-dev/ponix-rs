@@ -12,8 +12,8 @@ use ponix_nats::{
 };
 use ponix_payload::CelPayloadConverter;
 use ponix_postgres::{
-    CdcConfig, CdcProcess, PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
-    PostgresOrganizationRepository,
+    CdcConfig, CdcProcess, EntityConfig, GatewayConverter, PostgresClient,
+    PostgresDeviceRepository, PostgresGatewayRepository, PostgresOrganizationRepository,
 };
 use ponix_runner::Runner;
 use std::sync::Arc;
@@ -181,6 +181,14 @@ async fn main() {
         std::process::exit(1);
     }
 
+    if let Err(e) = nats_client
+        .ensure_stream(&config.nats_gateway_stream)
+        .await
+    {
+        error!("Failed to ensure gateway CDC stream exists: {}", e);
+        std::process::exit(1);
+    }
+
     // PHASE 5: Create processor using domain service
     let processor = create_domain_processor(envelope_service.clone());
 
@@ -270,6 +278,23 @@ async fn main() {
         port: config.grpc_port,
     };
 
+    // Build CDC entity configurations from service config
+    let gateway_entity_config = EntityConfig {
+        entity_name: config.cdc_gateway_entity_name.clone(),
+        table_name: config.cdc_gateway_table_name.clone(),
+        converter: Box::new(GatewayConverter::new()),
+    };
+    let cdc_entity_configs = vec![gateway_entity_config];
+
+    info!(
+        "CDC configured with {} entities: {:?}",
+        cdc_entity_configs.len(),
+        cdc_entity_configs
+            .iter()
+            .map(|c| format!("{}(table={})", c.entity_name, c.table_name))
+            .collect::<Vec<_>>()
+    );
+
     // Create runner with consumer processes, CDC, and gRPC server
     let runner = Runner::new()
         .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
@@ -277,8 +302,9 @@ async fn main() {
         .with_app_process({
             let cdc_config = cdc_config.clone();
             let nats_for_cdc = Arc::clone(&nats_client);
+            let entity_configs = cdc_entity_configs;
             move |ctx| {
-                let cdc_process = CdcProcess::new(cdc_config, nats_for_cdc, ctx);
+                let cdc_process = CdcProcess::new(cdc_config, nats_for_cdc, entity_configs, ctx);
                 Box::pin(async move { cdc_process.run().await })
             }
         })
