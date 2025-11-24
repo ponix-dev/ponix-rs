@@ -231,4 +231,44 @@ impl GatewayRepository for PostgresGatewayRepository {
         info!(count = gateways.len(), "Listed gateways from database");
         Ok(gateways)
     }
+
+    async fn list_all_gateways(&self) -> DomainResult<Vec<Gateway>> {
+        debug!("Listing all non-deleted gateways from database");
+
+        let conn = self
+            .client
+            .get_connection()
+            .await
+            .map_err(DomainError::RepositoryError)?;
+
+        let rows = conn
+            .query(
+                "SELECT gateway_id, organization_id, gateway_type, gateway_config, deleted_at, created_at, updated_at
+                 FROM gateways
+                 WHERE deleted_at IS NULL
+                 ORDER BY created_at DESC",
+                &[],
+            )
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        let gateways: Vec<Gateway> = rows
+            .into_iter()
+            .map(|row| {
+                let gateway_row = GatewayRow {
+                    gateway_id: row.get(0),
+                    organization_id: row.get(1),
+                    gateway_type: row.get(2),
+                    gateway_config: row.get(3),
+                    deleted_at: row.get(4),
+                    created_at: row.get(5),
+                    updated_at: row.get(6),
+                };
+                gateway_row.into()
+            })
+            .collect();
+
+        info!(count = gateways.len(), "Listed all gateways from database");
+        Ok(gateways)
+    }
 }
