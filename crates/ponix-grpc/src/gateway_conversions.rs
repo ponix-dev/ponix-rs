@@ -1,11 +1,14 @@
 use chrono::{DateTime, TimeZone, Utc};
 use ponix_domain::{
-    gateway::{CreateGatewayInput, DeleteGatewayInput, GetGatewayInput, ListGatewaysInput, UpdateGatewayInput},
+    gateway::{
+        CreateGatewayInput, DeleteGatewayInput, GetGatewayInput, ListGatewaysInput,
+        UpdateGatewayInput,
+    },
     Gateway,
 };
 use ponix_proto_prost::gateway::v1::{
-    CreateGatewayRequest, DeleteGatewayRequest, Gateway as ProtoGateway, GatewayType, GetGatewayRequest,
-    ListGatewaysRequest, UpdateGatewayRequest,
+    CreateGatewayRequest, DeleteGatewayRequest, Gateway as ProtoGateway, GatewayType,
+    GetGatewayRequest, ListGatewaysRequest, UpdateGatewayRequest,
 };
 use prost_types::Timestamp;
 
@@ -57,7 +60,9 @@ pub fn to_list_gateways_input(request: ListGatewaysRequest) -> ListGatewaysInput
 
 /// Convert UpdateGatewayRequest to domain UpdateGatewayInput
 pub fn to_update_gateway_input(request: UpdateGatewayRequest) -> UpdateGatewayInput {
-    let gateway_type = request.r#type.map(|t| gateway_type_to_string(GatewayType::try_from(t).unwrap_or(GatewayType::Unspecified)));
+    let gateway_type = request.r#type.map(|t| {
+        gateway_type_to_string(GatewayType::try_from(t).unwrap_or(GatewayType::Unspecified))
+    });
 
     // Build config from optional name
     let gateway_config = request.name.map(|name| {

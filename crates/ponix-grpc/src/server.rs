@@ -5,6 +5,7 @@ use tonic::transport::Server;
 use tracing::{error, info};
 
 use ponix_domain::{DeviceService, GatewayService, OrganizationService};
+use ponix_proto_prost;
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceServiceServer;
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServiceServer;
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationServiceServer;
@@ -12,6 +13,21 @@ use ponix_proto_tonic::organization::v1::tonic::organization_service_server::Org
 use crate::device_handler::DeviceServiceHandler;
 use crate::gateway_handler::GatewayServiceHandler;
 use crate::organization_handler::OrganizationServiceHandler;
+
+/// Build reflection service descriptor for all services
+fn build_reflection_service() -> tonic_reflection::server::ServerReflectionServer<
+    impl tonic_reflection::server::ServerReflection,
+> {
+    tonic_reflection::server::Builder::configure()
+        // Register Google well-known types
+        .register_encoded_file_descriptor_set(protoc_wkt::google::protobuf::FILE_DESCRIPTOR_SET)
+        // Register our service descriptors
+        .register_encoded_file_descriptor_set(ponix_proto_prost::end_device::v1::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(ponix_proto_prost::organization::v1::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(ponix_proto_prost::gateway::v1::FILE_DESCRIPTOR_SET)
+        .build_v1()
+        .expect("Failed to build reflection service")
+}
 
 /// gRPC server configuration
 pub struct GrpcServerConfig {
@@ -47,8 +63,12 @@ pub async fn run_grpc_server(
     let organization_handler = OrganizationServiceHandler::new(organization_service);
     let gateway_handler = GatewayServiceHandler::new(gateway_service);
 
+    // Build reflection service
+    let reflection_service = build_reflection_service();
+
     // Build server with graceful shutdown
     let server = Server::builder()
+        .add_service(reflection_service)
         .add_service(EndDeviceServiceServer::new(device_handler))
         .add_service(OrganizationServiceServer::new(organization_handler))
         .add_service(GatewayServiceServer::new(gateway_handler))

@@ -107,10 +107,7 @@ async fn test_gateway_crud_operations() {
     assert_eq!(updated.gateway_config["host"], "mqtt2.example.com");
 
     // Test List
-    let gateways = gateway_repo
-        .list_gateways("org-test-001")
-        .await
-        .unwrap();
+    let gateways = gateway_repo.list_gateways("org-test-001").await.unwrap();
     assert_eq!(gateways.len(), 1);
 
     // Test Delete
@@ -180,10 +177,7 @@ async fn test_list_excludes_soft_deleted() {
     gateway_repo.delete_gateway("gw-test-2").await.unwrap();
 
     // List should only return 2
-    let gateways = gateway_repo
-        .list_gateways("org-test-003")
-        .await
-        .unwrap();
+    let gateways = gateway_repo.list_gateways("org-test-003").await.unwrap();
     assert_eq!(gateways.len(), 2);
     assert!(gateways.iter().all(|g| g.gateway_id != "gw-test-2"));
 }

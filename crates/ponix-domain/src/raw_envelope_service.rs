@@ -159,8 +159,8 @@ mod tests {
     use super::*;
     use crate::organization::Organization;
     use crate::payload_converter::MockPayloadConverter;
-    use crate::repository::{MockDeviceRepository, MockOrganizationRepository};
     use crate::repository::MockProcessedEnvelopeProducer;
+    use crate::repository::{MockDeviceRepository, MockOrganizationRepository};
     // Device already imported via use super::*;
 
     #[tokio::test]
@@ -592,10 +592,7 @@ mod tests {
         let result = service.process_raw_envelope(raw_envelope).await;
 
         // Assert
-        assert!(matches!(
-            result,
-            Err(DomainError::OrganizationDeleted(_))
-        ));
+        assert!(matches!(result, Err(DomainError::OrganizationDeleted(_))));
     }
 
     #[tokio::test]
@@ -644,9 +641,6 @@ mod tests {
         let result = service.process_raw_envelope(raw_envelope).await;
 
         // Assert
-        assert!(matches!(
-            result,
-            Err(DomainError::OrganizationNotFound(_))
-        ));
+        assert!(matches!(result, Err(DomainError::OrganizationNotFound(_))));
     }
 }

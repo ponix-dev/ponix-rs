@@ -53,7 +53,11 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         Ok(Response::new(CreateOrganizationResponse {
             organization_id: organization.id.clone(),
             name: organization.name.clone(),
-            status: if organization.deleted_at.is_some() { 1 } else { 0 },
+            status: if organization.deleted_at.is_some() {
+                1
+            } else {
+                0
+            },
             created_at: datetime_to_timestamp(organization.created_at),
         }))
     }

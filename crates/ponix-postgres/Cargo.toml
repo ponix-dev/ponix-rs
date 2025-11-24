@@ -13,9 +13,11 @@ deadpool-postgres = "0.14"
 
 # Async runtime
 tokio.workspace = true
+tokio-util.workspace = true
 
 # Error handling
 anyhow.workspace = true
+thiserror.workspace = true
 
 # Logging
 tracing.workspace = true
@@ -23,6 +25,9 @@ tracing.workspace = true
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+bytes = "1.9"
+prost.workspace = true
+base64 = "0.22"
 
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
@@ -32,13 +37,26 @@ goose = { path = "../goose" }
 
 # Domain layer dependency
 ponix-domain = { path = "../ponix-domain" }
+ponix-nats = { path = "../ponix-nats" }
 async-trait = "0.1"
+
+# Protobuf
+ponix_ponix_community_neoeinstein-prost = { version = "0.4.0-20251123210325-2b150142b2af.1", registry = "buf" }
+prost-types.workspace = true
+
+# CDC dependencies
+etl = { git = "https://github.com/supabase/etl", branch = "main" }
+etl-postgres = { git = "https://github.com/supabase/etl", branch = "main" }
 
 [dev-dependencies]
 tokio-test = "0.4"
 testcontainers = "0.23"
 testcontainers-modules = { version = "0.11", features = ["postgres"] }
 which = "7.0"
+mockall = "0.13"
+async-nats = "0.37"
+futures-util = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 default = []
