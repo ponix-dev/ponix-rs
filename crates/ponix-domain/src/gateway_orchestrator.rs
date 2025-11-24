@@ -60,36 +60,44 @@ impl GatewayOrchestrator {
     /// Handle gateway updated event
     pub async fn handle_gateway_updated(
         &self,
-        old_gateway: Gateway,
-        new_gateway: Gateway,
+        gateway: Gateway,
     ) -> DomainResult<()> {
-        info!("Handling gateway updated: {}", new_gateway.gateway_id);
+        info!("Handling gateway updated: {}", gateway.gateway_id);
 
         // Check if soft deleted
-        if new_gateway.deleted_at.is_some() {
+        if gateway.deleted_at.is_some() {
             info!(
                 "Gateway {} has been soft deleted, stopping process",
-                new_gateway.gateway_id
+                gateway.gateway_id
             );
-            return self.stop_gateway_process(&new_gateway.gateway_id).await;
+            return self.stop_gateway_process(&gateway.gateway_id).await;
         }
 
-        // Check if config changed
-        let config_changed = old_gateway.gateway_config != new_gateway.gateway_config;
+        let config_changed = match self.gateway_repository.get_gateway(&gateway.gateway_id).await? {
+                Some(old_gateway) => old_gateway.gateway_config != gateway.gateway_config,
+                None => {
+                    warn!(
+                        "Old gateway state not found for {}, starting new process",
+                        gateway.gateway_id
+                    );
+                    true
+                },
+            };
+                
 
         if config_changed {
             info!(
                 "Gateway {} config changed, restarting process",
-                new_gateway.gateway_id
+                gateway.gateway_id
             );
             // Stop existing process
-            self.stop_gateway_process(&new_gateway.gateway_id).await?;
+            self.stop_gateway_process(&gateway.gateway_id).await?;
             // Start with new config
-            self.start_gateway_process(&new_gateway).await?;
+            self.start_gateway_process(&gateway).await?;
         } else {
             info!(
                 "Gateway {} updated but config unchanged, no action needed",
-                new_gateway.gateway_id
+                gateway.gateway_id
             );
         }
 
@@ -269,14 +277,14 @@ async fn run_gateway_print_process(
 
 /// Print gateway configuration to stdout
 fn print_gateway_config(gateway: &Gateway) -> DomainResult<()> {
-    println!(
-        "[GATEWAY {}] org={} type={} config={}",
-        gateway.gateway_id,
-        gateway.organization_id,
-        gateway.gateway_type,
-        serde_json::to_string_pretty(&gateway.gateway_config)
-            .unwrap_or_else(|_| "invalid json".to_string())
-    );
+    match &gateway.gateway_config {
+        crate::GatewayConfig::Emqx(emqx) => {
+            println!(
+                "[GATEWAY {}] org={} type={} broker_url={}",
+                gateway.gateway_id, gateway.organization_id, gateway.gateway_type, emqx.broker_url
+            );
+        }
+    }
     Ok(())
 }
 
@@ -289,13 +297,14 @@ mod tests {
 
     // Helper to create test gateway
     fn create_test_gateway(gateway_id: &str, org_id: &str) -> Gateway {
+        use crate::{EmqxGatewayConfig, GatewayConfig};
+
         Gateway {
             gateway_id: gateway_id.to_string(),
             organization_id: org_id.to_string(),
             gateway_type: "emqx".to_string(),
-            gateway_config: serde_json::json!({
-                "host": "mqtt.example.com",
-                "port": 1883
+            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+                broker_url: "mqtt://mqtt.example.com:1883".to_string(),
             }),
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),
@@ -383,7 +392,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_gateway_updated_with_config_change() {
-        let mock_repo = MockGatewayRepository::new();
+        use crate::{EmqxGatewayConfig, GatewayConfig};
+
+        let mut mock_repo = MockGatewayRepository::new();
+
+        // Setup mock to return the old gateway when get_gateway is called
+        let old_gateway = create_test_gateway("gw1", "org1");
+        let old_gateway_clone = old_gateway.clone();
+
+        mock_repo
+            .expect_get_gateway()
+            .withf(|gateway_id| gateway_id == "gw1")
+            .times(1)
+            .returning(move |_| Ok(Some(old_gateway_clone.clone())));
+
         let store = Arc::new(InMemoryGatewayProcessStore::new());
 
         let orchestrator = GatewayOrchestrator::new(
@@ -394,17 +416,15 @@ mod tests {
         );
 
         // Start a process
-        let old_gateway = create_test_gateway("gw1", "org1");
         orchestrator.handle_gateway_created(old_gateway.clone()).await.unwrap();
 
         // Update with different config
         let mut new_gateway = old_gateway.clone();
-        new_gateway.gateway_config = serde_json::json!({
-            "host": "mqtt.newhost.com",
-            "port": 8883
+        new_gateway.gateway_config = GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://mqtt.newhost.com:8883".to_string(),
         });
 
-        let result = orchestrator.handle_gateway_updated(old_gateway, new_gateway).await;
+        let result = orchestrator.handle_gateway_updated(new_gateway).await;
         assert!(result.is_ok());
 
         // Give time for restart
@@ -434,7 +454,7 @@ mod tests {
         let mut new_gateway = old_gateway.clone();
         new_gateway.deleted_at = Some(chrono::Utc::now());
 
-        let result = orchestrator.handle_gateway_updated(old_gateway, new_gateway).await;
+        let result = orchestrator.handle_gateway_updated( new_gateway).await;
         assert!(result.is_ok());
 
         // Give time for shutdown

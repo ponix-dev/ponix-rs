@@ -3,8 +3,8 @@
 use async_nats::jetstream;
 use futures_util::stream::StreamExt;
 use ponix_domain::{
-    CreateGatewayInputWithId, CreateOrganizationInputWithId, GatewayRepository,
-    OrganizationRepository, UpdateGatewayInput,
+    CreateGatewayInputWithId, CreateOrganizationInputWithId, EmqxGatewayConfig, GatewayConfig,
+    GatewayRepository, OrganizationRepository, UpdateGatewayInput,
 };
 use ponix_nats::NatsClient;
 use ponix_ponix_community_neoeinstein_prost::gateway::v1::{Gateway, GatewayType};
@@ -13,7 +13,6 @@ use ponix_postgres::{
     PostgresGatewayRepository, PostgresOrganizationRepository,
 };
 use prost::Message;
-use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use testcontainers::runners::AsyncRunner;
@@ -269,7 +268,9 @@ async fn test_gateway_create_cdc_event() {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-001".to_string(),
         gateway_type: "EMQX".to_string(),
-        gateway_config: json!({"name": "Test Gateway Create"}),
+        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://test.example.com:1883".to_string(),
+        }),
     };
 
     env.gateway_repo
@@ -288,9 +289,17 @@ async fn test_gateway_create_cdc_event() {
     // Validate the CDC event
     assert_eq!(gateway_event.gateway_id, gateway_id);
     assert_eq!(gateway_event.organization_id, "test-org-001");
-    assert_eq!(gateway_event.name, "Test Gateway Create");
     assert_eq!(gateway_event.r#type, GatewayType::Emqx as i32);
     assert!(gateway_event.created_at.is_some());
+
+    // Validate config
+    if let Some(config) = gateway_event.config {
+        match config {
+            ponix_ponix_community_neoeinstein_prost::gateway::v1::gateway::Config::EmqxConfig(emqx) => {
+                assert_eq!(emqx.broker_url, "mqtt://test.example.com:1883");
+            }
+        }
+    }
 
     debug!("CDC create event validated successfully");
 }
@@ -313,7 +322,9 @@ async fn test_gateway_update_cdc_event() {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-002".to_string(),
         gateway_type: "EMQX".to_string(),
-        gateway_config: json!({"name": "Original Name"}),
+        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://original.example.com:1883".to_string(),
+        }),
     };
 
     env.gateway_repo
@@ -333,7 +344,9 @@ async fn test_gateway_update_cdc_event() {
     let update_input = UpdateGatewayInput {
         gateway_id: gateway_id.clone(),
         gateway_type: None,
-        gateway_config: Some(json!({"name": "Updated Gateway Name"})),
+        gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://updated.example.com:8883".to_string(),
+        })),
     };
 
     env.gateway_repo
@@ -351,8 +364,16 @@ async fn test_gateway_update_cdc_event() {
 
     // Validate the CDC event
     assert_eq!(gateway_event.gateway_id, gateway_id);
-    assert_eq!(gateway_event.name, "Updated Gateway Name");
     assert!(gateway_event.updated_at.is_some());
+
+    // Validate config
+    if let Some(config) = gateway_event.config {
+        match config {
+            ponix_ponix_community_neoeinstein_prost::gateway::v1::gateway::Config::EmqxConfig(emqx) => {
+                assert_eq!(emqx.broker_url, "mqtt://updated.example.com:8883");
+            }
+        }
+    }
 
     debug!("CDC update event validated successfully");
 }
@@ -375,7 +396,9 @@ async fn test_gateway_delete_cdc_event() {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-003".to_string(),
         gateway_type: "EMQX".to_string(),
-        gateway_config: json!({"name": "To Be Deleted"}),
+        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://delete-test.example.com:1883".to_string(),
+        }),
     };
 
     env.gateway_repo

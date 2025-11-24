@@ -4,6 +4,7 @@ use ponix_domain::{
     gateway::{CreateGatewayInputWithId, UpdateGatewayInput},
     organization::CreateOrganizationInputWithId,
     repository::{GatewayRepository, OrganizationRepository},
+    EmqxGatewayConfig, GatewayConfig,
 };
 use ponix_postgres::{
     MigrationRunner, PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository,
@@ -76,16 +77,21 @@ async fn test_gateway_crud_operations() {
         gateway_id: "gw-test-001".to_string(),
         organization_id: "org-test-001".to_string(),
         gateway_type: "emqx".to_string(),
-        gateway_config: serde_json::json!({
-            "host": "mqtt.example.com",
-            "port": 1883,
-            "topic_pattern": "{organization}/{device}"
+        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://mqtt.example.com:1883".to_string(),
         }),
     };
 
     let created = gateway_repo.create_gateway(create_input).await.unwrap();
     assert_eq!(created.gateway_id, "gw-test-001");
     assert_eq!(created.gateway_type, "emqx");
+
+    // Verify config
+    match &created.gateway_config {
+        GatewayConfig::Emqx(emqx) => {
+            assert_eq!(emqx.broker_url, "mqtt://mqtt.example.com:1883");
+        }
+    }
     assert!(created.created_at.is_some());
 
     // Test Get
@@ -98,13 +104,18 @@ async fn test_gateway_crud_operations() {
     let update_input = UpdateGatewayInput {
         gateway_id: "gw-test-001".to_string(),
         gateway_type: None,
-        gateway_config: Some(serde_json::json!({
-            "host": "mqtt2.example.com",
-            "port": 8883
+        gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://mqtt2.example.com:8883".to_string(),
         })),
     };
     let updated = gateway_repo.update_gateway(update_input).await.unwrap();
-    assert_eq!(updated.gateway_config["host"], "mqtt2.example.com");
+
+    // Verify updated config
+    match &updated.gateway_config {
+        GatewayConfig::Emqx(emqx) => {
+            assert_eq!(emqx.broker_url, "mqtt://mqtt2.example.com:8883");
+        }
+    }
 
     // Test List
     let gateways = gateway_repo.list_gateways("org-test-001").await.unwrap();
@@ -133,7 +144,9 @@ async fn test_gateway_unique_constraint() {
         gateway_id: "gw-test-002".to_string(),
         organization_id: "org-test-002".to_string(),
         gateway_type: "emqx".to_string(),
-        gateway_config: serde_json::json!({}),
+        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: String::new(),
+        }),
     };
 
     gateway_repo
@@ -168,7 +181,9 @@ async fn test_list_excludes_soft_deleted() {
             gateway_id: format!("gw-test-{}", i),
             organization_id: "org-test-003".to_string(),
             gateway_type: "emqx".to_string(),
-            gateway_config: serde_json::json!({}),
+            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+                broker_url: format!("mqtt://mqtt{}.example.com:1883", i),
+            }),
         };
         gateway_repo.create_gateway(create_input).await.unwrap();
     }

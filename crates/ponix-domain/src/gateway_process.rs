@@ -1,4 +1,5 @@
 use crate::gateway::Gateway;
+use crate::gateway_config::GatewayConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -28,10 +29,15 @@ impl GatewayProcessHandle {
         }
     }
 
-    /// Hash gateway config JSON for change detection
-    fn hash_config(config: &serde_json::Value) -> String {
+    /// Hash gateway config for change detection
+    fn hash_config(config: &GatewayConfig) -> String {
         let mut hasher = DefaultHasher::new();
-        config.to_string().hash(&mut hasher);
+        // Hash the config fields to detect changes
+        match config {
+            GatewayConfig::Emqx(emqx) => {
+                emqx.broker_url.hash(&mut hasher);
+            }
+        }
         format!("{:x}", hasher.finish())
     }
 

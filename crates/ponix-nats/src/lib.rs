@@ -21,6 +21,9 @@ mod raw_envelope_processor;
 #[cfg(feature = "raw-envelope")]
 mod raw_envelope_producer;
 
+mod gateway_cdc_converter;
+mod gateway_cdc_consumer;
+
 pub use client::{NatsClient, NatsJetStreamConsumer, NatsJetStreamPublisher, NatsPullConsumer};
 pub use consumer::{BatchProcessor, NatsConsumer, ProcessingResult};
 pub use traits::{JetStreamConsumer, JetStreamPublisher, PullConsumer};
@@ -48,3 +51,6 @@ pub use raw_envelope_demo_producer::{
 pub use raw_envelope_processor::create_domain_processor as create_raw_envelope_domain_processor;
 #[cfg(feature = "raw-envelope")]
 pub use raw_envelope_producer::RawEnvelopeProducer;
+
+pub use gateway_cdc_consumer::GatewayCdcConsumer;
+pub use gateway_cdc_converter::{parse_gateway_cdc_event, proto_to_domain_gateway};
