@@ -9,7 +9,9 @@ license.workspace = true
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 async-trait = "0.1"
-
+serde = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
 
 chrono = "0.4"
 tracing = { workspace = true }

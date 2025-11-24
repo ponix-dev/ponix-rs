@@ -345,10 +345,10 @@ pub use in_memory_gateway_process_store::*;
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] Code compiles: `cargo build -p ponix-domain`
-- [ ] Unit tests pass: `cargo test -p ponix-domain --lib`
-- [ ] Type checking passes: `cargo check -p ponix-domain`
-- [ ] Clippy passes: `cargo clippy -p ponix-domain`
+- [x] Code compiles: `cargo build -p ponix-domain`
+- [x] Unit tests pass: `cargo test -p ponix-domain --lib`
+- [x] Type checking passes: `cargo check -p ponix-domain`
+- [x] Clippy passes: `cargo clippy -p ponix-domain`
 
 #### Manual Verification:
 - [ ] Verify in-memory store can insert and retrieve handles
@@ -808,10 +808,10 @@ mod tests {
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] Code compiles: `cargo build -p ponix-domain`
-- [ ] Unit tests pass: `cargo test -p ponix-domain --lib`
-- [ ] Type checking passes: `cargo check -p ponix-domain`
-- [ ] Clippy passes: `cargo clippy -p ponix-domain`
+- [x] Code compiles: `cargo build -p ponix-domain`
+- [x] Unit tests pass: `cargo test -p ponix-domain --lib`
+- [x] Type checking passes: `cargo check -p ponix-domain`
+- [x] Clippy passes: `cargo clippy -p ponix-domain`
 
 #### Manual Verification:
 - [ ] Create orchestrator with in-memory store and verify it can start
