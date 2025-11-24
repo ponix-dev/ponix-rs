@@ -4,8 +4,8 @@ use tracing::{debug, info};
 use crate::{
     error::{DomainError, DomainResult},
     gateway::{
-        CreateGatewayInput, CreateGatewayInputWithId, DeleteGatewayInput, Gateway,
-        GetGatewayInput, ListGatewaysInput, UpdateGatewayInput,
+        CreateGatewayInput, CreateGatewayInputWithId, DeleteGatewayInput, Gateway, GetGatewayInput,
+        ListGatewaysInput, UpdateGatewayInput,
     },
     organization::GetOrganizationInput,
     repository::{GatewayRepository, OrganizationRepository},
@@ -37,7 +37,11 @@ impl GatewayService {
             organization_id: input.organization_id.clone(),
         };
 
-        match self.organization_repository.get_organization(org_input).await? {
+        match self
+            .organization_repository
+            .get_organization(org_input)
+            .await?
+        {
             Some(org) => {
                 if org.deleted_at.is_some() {
                     return Err(DomainError::OrganizationDeleted(format!(
@@ -131,7 +135,9 @@ impl GatewayService {
             ));
         }
 
-        self.gateway_repository.delete_gateway(&input.gateway_id).await?;
+        self.gateway_repository
+            .delete_gateway(&input.gateway_id)
+            .await?;
 
         info!("Gateway soft deleted successfully");
         Ok(())
@@ -147,7 +153,10 @@ impl GatewayService {
             ));
         }
 
-        let gateways = self.gateway_repository.list_gateways(&input.organization_id).await?;
+        let gateways = self
+            .gateway_repository
+            .list_gateways(&input.organization_id)
+            .await?;
 
         info!(count = gateways.len(), "Listed gateways");
         Ok(gateways)
@@ -204,10 +213,7 @@ mod tests {
                 })
             });
 
-        let service = GatewayService::new(
-            Arc::new(mock_gateway_repo),
-            Arc::new(mock_org_repo),
-        );
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
 
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),
@@ -232,10 +238,7 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = GatewayService::new(
-            Arc::new(mock_gateway_repo),
-            Arc::new(mock_org_repo),
-        );
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
 
         let input = CreateGatewayInput {
             organization_id: "org-999".to_string(),
@@ -265,10 +268,7 @@ mod tests {
                 }))
             });
 
-        let service = GatewayService::new(
-            Arc::new(mock_gateway_repo),
-            Arc::new(mock_org_repo),
-        );
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
 
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),

@@ -1,9 +1,7 @@
 use chrono::Utc;
 use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository, MigrationRunner};
 use ponix_domain::{
-    ProcessedEnvelope as DomainEnvelope, 
-    StoreEnvelopesInput,
-    ProcessedEnvelopeRepository,
+    ProcessedEnvelope as DomainEnvelope, ProcessedEnvelopeRepository, StoreEnvelopesInput,
 };
 use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;

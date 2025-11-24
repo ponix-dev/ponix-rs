@@ -4,7 +4,11 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use testcontainers_modules::postgres::Postgres;
 
-async fn setup_test_db() -> (ContainerAsync<Postgres>, PostgresDeviceRepository, PostgresClient) {
+async fn setup_test_db() -> (
+    ContainerAsync<Postgres>,
+    PostgresDeviceRepository,
+    PostgresClient,
+) {
     let postgres = Postgres::default().start().await.unwrap();
     let host = postgres.get_host().await.unwrap();
     let port = postgres.get_host_port_ipv4(5432).await.unwrap();

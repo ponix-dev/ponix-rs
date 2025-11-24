@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
-use ponix_domain::{CreateOrganizationInput, DeleteOrganizationInput, GetOrganizationInput, Organization};
+use ponix_domain::{
+    CreateOrganizationInput, DeleteOrganizationInput, GetOrganizationInput, Organization,
+};
 use ponix_proto_prost::organization::v1::{
     CreateOrganizationRequest, DeleteOrganizationRequest, GetOrganizationRequest,
     Organization as ProtoOrganization,

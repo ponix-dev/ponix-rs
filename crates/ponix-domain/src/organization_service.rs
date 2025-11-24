@@ -198,10 +198,7 @@ mod tests {
         };
 
         let result = service.get_organization(input).await;
-        assert!(matches!(
-            result,
-            Err(DomainError::InvalidOrganizationId(_))
-        ));
+        assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
     }
 
     #[tokio::test]
@@ -231,9 +228,6 @@ mod tests {
         };
 
         let result = service.delete_organization(input).await;
-        assert!(matches!(
-            result,
-            Err(DomainError::InvalidOrganizationId(_))
-        ));
+        assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
     }
 }

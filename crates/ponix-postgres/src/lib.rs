@@ -1,3 +1,4 @@
+mod cdc;
 mod client;
 mod config;
 mod conversions;
@@ -6,6 +7,7 @@ mod gateway_repository;
 mod models;
 mod organization_repository;
 
+pub use cdc::{CdcConfig, CdcConverter, CdcProcess, EntityConfig, GatewayConverter, NatsSink};
 pub use client::PostgresClient;
 pub use config::PostgresConfig;
 pub use device_repo::PostgresDeviceRepository;

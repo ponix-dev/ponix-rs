@@ -5,8 +5,8 @@ use ponix_clickhouse::{
     ClickHouseClient, ClickHouseEnvelopeRepository, MigrationRunner as ClickHouseMigrationRunner,
 };
 use ponix_domain::{
-    DeviceService, ProcessedEnvelopeService, RawEnvelopeService, CreateDeviceInput, Device,
-    RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait,
+    CreateDeviceInput, Device, DeviceService, ProcessedEnvelopeService, RawEnvelope,
+    RawEnvelopeProducer as RawEnvelopeProducerTrait, RawEnvelopeService,
 };
 use ponix_nats::{
     create_domain_processor, create_raw_envelope_domain_processor, NatsClient, NatsConsumer,
@@ -249,9 +249,7 @@ async fn initialize_services(
 
     // Ensure streams exist (JetStream must be enabled in NATS)
     nats_client.ensure_stream("raw_envelopes").await?;
-    nats_client
-        .ensure_stream("processed_envelopes")
-        .await?;
+    nats_client.ensure_stream("processed_envelopes").await?;
 
     // ProcessedEnvelopeProducer for RawEnvelopeService
     let processed_producer = Arc::new(ProcessedEnvelopeProducer::new(
@@ -280,7 +278,10 @@ async fn initialize_services(
 }
 
 /// Create a test organization and device with CEL expression for Cayenne LPP transformation
-async fn create_test_device(device_service: &DeviceService, pg_client: &PostgresClient) -> Result<Device> {
+async fn create_test_device(
+    device_service: &DeviceService,
+    pg_client: &PostgresClient,
+) -> Result<Device> {
     // First, create the test organization directly in the database
     // (OrganizationService not yet implemented in Phase 1)
     let conn = pg_client.get_connection().await?;
@@ -328,7 +329,7 @@ async fn produce_raw_messages(
     // Channel 2: Barometer (1013.25 hPa) - type 0x73 (barometer), value 0x2795 = 10133, 10133/10 = 1013.3
     let cayenne_payload = vec![
         0x00, 0x67, 0x00, 0xFF, // Ch 0, temp: 25.5°C
-        0x01, 0x68, 0x82,       // Ch 1, humidity: 65%
+        0x01, 0x68, 0x82, // Ch 1, humidity: 65%
         0x02, 0x73, 0x27, 0x95, // Ch 2, barometer: 1013.3 hPa
     ];
 

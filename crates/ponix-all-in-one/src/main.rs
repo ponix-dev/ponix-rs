@@ -1,14 +1,20 @@
 mod config;
 
 use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository};
-use ponix_domain::{DeviceService, GatewayService, OrganizationService, ProcessedEnvelopeService, RawEnvelopeService};
+use ponix_domain::{
+    DeviceService, GatewayService, OrganizationService, ProcessedEnvelopeService,
+    RawEnvelopeService,
+};
 use ponix_grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_nats::{
     create_domain_processor, create_raw_envelope_domain_processor, NatsClient, NatsConsumer,
     ProcessedEnvelopeProducer,
 };
 use ponix_payload::CelPayloadConverter;
-use ponix_postgres::{PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository, PostgresOrganizationRepository};
+use ponix_postgres::{
+    CdcConfig, CdcProcess, PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
+    PostgresOrganizationRepository,
+};
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
@@ -84,7 +90,8 @@ async fn main() {
 
     // Initialize repositories
     let device_repository = Arc::new(PostgresDeviceRepository::new(postgres_client.clone()));
-    let organization_repository = Arc::new(PostgresOrganizationRepository::new(postgres_client.clone()));
+    let organization_repository =
+        Arc::new(PostgresOrganizationRepository::new(postgres_client.clone()));
     let gateway_repository = Arc::new(PostgresGatewayRepository::new(postgres_client));
 
     // Initialize domain services
@@ -154,7 +161,7 @@ async fn main() {
 
     // PHASE 4: Connect to NATS
     let nats_client = match NatsClient::connect(&config.nats_url, startup_timeout).await {
-        Ok(client) => client,
+        Ok(client) => Arc::new(client),
         Err(e) => {
             error!("Failed to connect to NATS: {}", e);
             std::process::exit(1);
@@ -245,31 +252,61 @@ async fn main() {
 
     info!("Raw envelope infrastructure initialized");
 
+    // PHASE 6: CDC Setup
+    info!("Setting up CDC for gateway changes");
+
+    // Load CDC configuration
+    let cdc_config = match CdcConfig::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            error!("Failed to load CDC configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     // Create gRPC server configuration
     let grpc_config = GrpcServerConfig {
         host: config.grpc_host.clone(),
         port: config.grpc_port,
     };
 
-    // Create runner with consumer processes and gRPC server
+    // Create runner with consumer processes, CDC, and gRPC server
     let runner = Runner::new()
         .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
         .with_app_process(move |ctx| Box::pin(async move { raw_consumer.run(ctx).await }))
+        .with_app_process({
+            let cdc_config = cdc_config.clone();
+            let nats_for_cdc = Arc::clone(&nats_client);
+            move |ctx| {
+                let cdc_process = CdcProcess::new(cdc_config, nats_for_cdc, ctx);
+                Box::pin(async move { cdc_process.run().await })
+            }
+        })
         .with_app_process({
             let device_svc = device_service.clone();
             let org_svc = organization_service.clone();
             let gateway_svc = gateway_service.clone();
             move |ctx| {
-                Box::pin(async move { run_grpc_server(grpc_config, device_svc, org_svc, gateway_svc, ctx).await })
+                Box::pin(async move {
+                    run_grpc_server(grpc_config, device_svc, org_svc, gateway_svc, ctx).await
+                })
             }
         })
-        .with_closer(move || {
-            Box::pin(async move {
-                info!("Running cleanup tasks...");
-                nats_client.close().await;
-                info!("Cleanup complete");
-                Ok(())
-            })
+        .with_closer({
+            let nats_for_close = Arc::clone(&nats_client);
+            move || {
+                Box::pin(async move {
+                    info!("Running cleanup tasks...");
+                    // Try to unwrap Arc to get ownership for close()
+                    if let Ok(client) = Arc::try_unwrap(nats_for_close) {
+                        client.close().await;
+                    } else {
+                        info!("Could not unwrap NATS client for close (still in use)");
+                    }
+                    info!("Cleanup complete");
+                    Ok(())
+                })
+            }
         })
         .with_closer_timeout(Duration::from_secs(10));
 

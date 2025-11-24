@@ -48,7 +48,11 @@ impl DeviceService {
             organization_id: input.organization_id.clone(),
         };
 
-        match self.organization_repository.get_organization(org_input).await? {
+        match self
+            .organization_repository
+            .get_organization(org_input)
+            .await?
+        {
             Some(org) => {
                 if org.deleted_at.is_some() {
                     return Err(DomainError::OrganizationDeleted(format!(

@@ -12,8 +12,8 @@ use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServic
 
 use crate::error::domain_error_to_status;
 use crate::gateway_conversions::{
-    to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input,
-    to_list_gateways_input, to_proto_gateway, to_update_gateway_input,
+    to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input, to_list_gateways_input,
+    to_proto_gateway, to_update_gateway_input,
 };
 
 /// gRPC handler for GatewayService
