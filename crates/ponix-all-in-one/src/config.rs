@@ -123,6 +123,30 @@ pub struct ServiceConfig {
     /// CDC table name for gateway events
     #[serde(default = "default_cdc_gateway_table_name")]
     pub cdc_gateway_table_name: String,
+
+    /// CDC publication name
+    #[serde(default = "default_cdc_publication_name")]
+    pub cdc_publication_name: String,
+
+    /// CDC replication slot name
+    #[serde(default = "default_cdc_slot_name")]
+    pub cdc_slot_name: String,
+
+    /// CDC batch size
+    #[serde(default = "default_cdc_batch_size")]
+    pub cdc_batch_size: usize,
+
+    /// CDC batch timeout in milliseconds
+    #[serde(default = "default_cdc_batch_timeout_ms")]
+    pub cdc_batch_timeout_ms: u64,
+
+    /// CDC retry delay in milliseconds
+    #[serde(default = "default_cdc_retry_delay_ms")]
+    pub cdc_retry_delay_ms: u64,
+
+    /// CDC max retry attempts
+    #[serde(default = "default_cdc_max_retry_attempts")]
+    pub cdc_max_retry_attempts: u32,
 }
 
 fn default_log_level() -> String {
@@ -244,6 +268,30 @@ fn default_cdc_gateway_entity_name() -> String {
 
 fn default_cdc_gateway_table_name() -> String {
     "gateways".to_string()
+}
+
+fn default_cdc_publication_name() -> String {
+    "ponix_cdc_publication".to_string()
+}
+
+fn default_cdc_slot_name() -> String {
+    "ponix_cdc_slot".to_string()
+}
+
+fn default_cdc_batch_size() -> usize {
+    100
+}
+
+fn default_cdc_batch_timeout_ms() -> u64 {
+    5000
+}
+
+fn default_cdc_retry_delay_ms() -> u64 {
+    10000
+}
+
+fn default_cdc_max_retry_attempts() -> u32 {
+    5
 }
 
 impl ServiceConfig {

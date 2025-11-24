@@ -263,13 +263,19 @@ async fn main() {
     // PHASE 6: CDC Setup
     info!("Setting up CDC for gateway changes");
 
-    // Load CDC configuration
-    let cdc_config = match CdcConfig::from_env() {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            error!("Failed to load CDC configuration: {}", e);
-            std::process::exit(1);
-        }
+    // Build CDC configuration from service config
+    let cdc_config = CdcConfig {
+        pg_host: config.postgres_host.clone(),
+        pg_port: config.postgres_port,
+        pg_database: config.postgres_database.clone(),
+        pg_user: config.postgres_username.clone(),
+        pg_password: config.postgres_password.clone(),
+        publication_name: config.cdc_publication_name.clone(),
+        slot_name: config.cdc_slot_name.clone(),
+        batch_size: config.cdc_batch_size,
+        batch_timeout_ms: config.cdc_batch_timeout_ms,
+        retry_delay_ms: config.cdc_retry_delay_ms,
+        max_retry_attempts: config.cdc_max_retry_attempts,
     };
 
     // Create gRPC server configuration

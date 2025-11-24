@@ -23,37 +23,6 @@ pub struct CdcConfig {
 }
 
 impl CdcConfig {
-    pub fn from_env() -> anyhow::Result<Self> {
-        Ok(Self {
-            pg_host: std::env::var("PONIX_POSTGRES_HOST").unwrap_or_else(|_| "localhost".into()),
-            pg_port: std::env::var("PONIX_POSTGRES_PORT")
-                .unwrap_or_else(|_| "5432".into())
-                .parse()?,
-            pg_database: std::env::var("PONIX_POSTGRES_DB").unwrap_or_else(|_| "ponix".into()),
-            pg_user: std::env::var("PONIX_POSTGRES_USER").unwrap_or_else(|_| "ponix".into()),
-            pg_password: std::env::var("PONIX_POSTGRES_PASSWORD")
-                .unwrap_or_else(|_| "ponix".into()),
-
-            publication_name: std::env::var("PONIX_CDC_PUBLICATION")
-                .unwrap_or_else(|_| "ponix_cdc_publication".into()),
-            slot_name: std::env::var("PONIX_CDC_SLOT").unwrap_or_else(|_| "ponix_cdc_slot".into()),
-
-            batch_size: std::env::var("PONIX_CDC_BATCH_SIZE")
-                .unwrap_or_else(|_| "100".into())
-                .parse()?,
-            batch_timeout_ms: std::env::var("PONIX_CDC_BATCH_TIMEOUT_MS")
-                .unwrap_or_else(|_| "5000".into())
-                .parse()?,
-
-            retry_delay_ms: std::env::var("PONIX_CDC_RETRY_DELAY_MS")
-                .unwrap_or_else(|_| "10000".into())
-                .parse()?,
-            max_retry_attempts: std::env::var("PONIX_CDC_MAX_RETRY_ATTEMPTS")
-                .unwrap_or_else(|_| "5".into())
-                .parse()?,
-        })
-    }
-
     /// Creates a PostgreSQL connection string from the config
     pub fn connection_string(&self) -> String {
         format!(
