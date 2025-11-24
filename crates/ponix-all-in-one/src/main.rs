@@ -1,20 +1,21 @@
+mod analytics_ingester;
+mod cdc_worker;
 mod config;
+mod gateway_api;
+mod ponix_api;
 
-use ponix_clickhouse::{ClickHouseClient, ClickHouseEnvelopeRepository};
-use ponix_domain::{
-    DeviceService, GatewayOrchestrator, GatewayOrchestratorConfig, GatewayService,
-    InMemoryGatewayProcessStore, OrganizationService, ProcessedEnvelopeService,
-    RawEnvelopeService,
-};
-use ponix_grpc::{run_grpc_server, GrpcServerConfig};
-use ponix_nats::{
-    create_domain_processor, create_raw_envelope_domain_processor, GatewayCdcConsumer, NatsClient,
-    NatsConsumer, ProcessedEnvelopeProducer,
-};
-use ponix_payload::CelPayloadConverter;
+use analytics_ingester::{AnalyticsIngester, AnalyticsIngesterConfig};
+use cdc_worker::{CdcWorker, CdcWorkerConfig};
+use config::ServiceConfig;
+use gateway_api::{GatewayApi, GatewayApiConfig};
+use ponix_api::{PonixApi, PonixApiConfig};
+
+use ponix_clickhouse::ClickHouseClient;
+use ponix_domain::{DeviceService, GatewayService, OrganizationService};
+use ponix_nats::NatsClient;
 use ponix_postgres::{
-    CdcConfig, CdcProcess, EntityConfig, GatewayConverter, PostgresClient,
-    PostgresDeviceRepository, PostgresGatewayRepository, PostgresOrganizationRepository,
+    CdcConfig, EntityConfig, GatewayConverter, PostgresClient, PostgresDeviceRepository,
+    PostgresGatewayRepository, PostgresOrganizationRepository,
 };
 use ponix_runner::Runner;
 use std::sync::Arc;
@@ -24,8 +25,8 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() {
-    // Initialize tracing
-    let config = match config::ServiceConfig::from_env() {
+    // Initialize configuration and tracing
+    let config = match ServiceConfig::from_env() {
         Ok(cfg) => cfg,
         Err(e) => {
             eprintln!("Failed to load configuration: {}", e);
@@ -36,21 +37,182 @@ async fn main() {
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level)),
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new(&config.log_level)),
         )
         .init();
 
     info!("Starting ponix-all-in-one service");
     debug!("Configuration: {:?}", config);
 
-    let startup_timeout = Duration::from_secs(config.startup_timeout_secs);
-    debug!(
-        "Using startup timeout of {:?} for all initialization",
-        startup_timeout
+    // Initialize shared dependencies
+    let (postgres_repos, clickhouse_client, nats_client) =
+        match initialize_shared_dependencies(&config).await {
+            Ok(deps) => deps,
+            Err(e) => {
+                error!("Failed to initialize shared dependencies: {}", e);
+                std::process::exit(1);
+            }
+        };
+
+    // Initialize domain services
+    let device_service = Arc::new(DeviceService::new(
+        postgres_repos.device.clone(),
+        postgres_repos.organization.clone(),
+    ));
+    let organization_service = Arc::new(OrganizationService::new(
+        postgres_repos.organization.clone(),
+    ));
+    let gateway_service = Arc::new(GatewayService::new(
+        postgres_repos.gateway.clone(),
+        postgres_repos.organization.clone(),
+    ));
+
+    // Initialize application modules
+    let ponix_api = PonixApi::new(
+        device_service.clone(),
+        organization_service,
+        gateway_service,
+        PonixApiConfig {
+            grpc_host: config.grpc_host.clone(),
+            grpc_port: config.grpc_port,
+        },
     );
 
-    // PHASE 1: Run PostgreSQL migrations
-    info!("Running PostgreSQL migrations...");
+    // Create orchestrator shutdown token - owned by main for lifecycle coordination
+    let orchestrator_shutdown_token = tokio_util::sync::CancellationToken::new();
+
+    let gateway_api = match GatewayApi::new(
+        postgres_repos.gateway.clone(),
+        nats_client.clone(),
+        orchestrator_shutdown_token.clone(),
+        GatewayApiConfig {
+            gateway_stream: config.nats_gateway_stream.clone(),
+            gateway_consumer_name: config.gateway_consumer_name.clone(),
+            gateway_filter_subject: config.gateway_filter_subject.clone(),
+        },
+    )
+    .await
+    {
+        Ok(api) => api,
+        Err(e) => {
+            error!("Failed to initialize gateway API: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Initialize CDC Worker
+    let gateway_entity_config = EntityConfig {
+        entity_name: config.cdc_gateway_entity_name.clone(),
+        table_name: config.cdc_gateway_table_name.clone(),
+        converter: Box::new(GatewayConverter::new()),
+    };
+    let cdc_worker = CdcWorker::new(
+        nats_client.clone(),
+        CdcWorkerConfig {
+            cdc_config: build_cdc_config(&config),
+            entity_configs: vec![gateway_entity_config],
+        },
+    );
+
+    let analytics_ingester = match AnalyticsIngester::new(
+        postgres_repos.device.clone(),
+        postgres_repos.organization.clone(),
+        clickhouse_client,
+        nats_client.clone(),
+        AnalyticsIngesterConfig {
+            processed_envelopes_stream: config.processed_envelopes_stream.clone(),
+            processed_envelopes_subject: config.processed_envelopes_subject.clone(),
+            raw_stream: config.nats_raw_stream.clone(),
+            raw_subject: config.nats_raw_subject.clone(),
+            nats_batch_size: config.nats_batch_size,
+            nats_batch_wait_secs: config.nats_batch_wait_secs,
+        },
+    )
+    .await
+    {
+        Ok(ingester) => ingester,
+        Err(e) => {
+            error!("Failed to initialize analytics ingester: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Build runner with all processes
+    let mut runner = Runner::new();
+
+    // Add Ponix API process
+    runner = runner.with_app_process(ponix_api.into_runner_process());
+
+    // Add Gateway API process (handles NATS CDC events → orchestrator)
+    runner = runner.with_app_process(gateway_api.into_runner_process());
+
+    // Add CDC Worker process (handles Postgres → NATS CDC events)
+    runner = runner.with_app_process(cdc_worker.into_runner_process());
+
+    // Add Analytics Ingester processes
+    for process in analytics_ingester.into_runner_processes() {
+        runner = runner.with_app_process(process);
+    }
+
+    // Add cleanup handlers
+    runner = runner
+        .with_closer({
+            let nats_for_close = Arc::clone(&nats_client);
+            move || {
+                Box::pin(async move {
+                    info!("Running cleanup tasks...");
+                    orchestrator_shutdown_token.cancel();
+                    if let Ok(client) = Arc::try_unwrap(nats_for_close) {
+                        client.close().await;
+                    }
+                    info!("Cleanup complete");
+                    Ok(())
+                })
+            }
+        })
+        .with_closer_timeout(Duration::from_secs(10));
+
+    // Run the service
+    runner.run().await;
+}
+
+struct PostgresRepositories {
+    device: Arc<PostgresDeviceRepository>,
+    organization: Arc<PostgresOrganizationRepository>,
+    gateway: Arc<PostgresGatewayRepository>,
+}
+
+async fn initialize_shared_dependencies(
+    config: &ServiceConfig,
+) -> anyhow::Result<(PostgresRepositories, ClickHouseClient, Arc<NatsClient>)> {
+    // PostgreSQL initialization
+    info!("Initializing PostgreSQL...");
+    run_postgres_migrations(config).await?;
+    let postgres_client = create_postgres_client(config)?;
+    let postgres_repos = PostgresRepositories {
+        device: Arc::new(PostgresDeviceRepository::new(postgres_client.clone())),
+        organization: Arc::new(PostgresOrganizationRepository::new(postgres_client.clone())),
+        gateway: Arc::new(PostgresGatewayRepository::new(postgres_client)),
+    };
+
+    // ClickHouse initialization
+    info!("Initializing ClickHouse...");
+    run_clickhouse_migrations(config).await?;
+    let clickhouse_client = create_clickhouse_client(config).await?;
+
+    // NATS initialization
+    info!("Initializing NATS...");
+    let nats_client = Arc::new(
+        NatsClient::connect(&config.nats_url, Duration::from_secs(config.startup_timeout_secs))
+            .await?,
+    );
+    ensure_nats_streams(&nats_client, config).await?;
+
+    Ok((postgres_repos, clickhouse_client, nats_client))
+}
+
+async fn run_postgres_migrations(config: &ServiceConfig) -> anyhow::Result<()> {
     let postgres_dsn = format!(
         "postgres://{}:{}@{}:{}/{}?sslmode=disable",
         config.postgres_username,
@@ -59,79 +221,16 @@ async fn main() {
         config.postgres_port,
         config.postgres_database
     );
-    let postgres_migration_runner = ponix_postgres::MigrationRunner::new(
+    let runner = ponix_postgres::MigrationRunner::new(
         config.postgres_goose_binary_path.clone(),
         config.postgres_migrations_dir.clone(),
         "postgres".to_string(),
         postgres_dsn,
     );
+    runner.run_migrations().await
+}
 
-    if let Err(e) = postgres_migration_runner.run_migrations().await {
-        error!("Failed to run PostgreSQL migrations: {}", e);
-        std::process::exit(1);
-    }
-
-    // Initialize PostgreSQL client for device repository
-    info!("Connecting to PostgreSQL...");
-    let postgres_client = match PostgresClient::new(
-        &config.postgres_host,
-        config.postgres_port,
-        &config.postgres_database,
-        &config.postgres_username,
-        &config.postgres_password,
-        5, // max connections
-    ) {
-        Ok(client) => client,
-        Err(e) => {
-            error!("Failed to create PostgreSQL client: {}", e);
-            std::process::exit(1);
-        }
-    };
-    info!("PostgreSQL connection established");
-
-    // Initialize repositories
-    let device_repository = Arc::new(PostgresDeviceRepository::new(postgres_client.clone()));
-    let organization_repository =
-        Arc::new(PostgresOrganizationRepository::new(postgres_client.clone()));
-    let gateway_repository = Arc::new(PostgresGatewayRepository::new(postgres_client));
-
-    // Initialize gateway orchestrator
-    info!("Initializing gateway orchestrator");
-    let orchestrator_config = GatewayOrchestratorConfig::default();
-    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
-    let orchestrator_shutdown_token = tokio_util::sync::CancellationToken::new();
-    let gateway_orchestrator = Arc::new(GatewayOrchestrator::new(
-        gateway_repository.clone(),
-        process_store,
-        orchestrator_config,
-        orchestrator_shutdown_token.clone(),
-    ));
-
-    // Start orchestrator to load and start all existing gateways
-    if let Err(e) = gateway_orchestrator.start().await {
-        error!("Failed to start gateway orchestrator: {}", e);
-        std::process::exit(1);
-    }
-    info!("Gateway orchestrator initialized and started");
-
-    // Initialize domain services
-    let device_service = Arc::new(DeviceService::new(
-        device_repository.clone(),
-        organization_repository.clone(),
-    ));
-    info!("Device service initialized");
-
-    let organization_service = Arc::new(OrganizationService::new(organization_repository.clone()));
-    info!("Organization service initialized");
-
-    let gateway_service = Arc::new(GatewayService::new(
-        gateway_repository,
-        organization_repository.clone(),
-    ));
-    info!("Gateway service initialized");
-
-    // PHASE 2: Run ClickHouse migrations
-    info!("Running ClickHouse migrations...");
+async fn run_clickhouse_migrations(config: &ServiceConfig) -> anyhow::Result<()> {
     let clickhouse_dsn = format!(
         "clickhouse://{}:{}@{}/{}?allow_experimental_json_type=1",
         config.clickhouse_username,
@@ -139,163 +238,46 @@ async fn main() {
         config.clickhouse_native_url,
         config.clickhouse_database
     );
-    let clickhouse_migration_runner = ponix_clickhouse::MigrationRunner::new(
+    let runner = ponix_clickhouse::MigrationRunner::new(
         config.clickhouse_goose_binary_path.clone(),
         config.clickhouse_migrations_dir.clone(),
         "clickhouse".to_string(),
         clickhouse_dsn,
     );
+    runner.run_migrations().await
+}
 
-    if let Err(e) = clickhouse_migration_runner.run_migrations().await {
-        error!("Failed to run ClickHouse migrations: {}", e);
-        std::process::exit(1);
-    }
+fn create_postgres_client(config: &ServiceConfig) -> anyhow::Result<PostgresClient> {
+    PostgresClient::new(
+        &config.postgres_host,
+        config.postgres_port,
+        &config.postgres_database,
+        &config.postgres_username,
+        &config.postgres_password,
+        5, // max connections
+    )
+}
 
-    // PHASE 3: Initialize ClickHouse client
-    info!("Connecting to ClickHouse...");
-    let clickhouse_client = ClickHouseClient::new(
+async fn create_clickhouse_client(config: &ServiceConfig) -> anyhow::Result<ClickHouseClient> {
+    let client = ClickHouseClient::new(
         &config.clickhouse_url,
         &config.clickhouse_database,
         &config.clickhouse_username,
         &config.clickhouse_password,
     );
+    client.ping().await?;
+    Ok(client)
+}
 
-    if let Err(e) = clickhouse_client.ping().await {
-        error!("Failed to ping ClickHouse: {}", e);
-        std::process::exit(1);
-    }
-    info!("ClickHouse connection established");
+async fn ensure_nats_streams(client: &NatsClient, config: &ServiceConfig) -> anyhow::Result<()> {
+    client.ensure_stream(&config.processed_envelopes_stream).await?;
+    client.ensure_stream(&config.nats_raw_stream).await?;
+    client.ensure_stream(&config.nats_gateway_stream).await?;
+    Ok(())
+}
 
-    // Initialize ProcessedEnvelope domain layer
-    info!("Initializing processed envelope domain service");
-
-    // Create repository (infrastructure layer)
-    let envelope_repository = ClickHouseEnvelopeRepository::new(
-        clickhouse_client.clone(),
-        "processed_envelopes".to_string(),
-    );
-
-    // Create domain service with repository
-    let envelope_service = Arc::new(ProcessedEnvelopeService::new(Arc::new(envelope_repository)));
-    info!("Processed envelope service initialized");
-
-    // PHASE 4: Connect to NATS
-    let nats_client = match NatsClient::connect(&config.nats_url, startup_timeout).await {
-        Ok(client) => Arc::new(client),
-        Err(e) => {
-            error!("Failed to connect to NATS: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    if let Err(e) = nats_client
-        .ensure_stream(&config.processed_envelopes_stream)
-        .await
-    {
-        error!("Failed to ensure stream exists: {}", e);
-        std::process::exit(1);
-    }
-
-    if let Err(e) = nats_client.ensure_stream(&config.nats_raw_stream).await {
-        error!("Failed to ensure raw envelope stream exists: {}", e);
-        std::process::exit(1);
-    }
-
-    if let Err(e) = nats_client
-        .ensure_stream(&config.nats_gateway_stream)
-        .await
-    {
-        error!("Failed to ensure gateway CDC stream exists: {}", e);
-        std::process::exit(1);
-    }
-
-    // PHASE 5: Create processor using domain service
-    let processor = create_domain_processor(envelope_service.clone());
-
-    // Create consumer using trait-based API
-    let consumer_client = nats_client.create_consumer_client();
-    let consumer = match NatsConsumer::new(
-        consumer_client,
-        &config.processed_envelopes_stream,
-        "ponix-all-in-one",
-        &config.processed_envelopes_subject,
-        config.nats_batch_size,
-        config.nats_batch_wait_secs,
-        processor,
-    )
-    .await
-    {
-        Ok(consumer) => consumer,
-        Err(e) => {
-            error!("Failed to create consumer: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // Initialize RawEnvelope infrastructure
-    info!("Initializing raw envelope infrastructure");
-
-    // Create shared JetStream publisher for ProcessedEnvelope production
-    let publisher_client = nats_client.create_publisher_client();
-
-    // Create payload converter (CEL)
-    let payload_converter = Arc::new(CelPayloadConverter::new());
-
-    // Create ProcessedEnvelope producer for RawEnvelopeService
-    let processed_envelope_producer = Arc::new(ProcessedEnvelopeProducer::new(
-        publisher_client,
-        config.processed_envelopes_stream.clone(),
-    ));
-
-    // Create RawEnvelopeService
-    let raw_envelope_service = Arc::new(RawEnvelopeService::new(
-        device_repository.clone(),
-        organization_repository.clone(),
-        payload_converter,
-        processed_envelope_producer,
-    ));
-
-    // Create RawEnvelope consumer processor
-    let raw_processor = create_raw_envelope_domain_processor(raw_envelope_service.clone());
-
-    // Create RawEnvelope consumer
-    let raw_consumer_client = nats_client.create_consumer_client();
-    let raw_consumer = match NatsConsumer::new(
-        raw_consumer_client,
-        &config.nats_raw_stream,
-        "ponix-all-in-one-raw",
-        &config.nats_raw_subject,
-        config.nats_batch_size,
-        config.nats_batch_wait_secs,
-        raw_processor,
-    )
-    .await
-    {
-        Ok(consumer) => consumer,
-        Err(e) => {
-            error!("Failed to create raw envelope consumer: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    info!("Raw envelope infrastructure initialized");
-
-    // PHASE 6: Gateway CDC Consumer Setup
-    info!("Setting up gateway CDC consumer");
-    let gateway_cdc_consumer = GatewayCdcConsumer::new(
-        Arc::clone(&nats_client),
-        config.nats_gateway_stream.clone(),
-        config.gateway_consumer_name.clone(),
-        config.gateway_filter_subject.clone(),
-        Arc::clone(&gateway_orchestrator),
-    );
-    info!("Gateway CDC consumer initialized");
-
-    // PHASE 7: CDC Setup
-    info!("Setting up CDC for gateway changes");
-
-    // Build CDC configuration from service config
-    let cdc_config = CdcConfig {
+fn build_cdc_config(config: &ServiceConfig) -> CdcConfig {
+    CdcConfig {
         pg_host: config.postgres_host.clone(),
         pg_port: config.postgres_port,
         pg_database: config.postgres_database.clone(),
@@ -307,79 +289,5 @@ async fn main() {
         batch_timeout_ms: config.cdc_batch_timeout_ms,
         retry_delay_ms: config.cdc_retry_delay_ms,
         max_retry_attempts: config.cdc_max_retry_attempts,
-    };
-
-    // Create gRPC server configuration
-    let grpc_config = GrpcServerConfig {
-        host: config.grpc_host.clone(),
-        port: config.grpc_port,
-    };
-
-    // Build CDC entity configurations from service config
-    let gateway_entity_config = EntityConfig {
-        entity_name: config.cdc_gateway_entity_name.clone(),
-        table_name: config.cdc_gateway_table_name.clone(),
-        converter: Box::new(GatewayConverter::new()),
-    };
-    let cdc_entity_configs = vec![gateway_entity_config];
-
-    info!(
-        "CDC configured with {} entities: {:?}",
-        cdc_entity_configs.len(),
-        cdc_entity_configs
-            .iter()
-            .map(|c| format!("{}(table={})", c.entity_name, c.table_name))
-            .collect::<Vec<_>>()
-    );
-
-    // Create runner with consumer processes, CDC, gateway orchestrator consumer, and gRPC server
-    let runner = Runner::new()
-        .with_app_process(move |ctx| Box::pin(async move { consumer.run(ctx).await }))
-        .with_app_process(move |ctx| Box::pin(async move { raw_consumer.run(ctx).await }))
-        .with_app_process(move |ctx| Box::pin(async move { gateway_cdc_consumer.run(ctx).await }))
-        .with_app_process({
-            let cdc_config = cdc_config.clone();
-            let nats_for_cdc = Arc::clone(&nats_client);
-            let entity_configs = cdc_entity_configs;
-            move |ctx| {
-                let cdc_process = CdcProcess::new(cdc_config, nats_for_cdc, entity_configs, ctx);
-                Box::pin(async move { cdc_process.run().await })
-            }
-        })
-        .with_app_process({
-            let device_svc = device_service.clone();
-            let org_svc = organization_service.clone();
-            let gateway_svc = gateway_service.clone();
-            move |ctx| {
-                Box::pin(async move {
-                    run_grpc_server(grpc_config, device_svc, org_svc, gateway_svc, ctx).await
-                })
-            }
-        })
-        .with_closer({
-            let nats_for_close = Arc::clone(&nats_client);
-            let orchestrator_token = orchestrator_shutdown_token.clone();
-            move || {
-                Box::pin(async move {
-                    info!("Running cleanup tasks...");
-
-                    // Signal orchestrator to shutdown gateway processes
-                    info!("Shutting down gateway orchestrator");
-                    orchestrator_token.cancel();
-
-                    // Try to unwrap Arc to get ownership for close()
-                    if let Ok(client) = Arc::try_unwrap(nats_for_close) {
-                        client.close().await;
-                    } else {
-                        info!("Could not unwrap NATS client for close (still in use)");
-                    }
-                    info!("Cleanup complete");
-                    Ok(())
-                })
-            }
-        })
-        .with_closer_timeout(Duration::from_secs(10));
-
-    // Run the service (this will handle the exit)
-    runner.run().await;
+    }
 }

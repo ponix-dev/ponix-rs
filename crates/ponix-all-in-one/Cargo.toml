@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[lib]
+name = "ponix_all_in_one"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ponix-all-in-one"
 path = "src/main.rs"
