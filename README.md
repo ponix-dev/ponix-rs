@@ -15,17 +15,20 @@ Ponix uses CEL (Common Expression Language) to transform device payloads on-the-
 
 ## Key Features
 
-### 🔧 Flexible Payload Transformation
+### Flexible Payload Transformation
 Configure each device with custom CEL expressions to transform binary data into structured JSON. Built-in support for Cayenne LPP and extensible for custom formats.
 
-### 📊 Time-Series Analytics
+### Time-Series Analytics
 Automatic storage in ClickHouse provides fast queries across millions of data points with full-text search and aggregations.
 
-### 🎯 Device Management
-Simple gRPC API to register devices, configure transformations, and manage your IoT fleet.
+### Device Management
+Simple gRPC API to register devices, configure transformations, and manage your IoT fleet with organizations and gateways.
 
-### ⚡ Real-Time Processing
+### Real-Time Processing
 Event-driven architecture with NATS JetStream ensures low-latency data processing and reliable delivery.
+
+### Change Data Capture
+PostgreSQL CDC captures configuration changes and propagates them through the system via NATS streams.
 
 ## Quick Start
 
@@ -130,20 +133,44 @@ grpcurl -plaintext -d '{
 }' localhost:50051 ponix.end_device.v1.EndDeviceService/GetEndDevice
 ```
 
-## How It Works
+## Architecture
 
 ```
-IoT Device → Raw Payload → Ponix → Structured Data → Analytics
-             [0x01...]      ↓      {"temp": 27.2}
-                            CEL
-                        Transformation
+                                    ┌─────────────────┐
+                                    │   PostgreSQL    │
+                                    │  (Devices, Orgs,│
+                                    │   Gateways)     │
+                                    └────────┬────────┘
+                                             │ CDC
+                                             ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ IoT Device  │───▶│   Gateway   │───▶│    NATS     │───▶│  Analytics  │
+│             │    │             │    │  JetStream  │    │   Worker    │
+└─────────────┘    └─────────────┘    └──────┬──────┘    └──────┬──────┘
+                                             │                  │
+                         Raw Envelopes ──────┘                  │
+                                                                ▼
+                                                         ┌─────────────┐
+                                                         │ ClickHouse  │
+                                                         │ (Analytics) │
+                                                         └─────────────┘
 ```
 
-1. **Device Registration**: Configure each device with a CEL expression
+### Data Flow
+
+1. **Device Registration**: Configure each device with a CEL expression via gRPC API
 2. **Data Ingestion**: Raw binary payloads arrive via NATS
 3. **Transformation**: CEL engine converts binary to JSON based on device config
-4. **Storage**: Structured data is stored in ClickHouse
+4. **Storage**: Structured data is batch-written to ClickHouse
 5. **Query**: Run SQL queries on your IoT data
+
+### Modular Workers
+
+Ponix is built as modular workers that run concurrently:
+- **ponix_api**: gRPC server for device/organization/gateway management
+- **gateway_orchestrator**: Manages gateway state via CDC events
+- **cdc_worker**: Captures PostgreSQL changes and publishes to NATS
+- **analytics_worker**: Processes raw and processed envelopes
 
 ## Built-In Functions
 
@@ -165,27 +192,40 @@ cargo test --workspace --features integration-tests -- --test-threads=1
 
 ### Project Structure
 
-Ponix is built as a Rust workspace with clean separation of concerns:
-- **Domain layer** - Business logic and data transformations
-- **Infrastructure** - Database clients, message queues
-- **API** - gRPC service handlers
+Ponix is built as a Rust workspace with modular crates:
+
+```
+crates/
+├── runner/              # Process lifecycle management
+├── common/              # Shared domain types & infrastructure
+├── ponix_api/           # gRPC API & domain services
+├── gateway_orchestrator/# Gateway CDC orchestration
+├── cdc_worker/          # PostgreSQL CDC to NATS
+├── analytics_worker/    # Envelope processing & ClickHouse storage
+├── goose/               # Database migration runner
+└── ponix_all_in_one/    # Main service binary
+```
 
 See [CLAUDE.md](CLAUDE.md) for detailed development documentation.
 
 ## Configuration
 
-Configure via environment variables:
+Configure via environment variables with `PONIX_` prefix:
 
 ```bash
 # Database connections
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-CLICKHOUSE_URL=http://localhost:8123
-NATS_URL=nats://localhost:4222
+PONIX_POSTGRES_HOST=localhost
+PONIX_POSTGRES_PORT=5432
+PONIX_CLICKHOUSE_URL=http://localhost:8123
+PONIX_NATS_URL=nats://localhost:4222
 
 # gRPC API
 PONIX_GRPC_HOST=0.0.0.0
 PONIX_GRPC_PORT=50051
+
+# CDC Configuration
+PONIX_CDC_PUBLICATION_NAME=ponix_cdc_publication
+PONIX_CDC_SLOT_NAME=ponix_cdc_slot
 ```
 
 ## License
