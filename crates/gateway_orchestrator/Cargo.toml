@@ -1,0 +1,27 @@
+[package]
+name = "gateway_orchestrator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+tokio-util = { workspace = true }
+common = { path = "../common" }
+tracing = { workspace = true }
+async-trait = "0.1"
+tokio = { workspace = true }
+chrono = "0.4"
+anyhow = { workspace = true }
+futures = "0.3"
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf" }
+prost = { version = "0.13" }
+async-nats = "0.37"
+bytes = "1.9"
+
+[dev-dependencies]
+common = { path = "../common", features = ["testing"] }
+
+[features]
+integration-tests = []

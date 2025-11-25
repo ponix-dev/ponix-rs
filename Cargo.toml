@@ -1,14 +1,14 @@
 [workspace]
 members = [
     "crates/runner",
-    "crates/ponix-nats",
-    "crates/ponix-clickhouse",
-    "crates/ponix-all-in-one",
+    "crates/ponix_all_in_one",
     "crates/goose",
-    "crates/ponix-postgres",
-    "crates/ponix-domain",
-    "crates/ponix-grpc",
-    "crates/ponix-payload",
+    "crates/ponix_api",
+    "crates/common",
+    "crates/cdc_worker",
+    "crates/analytics_worker",
+    "crates/init_process",
+    "crates/gateway_orchestrator",
 ]
 resolver = "2"
 

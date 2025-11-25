@@ -1,0 +1,23 @@
+[package]
+name = "ponix_api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+common = { path = "../common" }
+tracing = { workspace = true }
+xid = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+chrono = "0.4"
+tonic = "0.12"
+tonic-reflection = "0.12"
+protoc-wkt = "1.0"
+anyhow = { workspace = true }
+ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.4.1-20251123210325-2b150142b2af.1", registry = "buf" }
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251123210325-2b150142b2af.1", registry = "buf" }
+
+[features]
+integration-tests = []

@@ -1,0 +1,50 @@
+[package]
+name = "ponix-all-in-one"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "ponix_all_in_one"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ponix-all-in-one"
+path = "src/main.rs"
+
+[dependencies]
+ponix-runner = { path = "../runner" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+config = { version = "0.14", features = ["toml"] }
+common = { path = "../common" }
+ponix_api = { path = "../ponix_api" }
+analytics_worker = { path = "../analytics_worker" }
+gateway_orchestrator = { path = "../gateway_orchestrator" }
+cdc_worker = { path = "../cdc_worker" }
+goose = { path = "../goose" }
+
+# Protobuf support
+ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf" }
+prost-types = { workspace = true }
+xid.workspace = true
+
+[features]
+integration-tests = []
+
+[dev-dependencies]
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = [
+    "postgres",
+    "clickhouse",
+    "nats",
+] }
+which = "7.0"
+chrono = { workspace = true }
+clickhouse = { version = "0.14", features = ["lz4"] }
+serde_json = "1.0"

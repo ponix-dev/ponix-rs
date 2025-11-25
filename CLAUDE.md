@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ponix RS is a Rust-based IoT data ingestion platform with gRPC device management, NATS JetStream event processing, and multi-database persistence (PostgreSQL + ClickHouse). It's a Cargo workspace with multiple crates implementing domain-driven design principles for device management and event processing.
+Ponix RS is a Rust-based IoT data ingestion platform with gRPC device management, NATS JetStream event processing, PostgreSQL Change Data Capture (CDC), and multi-database persistence (PostgreSQL + ClickHouse). It's a Cargo workspace with modular crates designed for future microservice extraction, currently deployed as a monolith.
 
 ## Development Commands
 
@@ -17,7 +17,7 @@ cargo build
 cargo build --release
 
 # Build specific crate
-cargo build -p ponix-all-in-one
+cargo build -p ponix_all_in_one
 ```
 
 ### Testing
@@ -89,157 +89,167 @@ grpcurl -plaintext -d '{"organization_id": "org-001"}' \
 ## Architecture
 
 ### Workspace Structure
-This is a multi-crate Cargo workspace with the following crates:
+This is a multi-crate Cargo workspace with modular workers designed for future microservice extraction:
 
 - **`runner`**: Core concurrency framework for managing long-running processes
   - Orchestrates multiple concurrent processes with graceful shutdown
   - Handles SIGTERM/SIGINT signals for graceful termination
-  - Manages cleanup functions (closers) with configurable timeouts
+  - Manages cleanup functions (closers) with configurable timeouts (default 10s)
   - Uses `CancellationToken` for coordinated shutdown across processes
   - All app processes run concurrently; if any fails, all are cancelled
 
-- **`ponix-domain`**: Domain layer (business logic)
-  - Core domain types: `Device`, `RawEnvelope`, `ProcessedEnvelope`, and input types
-  - Business logic services:
-    - `DeviceService`: Device management with input validation and ID generation
-    - `EnvelopeService`: Raw → Processed envelope conversion with CEL transformations
-  - Repository traits: `DeviceRepository`, `ProcessedEnvelopeProducer`
-  - Converter traits: `PayloadConverter` for CEL-based payload transformation
-  - Domain errors: `DomainError` enum including `PayloadConversionError`, `MissingCelExpression`
-  - Uses `xid` crate for generating unique device IDs
-  - Comprehensive unit and integration tests with Mockall mocks
+- **`common`**: Shared infrastructure and domain types
+  - **`domain/`**: Core domain entities and repository traits
+    - Entities: `Device`, `Organization`, `Gateway`, `RawEnvelope`, `ProcessedEnvelope`
+    - Repository traits: `DeviceRepository`, `OrganizationRepository`, `GatewayRepository`
+    - Producer traits: `ProcessedEnvelopeProducer`, `RawEnvelopeProducer`
+  - **`postgres/`**: PostgreSQL integration
+    - `PostgresClient`: Connection pooling (deadpool-postgres, max 5 connections)
+    - Repository implementations for devices, organizations, gateways
+  - **`nats/`**: NATS JetStream integration
+    - `NatsClient`, `NatsConsumer` with batch processing
+    - `ProcessingResult` for per-message Ack/Nak decisions
+  - **`clickhouse/`**: ClickHouse client and configuration
+  - **`proto/`**: Bidirectional domain ↔ protobuf conversions
+  - **`grpc/`**: Domain error → gRPC Status mapping
+  - Feature flags: `testing` (mockall mocks), `integration-tests`
 
-- **`ponix-grpc`**: gRPC API layer
-  - Service handlers implementing Tonic-generated traits
-  - Type conversions between protobuf and domain types
-  - Error mapping: Domain errors → gRPC Status codes
-  - Feature flag `device` (enabled by default) for device management endpoints
-  - Uses Buf Schema Registry for protobuf definitions
-  - Graceful shutdown support via CancellationToken
+- **`ponix_api`**: gRPC API layer and domain services
+  - **`domain/`**: Business logic services
+    - `DeviceService`: Device CRUD with organization validation
+    - `OrganizationService`: Organization management
+    - `GatewayService`: Gateway management
+  - **`grpc/`**: Tonic gRPC handlers and server
+  - `PonixApi`: Aggregates services, converts to `Runner` process
 
-- **`ponix-postgres`**: PostgreSQL repository implementation
-  - Implements `DeviceRepository` trait from domain layer
-  - Type conversions between database models and domain types
-  - PostgreSQL-specific error handling (e.g., error code 23505 for unique violations)
-  - Migration runner using goose
-  - SQL migrations stored in `crates/ponix-postgres/migrations/`
-  - Integration tests with Testcontainers
+- **`gateway_orchestrator`**: Gateway CDC orchestration
+  - `GatewayOrchestrator`: Manages gateway configuration state
+  - `GatewayOrchestrationService`: In-memory state machine for gateways
+  - `GatewayCdcConsumer`: Consumes gateway CDC events from NATS
+  - Loads existing gateways from PostgreSQL on startup
 
-- **`ponix-nats`**: NATS JetStream client library
-  - Generic batch consumer with fine-grained Ack/Nak control per message
-  - Stream management and JetStream context access
-  - Feature flag `processed-envelope` for ProcessedEnvelope-specific functionality:
-    - `ProcessedEnvelopeProducer`: Implements domain trait for publishing envelopes
-    - Domain ↔ Protobuf conversions for seamless type translation
-    - `run_demo_producer()`: Reusable demo producer for testing
-  - `ProcessingResult` type allows individual message Ack/Nak decisions
-  - Supports both generic message processing and protobuf-based workflows
+- **`cdc_worker`**: PostgreSQL Change Data Capture worker
+  - `CdcWorker`: Captures PostgreSQL changes via logical decoding
+  - Uses `etl` and `etl-postgres` (Supabase) for change capture
+  - Publishes changes to NATS as protobuf messages
+  - Configurable batch size, timeout, and retry logic
 
-- **`ponix-payload`**: CEL-based payload conversion
-  - `CelPayloadConverter`: Implements `PayloadConverter` trait from domain layer
-  - Executes CEL expressions on binary payloads to produce JSON
-  - Built-in Cayenne LPP decoder and base64 encoding functions
-  - Comprehensive test coverage for CEL transformations
+- **`analytics_worker`**: Envelope processing and storage
+  - `AnalyticsWorker`: Coordinates envelope consumers
+  - `ProcessedEnvelopeService`: Stores processed envelopes in ClickHouse
+  - `RawEnvelopeService`: Converts raw → processed envelopes
+    - Device lookup, organization validation
+    - CEL expression execution on binary payloads
+    - Republishes to processed envelopes stream
+  - `CelPayloadConverter`: CEL-based payload transformation
+  - `ClickHouseEnvelopeRepository`: Batch writes to ClickHouse
 
-- **`ponix-clickhouse`**: ClickHouse client and migrations
-  - Async batch writer for ProcessedEnvelope messages
-  - Migration runner using goose (external binary dependency)
-  - SQL migrations stored in `crates/ponix-clickhouse/migrations/`
-  - Feature flag `integration-tests` for testcontainer-based tests
+- **`goose`**: Migration runner wrapper
+  - `MigrationRunner`: Spawns goose binary as subprocess
+  - Supports PostgreSQL, ClickHouse, MySQL, SQLite
 
-- **`ponix-all-in-one`**: Main service binary
-  - Combines gRPC server, producer, and consumer in a single service
-  - Demonstrates the runner pattern with multiple concurrent processes
-  - gRPC server for device management on port 50051
-  - Producer publishes sample ProcessedEnvelope messages to NATS
-  - Consumer reads from NATS and writes to ClickHouse in batches
-  - Configuration loaded from environment variables
+- **`ponix_all_in_one`**: Main service binary (monolith)
+  - Orchestrates all modules via `Runner`
+  - Runs migrations on startup
+  - Initializes all infrastructure clients
+  - Registers all workers as concurrent app processes
 
 ### Key Architectural Patterns
 
 #### Domain-Driven Design (DDD)
 The system follows DDD principles with clear layer separation:
-- **Domain Layer** (`ponix-domain`): Business logic, domain types, and repository/converter traits
-- **Infrastructure Layer** (`ponix-postgres`, `ponix-nats`, `ponix-clickhouse`): Trait implementations
-- **Payload Layer** (`ponix-payload`): CEL-based payload transformation logic
-- **API Layer** (`ponix-grpc`): Protocol translation between gRPC and domain types
+- **Domain Layer** (`common/src/domain`): Business logic, domain types, repository traits
+- **Infrastructure Layer** (`common/src/postgres`, `common/src/nats`, `common/src/clickhouse`): Trait implementations
+- **Service Layer** (`ponix_api/src/domain`, `analytics_worker`): Business orchestration
+- **API Layer** (`ponix_api/src/grpc`): Protocol translation
 
 Key patterns:
-- **Repository Pattern**: `DeviceRepository` and `ProcessedEnvelopeProducer` traits with infrastructure implementations
-- **Strategy Pattern**: `PayloadConverter` trait allows different payload conversion strategies
-- **Dependency Inversion**: Domain layer defines interfaces, infrastructure implements them
-- **Service Orchestration**: `EnvelopeService` coordinates device lookup, conversion, and publishing
-- **ID Generation**: Domain service generates unique IDs using `xid` (not at API layer)
+- **Repository Pattern**: Traits in domain, implementations in infrastructure
+- **Dependency Inversion**: Domain defines interfaces, infrastructure implements
 - **Two-Type Pattern**: `CreateDeviceInput` (external) vs `CreateDeviceInputWithId` (internal)
-- **Error Mapping**: Domain errors (`DomainError`) mapped to gRPC Status codes
+- **ID Generation**: Domain service generates unique IDs using `xid`
+- **Error Mapping**: Domain errors mapped to gRPC Status codes
+
+#### Runner Pattern for Process Orchestration
+All workers implement a standard process pattern:
+
+```rust
+impl MyWorker {
+    pub fn into_runner_process(self) -> AppProcess {
+        Box::new(|cancellation_token| {
+            Box::pin(async move {
+                tokio::select! {
+                    _ = cancellation_token.cancelled() => Ok(())
+                    result = self.run() => result
+                }
+            })
+        })
+    }
+}
+```
+
+In `ponix_all_in_one`:
+```rust
+let runner = Runner::new()
+    .with_app_process(ponix_api.into_runner_process())
+    .with_app_process(gateway_orchestrator.into_runner_process())
+    .with_app_process(cdc_worker.into_runner_process())
+    .with_app_process(analytics_worker.into_runner_processes()) // Returns multiple
+    .with_closer(cleanup_fn);
+runner.run().await;
+```
 
 #### Raw Envelope Conversion Flow
 ```
 RawEnvelope (binary payload)
     ↓
-EnvelopeService.process_raw_envelope()
+RawEnvelopeService.process_raw_envelope()
     ↓
 ├─> DeviceRepository: Fetch device with CEL expression
-├─> Validate CEL expression exists
-├─> PayloadConverter: Execute CEL transformation on binary data
-├─> Validate output is a JSON object
+├─> Validate organization exists
+├─> CelPayloadConverter: Execute CEL on binary data
+├─> Validate output is JSON object
 └─> ProcessedEnvelopeProducer: Publish to NATS
     ↓
-ProcessedEnvelope (structured JSON) → ClickHouse
+ProcessedEnvelopeService (consumer)
+    ↓
+ClickHouseEnvelopeRepository: Batch insert
 ```
 
-This flow demonstrates:
-- **Separation of Concerns**: Each step has a single responsibility
-- **Testability**: Each component can be mocked independently
-- **Error Handling**: Clear error variants for each failure scenario
-
-#### Runner Pattern
-The `ponix-runner` crate implements a process lifecycle management pattern:
-- App processes are registered with `.with_app_process()` and run concurrently
-- Closers are registered with `.with_closer()` for cleanup tasks
-- Runner handles signal propagation via `CancellationToken`
-- Cleanup always runs regardless of process outcome
-- See [lib.rs](crates/runner/src/lib.rs) for the full implementation
-
-#### NATS Consumer Pattern
-The `ponix-nats` consumer uses a batch processing model:
-- Consumers pull batches of messages (configurable size and wait time)
-- Each message can be individually Ack'd or Nak'd via `ProcessingResult`
-- Processors are `Box<dyn Fn(&[Message]) -> BoxFuture<Result<ProcessingResult>>>`
-- This allows fine-grained error handling per message in a batch
-
-#### ClickHouse Batch Writing
-The ClickHouse integration uses an async batch writer:
-- Messages are collected in batches before insertion
-- Uses ClickHouse's native `inserter` feature for efficient bulk inserts
-- Protobuf Struct types are serialized to JSON for storage
-- See [main.rs:145-148](crates/ponix-all-in-one/src/main.rs#L145-L148) for processor integration
+#### CDC Stream Architecture
+```
+PostgreSQL (wal_level=logical)
+    ↓ (publication + replication slot)
+CdcWorker (etl-postgres)
+    ↓ extracts changes
+NATS JetStream (gateways stream)
+    ↓ CDC events as protobuf
+GatewayOrchestrator (CDC consumer)
+    ↓ updates in-memory state
+GatewayOrchestrationService
+```
 
 ### Protobuf Dependencies
 
 This project uses the Buf Schema Registry (BSR) for protobuf types:
-- Protobuf types are vendored via BSR at build time
+- Protobuf types vendored via BSR at build time
 - Registry: `buf` (configured in Cargo auth)
-- Package: `ponix_ponix_community_neoeinstein-prost`
+- Packages: `ponix-proto-prost` (common), `ponix-proto-tonic` (ponix_api)
 - **Authentication required**: Must run `cargo login --registry buf "Bearer $BSR_TOKEN"` once per machine
 - BSR_TOKEN should be set in `.env` and loaded via `.mise.toml`
 
 ### Service Lifecycle Phases
 
-The `ponix-all-in-one` service initializes in phases:
-1. **PostgreSQL Migrations**: Run PostgreSQL schema migrations via goose
-2. **PostgreSQL Client**: Initialize PostgreSQL client and device repository
-3. **Domain Service**: Create domain service with repository dependency
-4. **ClickHouse Migrations**: Run ClickHouse schema migrations via goose
-5. **ClickHouse Client**: Connect and ping ClickHouse
-6. **NATS**: Connect to NATS and ensure stream exists
-7. **Processes**: Start three concurrent processes via Runner:
-   - Producer (publishes sample data to NATS)
-   - Consumer (reads from NATS, writes to ClickHouse)
-   - gRPC Server (device management API)
-8. **Shutdown**: On signal, cancel processes and run closers (cleanup)
-
-See [main.rs](crates/ponix-all-in-one/src/main.rs) for the full initialization flow.
+The `ponix_all_in_one` service initializes in phases:
+1. **Configuration**: Load `ServiceConfig` from environment variables
+2. **PostgreSQL**: Run migrations → create client → initialize repositories
+3. **ClickHouse**: Run migrations → create client
+4. **NATS**: Connect → ensure streams exist
+5. **Domain Services**: Create DeviceService, OrganizationService, GatewayService
+6. **Workers**: Initialize PonixApi, GatewayOrchestrator, CdcWorker, AnalyticsWorker
+7. **Runner**: Register all as app processes, register closers
+8. **Run**: Start all processes concurrently
+9. **Shutdown**: On signal, cancel processes and run closers
 
 ## Common Development Tasks
 
@@ -251,30 +261,77 @@ See [main.rs](crates/ponix-all-in-one/src/main.rs) for the full initialization f
 ### Adding Database Migrations
 
 **PostgreSQL migrations:**
-1. Create new SQL file in `crates/ponix-postgres/migrations/`
+1. Create new SQL file in `crates/init_process/migrations/postgres/`
 2. Use naming convention: `{timestamp}_{description}.sql`
 3. Migrations run automatically on service startup via `MigrationRunner`
 4. Requires `goose` binary: `brew install goose`
 
 **ClickHouse migrations:**
-1. Create new SQL file in `crates/ponix-clickhouse/migrations/`
+1. Create new SQL file in `crates/init_process/migrations/clickhouse/`
 2. Use naming convention: `{timestamp}_{description}.sql`
 3. Migrations run automatically on service startup via `MigrationRunner`
 4. Requires `goose` binary: `brew install goose`
+
+### Adding a New Worker
+1. Create new crate under `crates/`
+2. Implement `into_runner_process()` method returning `AppProcess`
+3. Add to `ponix_all_in_one` initialization
+4. Register with `Runner.with_app_process()`
 
 ### Working with Integration Tests
 - Integration tests require Docker (uses testcontainers)
 - Must use `--features integration-tests` flag
 - Run with `--test-threads=1` to avoid container conflicts
-- Tests automatically start NATS/ClickHouse containers
-- See `crates/ponix-clickhouse/Cargo.toml` for feature flag pattern
+- Tests automatically start required containers
+- See `crates/common/Cargo.toml` for feature flag pattern
 
 ### Environment Configuration
-- Service configuration loaded from environment variables with `PONIX_` prefix
-- Use `.env` file (loaded via `.mise.toml`)
-- Required vars: `NATS_URL`, `CLICKHOUSE_URL`, `POSTGRES_HOST`, `BSR_TOKEN`
-- gRPC configuration: `PONIX_GRPC_HOST` (default: `0.0.0.0`), `PONIX_GRPC_PORT` (default: `50051`)
-- See `crates/ponix-all-in-one/src/config.rs` for full config schema
+Service configuration loaded from environment variables with `PONIX_` prefix:
+
+```bash
+# Logging
+PONIX_LOG_LEVEL=info
+
+# NATS
+PONIX_NATS_URL=nats://localhost:4222
+PONIX_PROCESSED_ENVELOPES_STREAM=processed_envelopes
+PONIX_NATS_RAW_STREAM=raw_envelopes
+PONIX_NATS_GATEWAY_STREAM=gateways
+PONIX_NATS_BATCH_SIZE=30
+PONIX_NATS_BATCH_WAIT_SECS=5
+
+# ClickHouse
+PONIX_CLICKHOUSE_URL=http://localhost:8123
+PONIX_CLICKHOUSE_NATIVE_URL=localhost:9000
+PONIX_CLICKHOUSE_DATABASE=ponix
+PONIX_CLICKHOUSE_USERNAME=ponix
+PONIX_CLICKHOUSE_PASSWORD=ponix
+PONIX_CLICKHOUSE_MIGRATIONS_DIR=./migrations/clickhouse
+PONIX_CLICKHOUSE_GOOSE_BINARY_PATH=/usr/local/bin/goose
+
+# PostgreSQL
+PONIX_POSTGRES_HOST=localhost
+PONIX_POSTGRES_PORT=5432
+PONIX_POSTGRES_DATABASE=ponix
+PONIX_POSTGRES_USERNAME=ponix
+PONIX_POSTGRES_PASSWORD=ponix
+PONIX_POSTGRES_MIGRATIONS_DIR=./migrations/postgres
+PONIX_POSTGRES_GOOSE_BINARY_PATH=/usr/local/bin/goose
+
+# gRPC
+PONIX_GRPC_HOST=0.0.0.0
+PONIX_GRPC_PORT=50051
+
+# CDC
+PONIX_CDC_PUBLICATION_NAME=ponix_cdc_publication
+PONIX_CDC_SLOT_NAME=ponix_cdc_slot
+PONIX_CDC_BATCH_SIZE=100
+PONIX_CDC_BATCH_TIMEOUT_MS=5000
+PONIX_CDC_RETRY_DELAY_MS=10000
+PONIX_CDC_MAX_RETRY_ATTEMPTS=5
+```
+
+See `crates/ponix_all_in_one/src/config.rs` for full config schema.
 
 ### Working with the gRPC API
 - Service definitions use Buf Schema Registry for protobuf types
@@ -284,7 +341,6 @@ See [main.rs](crates/ponix-all-in-one/src/main.rs) for the full initialization f
   ```
 - Domain service generates device IDs using `xid` crate (not at gRPC layer)
 - Error mapping: `DomainError::DeviceAlreadyExists` → `Status::already_exists`
-- Feature flag `device` is enabled by default for rust-analyzer support
 
 ## Tilt Development
 
@@ -294,3 +350,22 @@ The project uses Tilt for local development:
 - Requires BSR_TOKEN environment variable for protobuf authentication
 - Uses secret mounting to pass BSR token to Docker build
 - Access: `tilt up` then open Tilt UI in browser
+
+## Dependency Graph
+
+```
+ponix_all_in_one
+    ├── runner
+    ├── common
+    ├── ponix_api ────────→ common
+    ├── gateway_orchestrator → common
+    ├── cdc_worker ───────→ common
+    ├── analytics_worker ──→ common
+    └── goose
+
+common (no workspace deps)
+    └── External: async-nats, tokio-postgres, clickhouse, ponix-proto-prost
+
+runner (no workspace deps)
+    └── External: tokio, tokio-util, tracing
+```
