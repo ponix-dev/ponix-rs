@@ -1,0 +1,162 @@
+use anyhow::Context;
+
+use common::JetStreamPublisher;
+
+use prost::Message;
+
+use std::sync::Arc;
+
+use tracing::{debug, info};
+
+pub struct ProcessedEnvelopeProducer {
+    jetstream: Arc<dyn JetStreamPublisher>,
+    base_subject: String,
+}
+
+impl ProcessedEnvelopeProducer {
+    pub fn new(jetstream: Arc<dyn JetStreamPublisher>, base_subject: String) -> Self {
+        info!(
+            "Created ProcessedEnvelopeProducer with base subject: {}",
+            base_subject
+        );
+        Self {
+            jetstream,
+            base_subject,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use common::MockJetStreamPublisher;
+
+    #[tokio::test]
+    async fn test_producer_creation() {
+        let mock_jetstream = MockJetStreamPublisher::new();
+        let producer = ProcessedEnvelopeProducer::new(
+            Arc::new(mock_jetstream),
+            "processed.envelopes".to_string(),
+        );
+
+        assert_eq!(producer.base_subject, "processed.envelopes");
+    }
+}
+
+// Domain trait implementation
+
+use common::{
+    DomainError, DomainResult, ProcessedEnvelope as DomainProcessedEnvelope,
+    ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait,
+};
+
+#[async_trait::async_trait]
+impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
+    async fn publish(&self, envelope: &DomainProcessedEnvelope) -> DomainResult<()> {
+        // Convert domain ProcessedEnvelope to protobuf
+        let proto_envelope = common::domain_to_proto_envelope(envelope);
+
+        // Serialize protobuf message
+        let payload = proto_envelope.encode_to_vec();
+
+        // Build subject: {base_subject}.{end_device_id}
+        let subject = format!("{}.{}", self.base_subject, proto_envelope.end_device_id);
+
+        debug!(
+            subject = %subject,
+            end_device_id = %proto_envelope.end_device_id,
+            size_bytes = payload.len(),
+            "Publishing ProcessedEnvelope"
+        );
+
+        // Use the trait method
+        self.jetstream
+            .publish(subject.clone(), payload.into())
+            .await
+            .context("Failed to publish and acknowledge message")
+            .map_err(DomainError::RepositoryError)?;
+
+        info!(
+            subject = %subject,
+            end_device_id = %proto_envelope.end_device_id,
+            "Successfully published ProcessedEnvelope"
+        );
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod domain_trait_tests {
+    use super::*;
+    use common::{
+        MockJetStreamPublisher, ProcessedEnvelope as DomainProcessedEnvelope,
+        ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait,
+    };
+
+    #[tokio::test]
+    async fn test_domain_trait_publish_success() {
+        // Arrange
+        let mut mock_publisher = MockJetStreamPublisher::new();
+
+        mock_publisher
+            .expect_publish()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let producer =
+            ProcessedEnvelopeProducer::new(Arc::new(mock_publisher), "test.stream".to_string());
+
+        let mut data = serde_json::Map::new();
+        data.insert("temperature".to_string(), serde_json::json!(25.5));
+
+        let envelope = DomainProcessedEnvelope {
+            organization_id: "org-123".to_string(),
+            end_device_id: "device-456".to_string(),
+            occurred_at: chrono::Utc::now(),
+            processed_at: chrono::Utc::now(),
+            data,
+        };
+
+        // Act
+        let result = ProcessedEnvelopeProducerTrait::publish(&producer, &envelope).await;
+
+        // Assert
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_domain_trait_publish_error() {
+        // Arrange
+        let mut mock_publisher = MockJetStreamPublisher::new();
+
+        mock_publisher
+            .expect_publish()
+            .times(1)
+            .returning(|_, _| Err(anyhow::anyhow!("NATS publish failed")));
+
+        let producer =
+            ProcessedEnvelopeProducer::new(Arc::new(mock_publisher), "test.stream".to_string());
+
+        let mut data = serde_json::Map::new();
+        data.insert("temperature".to_string(), serde_json::json!(25.5));
+
+        let envelope = DomainProcessedEnvelope {
+            organization_id: "org-123".to_string(),
+            end_device_id: "device-456".to_string(),
+            occurred_at: chrono::Utc::now(),
+            processed_at: chrono::Utc::now(),
+            data,
+        };
+
+        // Act
+        let result = ProcessedEnvelopeProducerTrait::publish(&producer, &envelope).await;
+
+        // Assert
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(common::DomainError::RepositoryError(_))
+        ));
+    }
+}

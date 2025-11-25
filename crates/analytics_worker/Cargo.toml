@@ -1,0 +1,36 @@
+[package]
+name = "analytics_worker"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+common = { path = "../common" }
+anyhow = { workspace = true }
+futures = "0.3"
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+async-nats = "0.37"
+ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251121014924-bbe747bf8fab.1", registry = "buf" }
+prost = { version = "0.13" }
+async-trait = "0.1"
+serde_json = { workspace = true }
+chrono = "0.4"
+serde = { workspace = true }
+thiserror = { workspace = true }
+cel-interpreter = { workspace = true }
+clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
+
+
+[dev-dependencies]
+common = { path = "../common", features = ["testing"] }
+mockall = "0.13"
+goose = { path = "../goose" }
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["clickhouse"] }
+
+
+[features]
+integration-tests = []

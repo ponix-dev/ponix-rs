@@ -8,7 +8,7 @@ bsr_token = os.getenv('BSR_TOKEN', '')
 docker_build(
     'ponix-all-in-one:latest',
     context='.',
-    dockerfile='./crates/ponix-all-in-one/Dockerfile',
+    dockerfile='./crates/ponix_all_in_one/Dockerfile',
     secret=['id=bsr_token,env=BSR_TOKEN'],
     only=[
         './.cargo',
