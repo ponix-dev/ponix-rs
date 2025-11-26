@@ -229,6 +229,57 @@ GatewayOrchestrator (CDC consumer)
 GatewayOrchestrationService
 ```
 
+### Rust Module Conventions
+
+This project follows specific module organization patterns:
+
+#### Module Path Syntax
+Use the modern module path syntax (Rust 2018+) instead of `mod.rs`:
+```
+# Preferred
+src/
+├── lib.rs
+├── domain.rs        # Contains mod declarations and re-exports
+└── domain/
+    ├── foo.rs
+    └── bar.rs
+
+# Avoid
+src/
+├── lib.rs
+└── domain/
+    ├── mod.rs       # Don't use mod.rs
+    ├── foo.rs
+    └── bar.rs
+```
+
+#### Module Visibility Pattern
+Keep submodules private and re-export public items at the parent level:
+```rust
+// In domain.rs (or any module aggregator)
+mod foo;           // Private module declaration
+mod bar;
+
+pub use foo::*;    // Re-export public items
+pub use bar::*;
+```
+
+This pattern:
+- Keeps internal module structure private
+- Exposes items at the parent module level (e.g., `crate::domain::FooStruct`)
+- Allows refactoring internal structure without breaking external imports
+
+#### Crate-Level Exports
+In `lib.rs`, use `pub mod` to expose modules with full paths:
+```rust
+// In lib.rs
+pub mod domain;
+pub mod grpc;
+pub mod nats;
+```
+
+External consumers use namespaced imports: `my_crate::domain::FooStruct`
+
 ### Protobuf Dependencies
 
 This project uses the Buf Schema Registry (BSR) for protobuf types:
