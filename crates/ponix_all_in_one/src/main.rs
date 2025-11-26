@@ -32,7 +32,12 @@ async fn main() {
     };
 
     tracing_subscriber::registry()
-        .with(fmt::layer())
+        .with(
+            fmt::layer()
+                .json()
+                .with_span_list(true)
+                .with_current_span(true),
+        )
         .with(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level)),
         )
@@ -138,17 +143,18 @@ async fn main() {
     let mut runner = Runner::new();
 
     // Add Ponix API process
-    runner = runner.with_app_process(ponix_api.into_runner_process());
+    runner = runner.with_named_process("ponix_api", ponix_api.into_runner_process());
 
     // Add Gateway API process (handles NATS CDC events → orchestrator)
-    runner = runner.with_app_process(gateway_orchestrator.into_runner_process());
+    runner = runner.with_named_process("gateway_orchestrator", gateway_orchestrator.into_runner_process());
 
     // Add CDC Worker process (handles Postgres → NATS CDC events)
-    runner = runner.with_app_process(cdc_worker.into_runner_process());
+    runner = runner.with_named_process("cdc_worker", cdc_worker.into_runner_process());
 
     // Add Analytics Ingester processes
-    for process in analytics_ingester.into_runner_processes() {
-        runner = runner.with_app_process(process);
+    let analytics_processes = analytics_ingester.into_runner_processes();
+    for (i, process) in analytics_processes.into_iter().enumerate() {
+        runner = runner.with_named_process(format!("analytics_worker_{}", i), process);
     }
 
     // Add cleanup handlers

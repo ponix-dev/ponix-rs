@@ -50,9 +50,9 @@ impl NatsSink {
             .collect();
 
         info!(
-            "Initialized NatsSink with {} entity configurations: {:?}",
-            configs_by_name.len(),
-            configs_by_name.keys().collect::<Vec<_>>()
+            entity_count = configs_by_name.len(),
+            entities = ?configs_by_name.keys().collect::<Vec<_>>(),
+            "Initialized NatsSink for CDC events"
         );
 
         Self {

@@ -60,7 +60,21 @@ pub async fn run_grpc_server(
         .parse()
         .expect("Invalid server address");
 
-    info!("Starting gRPC server on {}", addr);
+    info!(address = %addr, "Starting gRPC server");
+
+    // Log registered routes
+    info!("Registered gRPC routes:");
+    info!("  POST /ponix.end_device.v1.EndDeviceService/CreateEndDevice");
+    info!("  POST /ponix.end_device.v1.EndDeviceService/GetEndDevice");
+    info!("  POST /ponix.end_device.v1.EndDeviceService/ListEndDevices");
+    info!("  POST /ponix.organization.v1.OrganizationService/CreateOrganization");
+    info!("  POST /ponix.organization.v1.OrganizationService/GetOrganization");
+    info!("  POST /ponix.organization.v1.OrganizationService/DeleteOrganization");
+    info!("  POST /ponix.gateway.v1.GatewayService/CreateGateway");
+    info!("  POST /ponix.gateway.v1.GatewayService/GetGateway");
+    info!("  POST /ponix.gateway.v1.GatewayService/ListGateways");
+    info!("  POST /ponix.gateway.v1.GatewayService/UpdateGateway");
+    info!("  POST /ponix.gateway.v1.GatewayService/DeleteGateway");
 
     // Create handlers
     let device_handler = DeviceServiceHandler::new(device_service);

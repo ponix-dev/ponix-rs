@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info};
+use tracing::{info, instrument};
 
 use crate::domain::DeviceService;
 use ponix_proto_prost::end_device::v1::{
@@ -28,17 +28,19 @@ impl DeviceServiceHandler {
 
 #[tonic::async_trait]
 impl DeviceServiceTrait for DeviceServiceHandler {
+    #[instrument(
+        name = "CreateEndDevice",
+        skip(self, request),
+        fields(
+            organization_id = %request.get_ref().organization_id,
+            device_name = %request.get_ref().name
+        )
+    )]
     async fn create_end_device(
         &self,
         request: Request<CreateEndDeviceRequest>,
     ) -> Result<Response<CreateEndDeviceResponse>, Status> {
         let req = request.into_inner();
-
-        debug!(
-            organization_id = %req.organization_id,
-            name = %req.name,
-            "Received CreateDevice request"
-        );
 
         // Convert proto → domain
         let input = to_create_device_input(req);
@@ -60,13 +62,16 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         }))
     }
 
+    #[instrument(
+        name = "GetEndDevice",
+        skip(self, request),
+        fields(device_id = %request.get_ref().device_id)
+    )]
     async fn get_end_device(
         &self,
         request: Request<GetEndDeviceRequest>,
     ) -> Result<Response<GetEndDeviceResponse>, Status> {
         let req = request.into_inner();
-
-        debug!(device_id = %req.device_id, "Received GetDevice request");
 
         // Convert proto → domain
         let input = to_get_device_input(req);
@@ -86,13 +91,16 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         }))
     }
 
+    #[instrument(
+        name = "ListEndDevices",
+        skip(self, request),
+        fields(organization_id = %request.get_ref().organization_id)
+    )]
     async fn list_end_devices(
         &self,
         request: Request<ListEndDevicesRequest>,
     ) -> Result<Response<ListEndDevicesResponse>, Status> {
         let req = request.into_inner();
-
-        debug!(organization_id = %req.organization_id, "Received ListDevices request");
 
         // Convert proto → domain
         let input = to_list_devices_input(req);

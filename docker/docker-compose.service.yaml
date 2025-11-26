@@ -8,10 +8,10 @@ services:
     image: ponix-all-in-one:latest
     container_name: ponix-all-in-one
     ports:
-      - "50051:50051"   # gRPC server
+      - "50051:50051" # gRPC server
     environment:
       # Service configuration
-      PONIX_LOG_LEVEL: debug
+      PONIX_LOG_LEVEL: info
       PONIX_MESSAGE: "Hello from ponix-rs!"
       PONIX_INTERVAL_SECS: "3"
       PONIX_STARTUP_TIMEOUT_SECS: "30"

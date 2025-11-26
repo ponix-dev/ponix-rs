@@ -51,6 +51,8 @@ pub type BatchProcessor =
 /// Message deserialization and business logic are delegated to the processor function
 pub struct NatsConsumer {
     consumer: Box<dyn PullConsumer>,
+    stream_name: String,
+    consumer_name: String,
     batch_size: usize,
     max_wait: Duration,
     processor: BatchProcessor,
@@ -66,11 +68,11 @@ impl NatsConsumer {
         max_wait_secs: u64,
         processor: BatchProcessor,
     ) -> Result<Self> {
-        debug!(
-            stream = stream_name,
-            consumer = consumer_name,
-            subject = subject_filter,
-            "Creating JetStream consumer"
+        info!(
+            stream = %stream_name,
+            consumer = %consumer_name,
+            filter_subject = %subject_filter,
+            "Creating NATS consumer"
         );
 
         let config = jetstream::consumer::pull::Config {
@@ -87,13 +89,16 @@ impl NatsConsumer {
             .context("Failed to create consumer")?;
 
         info!(
-            stream = stream_name,
-            consumer = consumer_name,
-            "Consumer created successfully"
+            stream = %stream_name,
+            consumer = %consumer_name,
+            filter_subject = %subject_filter,
+            "NATS consumer created successfully"
         );
 
         Ok(Self {
             consumer,
+            stream_name: stream_name.to_string(),
+            consumer_name: consumer_name.to_string(),
             batch_size,
             max_wait: Duration::from_secs(max_wait_secs),
             processor,
@@ -101,17 +106,30 @@ impl NatsConsumer {
     }
 
     pub async fn run(&self, ctx: CancellationToken) -> Result<()> {
-        info!("Starting consumer loop");
+        info!(
+            stream = %self.stream_name,
+            consumer = %self.consumer_name,
+            "Starting NATS consumer loop"
+        );
 
         loop {
             tokio::select! {
                 _ = ctx.cancelled() => {
-                    info!("Received shutdown signal, stopping consumer");
+                    info!(
+                        stream = %self.stream_name,
+                        consumer = %self.consumer_name,
+                        "Received shutdown signal, stopping consumer"
+                    );
                     break;
                 }
                 result = self.fetch_and_process_batch() => {
                     if let Err(e) = result {
-                        error!(error = %e, "Error processing batch");
+                        error!(
+                            stream = %self.stream_name,
+                            consumer = %self.consumer_name,
+                            error = %e,
+                            "Error processing batch"
+                        );
                         // Continue processing despite errors
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
@@ -119,7 +137,11 @@ impl NatsConsumer {
             }
         }
 
-        info!("Consumer stopped gracefully");
+        info!(
+            stream = %self.stream_name,
+            consumer = %self.consumer_name,
+            "Consumer stopped gracefully"
+        );
         Ok(())
     }
 

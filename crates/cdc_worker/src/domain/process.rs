@@ -34,8 +34,8 @@ impl CdcProcess {
 
     pub async fn run(self) -> Result<()> {
         info!(
-            "Starting CDC process with {} entity configurations",
-            self.entity_configs.len()
+            entity_count = self.entity_configs.len(),
+            "Starting CDC process"
         );
 
         // Create NATS publisher
@@ -87,12 +87,12 @@ impl CdcProcess {
                         info!("CDC pipeline started, waiting for completion");
                         // Wait for pipeline to complete
                         if let Err(e) = pipeline.wait().await {
-                            error!("CDC pipeline error: {}", e);
+                            error!(error = %e, "CDC pipeline error");
                             return Err(e.into());
                         }
                     }
                     Err(e) => {
-                        error!("CDC pipeline start error: {}", e);
+                        error!(error = %e, "CDC pipeline start error");
                         return Err(e.into());
                     }
                 }

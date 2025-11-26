@@ -22,7 +22,7 @@ license = "MIT"
 tokio = { version = "1.40", features = ["full"] }
 tokio-util = "0.7"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 anyhow = "1.0"
 thiserror = "1.0"
 prost = "0.13"
