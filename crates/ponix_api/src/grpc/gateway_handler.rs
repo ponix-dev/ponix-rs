@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info};
+use tracing::{info, instrument};
 
 use crate::domain::GatewayService;
 use ponix_proto_prost::gateway::v1::{
@@ -30,16 +30,19 @@ impl GatewayServiceHandler {
 
 #[tonic::async_trait]
 impl GatewayServiceTrait for GatewayServiceHandler {
+    #[instrument(
+        name = "CreateGateway",
+        skip(self, request),
+        fields(
+            organization_id = %request.get_ref().organization_id,
+            gateway_name = %request.get_ref().name
+        )
+    )]
     async fn create_gateway(
         &self,
         request: Request<CreateGatewayRequest>,
     ) -> Result<Response<CreateGatewayResponse>, Status> {
         let req = request.into_inner();
-        debug!(
-            organization_id = %req.organization_id,
-            name = %req.name,
-            "Received CreateGateway request"
-        );
 
         let input = to_create_gateway_input(req);
 
@@ -56,12 +59,16 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         }))
     }
 
+    #[instrument(
+        name = "GetGateway",
+        skip(self, request),
+        fields(gateway_id = %request.get_ref().gateway_id)
+    )]
     async fn get_gateway(
         &self,
         request: Request<GetGatewayRequest>,
     ) -> Result<Response<GetGatewayResponse>, Status> {
         let req = request.into_inner();
-        debug!(gateway_id = %req.gateway_id, "Received GetGateway request");
 
         let input = to_get_gateway_input(req);
 
@@ -71,22 +78,21 @@ impl GatewayServiceTrait for GatewayServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(gateway_id = %gateway.gateway_id, "Gateway retrieved successfully");
-
         Ok(Response::new(GetGatewayResponse {
             gateway: Some(to_proto_gateway(gateway)),
         }))
     }
 
+    #[instrument(
+        name = "ListGateways",
+        skip(self, request),
+        fields(organization_id = %request.get_ref().organization_id)
+    )]
     async fn list_gateways(
         &self,
         request: Request<ListGatewaysRequest>,
     ) -> Result<Response<ListGatewaysResponse>, Status> {
         let req = request.into_inner();
-        debug!(
-            organization_id = %req.organization_id,
-            "Received ListGateways request"
-        );
 
         let input = to_list_gateways_input(req);
 
@@ -105,12 +111,16 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         }))
     }
 
+    #[instrument(
+        name = "UpdateGateway",
+        skip(self, request),
+        fields(gateway_id = %request.get_ref().gateway_id)
+    )]
     async fn update_gateway(
         &self,
         request: Request<UpdateGatewayRequest>,
     ) -> Result<Response<UpdateGatewayResponse>, Status> {
         let req = request.into_inner();
-        debug!(gateway_id = %req.gateway_id, "Received UpdateGateway request");
 
         let input = to_update_gateway_input(req);
 
@@ -127,13 +137,17 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         }))
     }
 
+    #[instrument(
+        name = "DeleteGateway",
+        skip(self, request),
+        fields(gateway_id = %request.get_ref().gateway_id)
+    )]
     async fn delete_gateway(
         &self,
         request: Request<DeleteGatewayRequest>,
     ) -> Result<Response<DeleteGatewayResponse>, Status> {
         let req = request.into_inner();
         let gateway_id = req.gateway_id.clone();
-        debug!(gateway_id = %gateway_id, "Received DeleteGateway request");
 
         let input = to_delete_gateway_input(req);
 

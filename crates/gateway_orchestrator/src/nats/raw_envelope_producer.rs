@@ -17,8 +17,9 @@ pub struct RawEnvelopeProducer {
 impl RawEnvelopeProducer {
     pub fn new(jetstream: Arc<dyn JetStreamPublisher>, base_subject: String) -> Self {
         info!(
-            "Created RawEnvelopeProducer with base subject: {}",
-            base_subject
+            stream = "raw_envelopes",
+            base_subject = %base_subject,
+            "Initialized RawEnvelopeProducer"
         );
         Self {
             jetstream,

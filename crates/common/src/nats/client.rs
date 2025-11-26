@@ -12,7 +12,7 @@ pub struct NatsClient {
 
 impl NatsClient {
     pub async fn connect(url: &str, timeout: std::time::Duration) -> Result<Self> {
-        info!("Connecting to NATS at {} (timeout={:?})", url, timeout);
+        info!(url = %url, timeout_ms = timeout.as_millis(), "Connecting to NATS");
 
         // Configure connection timeout for establishing the TCP connection
         let client = async_nats::ConnectOptions::new()
@@ -28,7 +28,7 @@ impl NatsClient {
     }
 
     pub async fn ensure_stream(&self, stream_name: &str) -> Result<()> {
-        info!("Ensuring stream '{}' exists", stream_name);
+        info!(stream = %stream_name, "Ensuring stream exists");
 
         let stream_config = StreamConfig {
             name: stream_name.to_string(),
@@ -39,14 +39,14 @@ impl NatsClient {
 
         match self.jetstream.get_stream(stream_name).await {
             Ok(_) => {
-                info!("Stream '{}' already exists", stream_name);
+                info!(stream = %stream_name, "Stream already exists");
             }
             Err(_) => {
                 self.jetstream
                     .create_stream(stream_config)
                     .await
                     .context("Failed to create stream")?;
-                info!("Created stream '{}'", stream_name);
+                info!(stream = %stream_name, "Created stream");
             }
         }
 
@@ -137,7 +137,7 @@ impl PullConsumer for NatsPullConsumer {
             match msg {
                 Ok(message) => result.push(message),
                 Err(e) => {
-                    error!("Error receiving message: {}", e);
+                    error!(error = %e, "Error receiving message");
                     // Continue processing other messages
                 }
             }

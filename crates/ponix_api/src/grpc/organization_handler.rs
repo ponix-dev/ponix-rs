@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info};
+use tracing::{info, instrument};
 
 use crate::domain::OrganizationService;
 use ponix_proto_prost::organization::v1::{
@@ -29,13 +29,16 @@ impl OrganizationServiceHandler {
 
 #[tonic::async_trait]
 impl OrganizationServiceTrait for OrganizationServiceHandler {
+    #[instrument(
+        name = "CreateOrganization",
+        skip(self, request),
+        fields(organization_name = %request.get_ref().name)
+    )]
     async fn create_organization(
         &self,
         request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<CreateOrganizationResponse>, Status> {
         let req = request.into_inner();
-
-        debug!(name = %req.name, "Received CreateOrganization request");
 
         // Convert proto → domain
         let input = to_create_organization_input(req);
@@ -62,13 +65,16 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         }))
     }
 
+    #[instrument(
+        name = "GetOrganization",
+        skip(self, request),
+        fields(organization_id = %request.get_ref().organization_id)
+    )]
     async fn get_organization(
         &self,
         request: Request<GetOrganizationRequest>,
     ) -> Result<Response<GetOrganizationResponse>, Status> {
         let req = request.into_inner();
-
-        debug!(organization_id = %req.organization_id, "Received GetOrganization request");
 
         // Convert proto → domain
         let input = to_get_organization_input(req);
@@ -88,13 +94,16 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         }))
     }
 
+    #[instrument(
+        name = "DeleteOrganization",
+        skip(self, request),
+        fields(organization_id = %request.get_ref().organization_id)
+    )]
     async fn delete_organization(
         &self,
         request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<DeleteOrganizationResponse>, Status> {
         let req = request.into_inner();
-
-        debug!(organization_id = %req.organization_id, "Received DeleteOrganization request");
 
         // Convert proto → domain
         let input = to_delete_organization_input(req);

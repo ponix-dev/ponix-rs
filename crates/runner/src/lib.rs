@@ -58,6 +58,24 @@ pub type AppProcess = Box<
 pub type Closer =
     Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send>> + Send>;
 
+/// A named app process for logging purposes.
+pub struct NamedProcess {
+    /// The name of the process for logging
+    pub name: String,
+    /// The process function
+    pub process: AppProcess,
+}
+
+impl NamedProcess {
+    /// Creates a new named process.
+    pub fn new<S: Into<String>>(name: S, process: AppProcess) -> Self {
+        Self {
+            name: name.into(),
+            process,
+        }
+    }
+}
+
 /// A concurrent application runner that manages long-running processes with graceful shutdown.
 ///
 /// The `Runner` orchestrates multiple app processes and cleanup functions:
@@ -65,7 +83,7 @@ pub type Closer =
 /// - Closers execute afterward, regardless of process outcome
 /// - Signal handling (SIGTERM/SIGINT) implements graceful shutdown
 pub struct Runner {
-    app_processes: Vec<AppProcess>,
+    app_processes: Vec<NamedProcess>,
     closers: Vec<Closer>,
     closer_timeout: Duration,
     cancellation_token: CancellationToken,
@@ -92,7 +110,29 @@ impl Runner {
         }
     }
 
-    /// Adds an app process to the runner.
+    /// Adds a named app process to the runner.
+    ///
+    /// App processes run concurrently. If any process returns an error,
+    /// all processes are cancelled and closers are executed.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - A human-readable name for the process (used in logging)
+    /// * `process` - A function that takes a CancellationToken and returns a Future
+    pub fn with_named_process<S, F, Fut>(mut self, name: S, process: F) -> Self
+    where
+        S: Into<String>,
+        F: FnOnce(CancellationToken) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<(), anyhow::Error>> + Send + 'static,
+    {
+        self.app_processes.push(NamedProcess::new(
+            name,
+            Box::new(|token| Box::pin(process(token))),
+        ));
+        self
+    }
+
+    /// Adds an app process to the runner with an auto-generated name.
     ///
     /// App processes run concurrently. If any process returns an error,
     /// all processes are cancelled and closers are executed.
@@ -105,8 +145,11 @@ impl Runner {
         F: FnOnce(CancellationToken) -> Fut + Send + 'static,
         Fut: Future<Output = Result<(), anyhow::Error>> + Send + 'static,
     {
-        self.app_processes
-            .push(Box::new(|token| Box::pin(process(token))));
+        let name = format!("process_{}", self.app_processes.len());
+        self.app_processes.push(NamedProcess::new(
+            name,
+            Box::new(|token| Box::pin(process(token))),
+        ));
         self
     }
 
@@ -161,17 +204,27 @@ impl Runner {
     /// 4. Executes all closers with the configured timeout
     /// 5. Exits the application with code 0
     pub async fn run(self) {
+        // Hello message
+        tracing::info!(
+            process_count = self.app_processes.len(),
+            "Hello! Starting application"
+        );
+
         let token = Arc::new(self.cancellation_token);
         let mut join_set = JoinSet::new();
         let closer_timeout = self.closer_timeout;
         let closers = self.closers;
 
-        // Spawn all app processes
-        for process in self.app_processes {
+        // Spawn all app processes with names
+        for named_process in self.app_processes {
             let process_token = token.clone();
+            let process_name = named_process.name.clone();
+
+            tracing::info!(process = %process_name, "Starting process");
+
             join_set.spawn(async move {
-                let result = process((*process_token).clone()).await;
-                result
+                let result = (named_process.process)((*process_token).clone()).await;
+                (process_name, result)
             });
         }
 
@@ -184,7 +237,7 @@ impl Runner {
                     signal_token.cancel();
                 }
                 Err(err) => {
-                    tracing::error!("Error setting up signal handler: {}", err);
+                    tracing::error!(error = %err, "Error setting up signal handler");
                 }
             }
         });
@@ -207,21 +260,21 @@ impl Runner {
         let mut first_error = None;
         while let Some(result) = join_set.join_next().await {
             match result {
-                Ok(Ok(())) => {
+                Ok((name, Ok(()))) => {
                     // Process completed successfully
-                    tracing::debug!("App process completed successfully");
+                    tracing::info!(process = %name, "Process completed successfully");
                 }
-                Ok(Err(err)) => {
+                Ok((name, Err(err))) => {
                     // Process returned an error
                     if !token.is_cancelled() {
-                        tracing::error!("App process error: {:#}", err);
+                        tracing::error!(process = %name, error = %err, "Process error");
                         first_error = Some(err);
                         token.cancel();
                     }
                 }
                 Err(err) => {
                     // Task panicked
-                    tracing::error!("App process panicked: {}", err);
+                    tracing::error!(error = %err, "Process panicked");
                     if !token.is_cancelled() {
                         token.cancel();
                     }
@@ -239,7 +292,7 @@ impl Runner {
 
         // Execute closers with timeout
         if !closers.is_empty() {
-            tracing::info!("Running closers with timeout of {:?}", closer_timeout);
+            tracing::info!(timeout_secs = closer_timeout.as_secs(), "Running closers");
 
             let closer_result =
                 tokio::time::timeout(closer_timeout, Self::run_closers_static(closers)).await;
@@ -249,17 +302,17 @@ impl Runner {
                     tracing::info!("All closers completed");
                 }
                 Err(_) => {
-                    tracing::error!("Closers timed out after {:?}", closer_timeout);
+                    tracing::error!(timeout_secs = closer_timeout.as_secs(), "Closers timed out");
                 }
             }
         }
 
-        // Exit the application
+        // Goodbye message
         if let Some(err) = first_error {
-            tracing::error!("Application exiting with error: {:#}", err);
+            tracing::error!(error = %err, "Goodbye! Application exiting with error");
             std::process::exit(1);
         } else {
-            tracing::info!("Application exiting normally");
+            tracing::info!("Goodbye! Application exiting normally");
             std::process::exit(0);
         }
     }
