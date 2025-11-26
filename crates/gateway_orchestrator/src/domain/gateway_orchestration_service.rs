@@ -1,8 +1,8 @@
-use crate::{
+use crate::domain::{
     GatewayOrchestrationServiceConfig, GatewayProcessHandle, GatewayProcessStore,
     PRINT_INTERVAL_SECS,
 };
-use common::{DomainResult, Gateway, GatewayRepository};
+use common::domain::{DomainResult, Gateway, GatewayConfig, GatewayRepository};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -272,7 +272,7 @@ async fn run_gateway_print_process(
 /// Print gateway configuration to stdout
 fn print_gateway_config(gateway: &Gateway) -> DomainResult<()> {
     match &gateway.gateway_config {
-        common::GatewayConfig::Emqx(emqx) => {
+        GatewayConfig::Emqx(emqx) => {
             println!(
                 "[GATEWAY {}] org={} type={} broker_url={}",
                 gateway.gateway_id, gateway.organization_id, gateway.gateway_type, emqx.broker_url
@@ -285,10 +285,8 @@ fn print_gateway_config(gateway: &Gateway) -> DomainResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::GatewayProcessStore;
-    use crate::InMemoryGatewayProcessStore;
-    use common::MockGatewayRepository;
-    use common::{EmqxGatewayConfig, GatewayConfig};
+    use crate::domain::{GatewayProcessStore, InMemoryGatewayProcessStore};
+    use common::domain::{EmqxGatewayConfig, MockGatewayRepository};
 
     // Helper to create test gateway
     fn create_test_gateway(gateway_id: &str, org_id: &str) -> Gateway {

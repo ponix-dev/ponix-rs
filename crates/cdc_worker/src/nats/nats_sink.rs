@@ -1,5 +1,5 @@
 use crate::domain::EntityConfig;
-use common::JetStreamPublisher;
+use common::nats::JetStreamPublisher;
 use etl::destination::Destination;
 use etl::error::{ErrorKind, EtlResult};
 use etl::etl_error;

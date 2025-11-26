@@ -1,9 +1,7 @@
 #![cfg(feature = "integration-tests")]
 
-use common::{
-    CreateDeviceInputWithId, DeviceRepository, GetDeviceInput, ListDevicesInput, PostgresClient,
-    PostgresDeviceRepository,
-};
+use common::domain::{CreateDeviceInputWithId, DeviceRepository, DomainError, GetDeviceInput, ListDevicesInput};
+use common::postgres::{PostgresClient, PostgresDeviceRepository};
 use goose::MigrationRunner;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
@@ -187,6 +185,6 @@ async fn test_create_duplicate_device() {
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        common::DomainError::DeviceAlreadyExists(_)
+        DomainError::DeviceAlreadyExists(_)
     ));
 }

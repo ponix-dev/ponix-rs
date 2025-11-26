@@ -1,5 +1,5 @@
 use crate::domain::{CelEnvironment, PayloadConverter};
-use common::{DomainError, DomainResult};
+use common::domain::{DomainError, DomainResult};
 use tracing::{debug, error};
 
 /// Implementation of PayloadConverter using CelEnvironment

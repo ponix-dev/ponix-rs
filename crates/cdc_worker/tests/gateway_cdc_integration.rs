@@ -1,12 +1,13 @@
 #![cfg(feature = "integration-tests")]
 
 use async_nats::jetstream;
-use cdc_worker::{CdcConfig, CdcProcess, EntityConfig, GatewayConverter};
-use common::{
+use cdc_worker::domain::{CdcConfig, CdcProcess, EntityConfig, GatewayConverter};
+use common::domain::{
     CreateGatewayInputWithId, CreateOrganizationInputWithId, EmqxGatewayConfig, GatewayConfig,
-    GatewayRepository, NatsClient, OrganizationRepository, PostgresClient,
-    PostgresGatewayRepository, PostgresOrganizationRepository, UpdateGatewayInput,
+    GatewayRepository, OrganizationRepository, UpdateGatewayInput,
 };
+use common::nats::NatsClient;
+use common::postgres::{PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository};
 use futures_util::stream::StreamExt;
 use goose::MigrationRunner;
 use ponix_proto_prost::gateway::v1::{Gateway, GatewayType};

@@ -1,5 +1,5 @@
 use crate::domain::{CdcConfig, CdcProcess, EntityConfig};
-use common::NatsClient;
+use common::nats::NatsClient;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::info;

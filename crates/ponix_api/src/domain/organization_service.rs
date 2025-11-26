@@ -1,4 +1,4 @@
-use common::{
+use common::domain::{
     CreateOrganizationInput, CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError,
     DomainResult, GetOrganizationInput, ListOrganizationsInput, Organization,
     OrganizationRepository, UpdateOrganizationInput,
@@ -124,7 +124,7 @@ impl OrganizationService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::MockOrganizationRepository;
+    use common::domain::MockOrganizationRepository;
 
     #[tokio::test]
     async fn test_create_organization_success() {

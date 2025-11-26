@@ -3,9 +3,9 @@ use crate::domain::{CelPayloadConverter, ProcessedEnvelopeService, RawEnvelopeSe
 use crate::nats::{
     create_processed_envelope_processor, create_raw_envelope_processor, ProcessedEnvelopeProducer,
 };
-use common::{ClickHouseClient, NatsClient, NatsConsumer};
-
-use common::{PostgresDeviceRepository, PostgresOrganizationRepository};
+use common::clickhouse::ClickHouseClient;
+use common::nats::{NatsClient, NatsConsumer};
+use common::postgres::{PostgresDeviceRepository, PostgresOrganizationRepository};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::info;

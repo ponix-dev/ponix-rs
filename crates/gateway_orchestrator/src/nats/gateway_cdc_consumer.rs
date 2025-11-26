@@ -1,6 +1,8 @@
 use crate::domain::GatewayOrchestrationService;
 use anyhow::{Context, Result};
-use common::{parse_gateway_cdc_event, GatewayCdcEvent, NatsClient};
+use common::domain::GatewayCdcEvent;
+use common::nats::NatsClient;
+use common::proto::parse_gateway_cdc_event;
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;

@@ -9,9 +9,9 @@ use ponix_proto_prost::end_device::v1::{
 };
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceService as DeviceServiceTrait;
 
-use common::{
-    domain_error_to_status, to_create_device_input, to_get_device_input, to_list_devices_input,
-    to_proto_device,
+use common::grpc::domain_error_to_status;
+use common::proto::{
+    to_create_device_input, to_get_device_input, to_list_devices_input, to_proto_device,
 };
 
 /// gRPC handler for DeviceService

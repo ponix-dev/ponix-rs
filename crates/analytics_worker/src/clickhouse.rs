@@ -1,3 +1,3 @@
-pub mod envelope_repository;
+mod envelope_repository;
 
 pub use envelope_repository::*;

@@ -10,9 +10,10 @@ use ponix_proto_prost::gateway::v1::{
 };
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayService as GatewayServiceTrait;
 
-use common::{
-    domain_error_to_status, to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input,
-    to_list_gateways_input, to_proto_gateway, to_update_gateway_input,
+use common::grpc::domain_error_to_status;
+use common::proto::{
+    to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input, to_list_gateways_input,
+    to_proto_gateway, to_update_gateway_input,
 };
 
 /// gRPC handler for GatewayService

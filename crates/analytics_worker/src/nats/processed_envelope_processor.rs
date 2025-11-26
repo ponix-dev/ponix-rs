@@ -1,7 +1,8 @@
 use crate::domain::ProcessedEnvelopeService;
 use anyhow::Result;
-use common::processed_envelop_proto_to_domain;
-use common::{BatchProcessor, ProcessingResult, StoreEnvelopesInput};
+use common::domain::StoreEnvelopesInput;
+use common::nats::{BatchProcessor, ProcessingResult};
+use common::proto::processed_envelop_proto_to_domain;
 use futures::future::BoxFuture;
 use ponix_proto::envelope::v1::ProcessedEnvelope as ProtoEnvelope;
 use std::sync::Arc;

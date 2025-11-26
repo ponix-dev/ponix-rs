@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use common::{DomainResult, Gateway, GatewayConfig};
+use common::domain::{DomainResult, Gateway, GatewayConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};

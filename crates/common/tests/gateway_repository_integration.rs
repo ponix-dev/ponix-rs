@@ -1,10 +1,10 @@
 #![cfg(feature = "integration-tests")]
 
-use common::{
-    CreateGatewayInputWithId, CreateOrganizationInputWithId, EmqxGatewayConfig, GatewayConfig,
-    GatewayRepository, OrganizationRepository, PostgresClient, PostgresGatewayRepository,
-    PostgresOrganizationRepository, UpdateGatewayInput,
+use common::domain::{
+    CreateGatewayInputWithId, CreateOrganizationInputWithId, DomainError, EmqxGatewayConfig,
+    GatewayConfig, GatewayRepository, OrganizationRepository, UpdateGatewayInput,
 };
+use common::postgres::{PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository};
 use goose::MigrationRunner;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
@@ -159,7 +159,7 @@ async fn test_gateway_unique_constraint() {
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        common::DomainError::GatewayAlreadyExists(_)
+        DomainError::GatewayAlreadyExists(_)
     ));
 }
 

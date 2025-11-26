@@ -1,6 +1,6 @@
-use crate::{GatewayProcessHandle, GatewayProcessStore};
+use crate::domain::{GatewayProcessHandle, GatewayProcessStore};
 use async_trait::async_trait;
-use common::DomainResult;
+use common::domain::DomainResult;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

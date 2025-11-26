@@ -5,17 +5,16 @@ use analytics_worker::domain::{CelPayloadConverter, ProcessedEnvelopeService, Ra
 use anyhow::Result;
 use goose::MigrationRunner;
 
-use common::{
-    ClickHouseClient, CreateDeviceInput, Device, NatsClient, NatsConsumer, PostgresClient,
-    PostgresDeviceRepository, PostgresOrganizationRepository, RawEnvelope,
-    RawEnvelopeProducer as RawEnvelopeProducerTrait,
-};
+use common::clickhouse::ClickHouseClient;
+use common::domain::{CreateDeviceInput, Device, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait};
+use common::nats::{NatsClient, NatsConsumer};
+use common::postgres::{PostgresClient, PostgresDeviceRepository, PostgresOrganizationRepository};
 
 use analytics_worker::nats::{
     create_processed_envelope_processor, create_raw_envelope_processor, ProcessedEnvelopeProducer,
 };
 
-use gateway_orchestrator::RawEnvelopeProducer;
+use gateway_orchestrator::nats::RawEnvelopeProducer;
 
 use ponix_api::domain::DeviceService;
 

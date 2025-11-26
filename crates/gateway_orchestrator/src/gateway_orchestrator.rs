@@ -2,7 +2,8 @@ use crate::domain::{
     GatewayOrchestrationService, GatewayOrchestrationServiceConfig, InMemoryGatewayProcessStore,
 };
 use crate::nats::GatewayCdcConsumer;
-use common::{NatsClient, PostgresGatewayRepository};
+use common::nats::NatsClient;
+use common::postgres::PostgresGatewayRepository;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::info;

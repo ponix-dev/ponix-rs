@@ -2,15 +2,17 @@
 
 use analytics_worker::CelPayloadConverter;
 use analytics_worker::RawEnvelopeService;
-use common::{DomainError, RawEnvelope};
+use common::domain::{DomainError, RawEnvelope};
 use std::sync::Arc;
 
 // Mock implementations for integration testing
 mod mocks {
     use async_trait::async_trait;
-    use common::{
-        Device, DeviceRepository, DomainResult, GetDeviceInput, GetOrganizationInput, Organization,
-        OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer,
+    use common::domain::{
+        CreateDeviceInputWithId, CreateOrganizationInputWithId, DeleteOrganizationInput, Device,
+        DeviceRepository, DomainResult, GetDeviceInput, GetOrganizationInput, ListDevicesInput,
+        ListOrganizationsInput, Organization, OrganizationRepository, ProcessedEnvelope,
+        ProcessedEnvelopeProducer, UpdateOrganizationInput,
     };
     use std::sync::{Arc, Mutex};
 
@@ -33,10 +35,7 @@ mod mocks {
 
     #[async_trait]
     impl DeviceRepository for InMemoryDeviceRepository {
-        async fn create_device(
-            &self,
-            _input: common::CreateDeviceInputWithId,
-        ) -> DomainResult<Device> {
+        async fn create_device(&self, _input: CreateDeviceInputWithId) -> DomainResult<Device> {
             unimplemented!("Not needed for envelope tests")
         }
 
@@ -45,10 +44,7 @@ mod mocks {
             Ok(devices.get(&input.device_id).cloned())
         }
 
-        async fn list_devices(
-            &self,
-            _input: common::ListDevicesInput,
-        ) -> DomainResult<Vec<Device>> {
+        async fn list_devices(&self, _input: ListDevicesInput) -> DomainResult<Vec<Device>> {
             unimplemented!("Not needed for envelope tests")
         }
     }
@@ -74,7 +70,7 @@ mod mocks {
     impl OrganizationRepository for InMemoryOrganizationRepository {
         async fn create_organization(
             &self,
-            _input: common::CreateOrganizationInputWithId,
+            _input: CreateOrganizationInputWithId,
         ) -> DomainResult<Organization> {
             unimplemented!("Not needed for envelope tests")
         }
@@ -87,23 +83,20 @@ mod mocks {
             Ok(orgs.get(&input.organization_id).cloned())
         }
 
-        async fn delete_organization(
-            &self,
-            _input: common::DeleteOrganizationInput,
-        ) -> DomainResult<()> {
+        async fn delete_organization(&self, _input: DeleteOrganizationInput) -> DomainResult<()> {
             unimplemented!("Not needed for envelope tests")
         }
 
         async fn update_organization(
             &self,
-            _input: common::UpdateOrganizationInput,
+            _input: UpdateOrganizationInput,
         ) -> DomainResult<Organization> {
             unimplemented!("Not needed for envelope tests")
         }
 
         async fn list_organizations(
             &self,
-            _input: common::ListOrganizationsInput,
+            _input: ListOrganizationsInput,
         ) -> DomainResult<Vec<Organization>> {
             unimplemented!("Not needed for envelope tests")
         }
@@ -139,7 +132,7 @@ mod mocks {
 #[tokio::test]
 async fn test_full_conversion_flow_cayenne_lpp() {
     // Arrange: Create device with Cayenne LPP CEL expression
-    let device = common::Device {
+    let device = common::domain::Device {
         device_id: "sensor-001".to_string(),
         organization_id: "org-123".to_string(),
         name: "Temperature Sensor".to_string(),
@@ -148,7 +141,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
         updated_at: None,
     };
 
-    let org = common::Organization {
+    let org = common::domain::Organization {
         id: "org-123".to_string(),
         name: "Test Org".to_string(),
         deleted_at: None,
@@ -199,7 +192,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
 #[tokio::test]
 async fn test_full_conversion_flow_custom_transformation() {
     // Arrange: Create device with custom CEL transformation
-    let device = common::Device {
+    let device = common::domain::Device {
         device_id: "sensor-002".to_string(),
         organization_id: "org-456".to_string(),
         name: "Multi Sensor".to_string(),
@@ -216,7 +209,7 @@ async fn test_full_conversion_flow_custom_transformation() {
         updated_at: None,
     };
 
-    let org = common::Organization {
+    let org = common::domain::Organization {
         id: "org-456".to_string(),
         name: "Test Org".to_string(),
         deleted_at: None,
@@ -305,7 +298,7 @@ async fn test_device_not_found() {
 #[tokio::test]
 async fn test_invalid_cel_expression() {
     // Arrange: Device with invalid CEL expression
-    let device = common::Device {
+    let device = common::domain::Device {
         device_id: "sensor-bad".to_string(),
         organization_id: "org-789".to_string(),
         name: "Broken Sensor".to_string(),
@@ -314,7 +307,7 @@ async fn test_invalid_cel_expression() {
         updated_at: None,
     };
 
-    let org = common::Organization {
+    let org = common::domain::Organization {
         id: "org-789".to_string(),
         name: "Test Org".to_string(),
         deleted_at: None,
@@ -360,7 +353,7 @@ async fn test_invalid_cel_expression() {
 #[tokio::test]
 async fn test_empty_cel_expression() {
     // Arrange: Device with empty CEL expression
-    let device = common::Device {
+    let device = common::domain::Device {
         device_id: "sensor-empty".to_string(),
         organization_id: "org-000".to_string(),
         name: "Unconfigured Sensor".to_string(),
@@ -369,7 +362,7 @@ async fn test_empty_cel_expression() {
         updated_at: None,
     };
 
-    let org = common::Organization {
+    let org = common::domain::Organization {
         id: "org-000".to_string(),
         name: "Test Org".to_string(),
         deleted_at: None,
@@ -415,7 +408,7 @@ async fn test_empty_cel_expression() {
 #[tokio::test]
 async fn test_cel_expression_returns_non_object() {
     // Arrange: Device with CEL expression that returns a non-object
-    let device = common::Device {
+    let device = common::domain::Device {
         device_id: "sensor-scalar".to_string(),
         organization_id: "org-scalar".to_string(),
         name: "Scalar Sensor".to_string(),
@@ -424,7 +417,7 @@ async fn test_cel_expression_returns_non_object() {
         updated_at: None,
     };
 
-    let org = common::Organization {
+    let org = common::domain::Organization {
         id: "org-scalar".to_string(),
         name: "Test Org".to_string(),
         deleted_at: None,

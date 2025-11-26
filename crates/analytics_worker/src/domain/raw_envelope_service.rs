@@ -1,5 +1,5 @@
 use crate::domain::PayloadConverter;
-use common::{
+use common::domain::{
     DeviceRepository, DomainError, DomainResult, GetDeviceInput, GetOrganizationInput,
     OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer, RawEnvelope,
 };
@@ -157,9 +157,10 @@ impl RawEnvelopeService {
 mod tests {
     use super::*;
     use crate::domain::MockPayloadConverter;
-    use common::MockProcessedEnvelopeProducer;
-    use common::Organization;
-    use common::{Device, MockDeviceRepository, MockOrganizationRepository};
+    use common::domain::{
+        Device, MockDeviceRepository, MockOrganizationRepository, MockProcessedEnvelopeProducer,
+        Organization,
+    };
     // Device already imported via use super::*;
 
     #[tokio::test]
