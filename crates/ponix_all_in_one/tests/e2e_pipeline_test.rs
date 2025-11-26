@@ -14,7 +14,7 @@ use analytics_worker::nats::{
     create_processed_envelope_processor, create_raw_envelope_processor, ProcessedEnvelopeProducer,
 };
 
-use gateway_orchestrator::RawEnvelopeProducer;
+use gateway_orchestrator::nats::RawEnvelopeProducer;
 
 use ponix_api::domain::DeviceService;
 

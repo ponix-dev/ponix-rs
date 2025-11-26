@@ -1,4 +1,4 @@
-use crate::{GatewayProcessHandle, GatewayProcessStore};
+use crate::domain::{GatewayProcessHandle, GatewayProcessStore};
 use async_trait::async_trait;
 use common::domain::DomainResult;
 use std::collections::HashMap;

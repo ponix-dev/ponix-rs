@@ -4,7 +4,7 @@ use common::domain::{
     CreateGatewayInputWithId, DomainError, DomainResult, EmqxGatewayConfig, Gateway, GatewayConfig,
     GatewayRepository, UpdateGatewayInput,
 };
-use gateway_orchestrator::{
+use gateway_orchestrator::domain::{
     GatewayOrchestrationService, GatewayOrchestrationServiceConfig, GatewayProcessStore,
     InMemoryGatewayProcessStore,
 };

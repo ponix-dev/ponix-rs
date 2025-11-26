@@ -1,6 +1,6 @@
-pub mod end_device_service;
-pub mod gateway_service;
-pub mod organization_service;
+mod end_device_service;
+mod gateway_service;
+mod organization_service;
 
 pub use end_device_service::*;
 pub use gateway_service::*;

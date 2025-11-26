@@ -1,7 +1,7 @@
-pub mod device_handler;
-pub mod gateway_handler;
-pub mod organization_handler;
-pub mod server;
+mod device_handler;
+mod gateway_handler;
+mod organization_handler;
+mod server;
 
 pub use device_handler::*;
 pub use gateway_handler::*;

@@ -1,4 +1,4 @@
-use crate::{
+use crate::domain::{
     GatewayOrchestrationServiceConfig, GatewayProcessHandle, GatewayProcessStore,
     PRINT_INTERVAL_SECS,
 };
@@ -285,8 +285,7 @@ fn print_gateway_config(gateway: &Gateway) -> DomainResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::GatewayProcessStore;
-    use crate::InMemoryGatewayProcessStore;
+    use crate::domain::{GatewayProcessStore, InMemoryGatewayProcessStore};
     use common::domain::{EmqxGatewayConfig, MockGatewayRepository};
 
     // Helper to create test gateway

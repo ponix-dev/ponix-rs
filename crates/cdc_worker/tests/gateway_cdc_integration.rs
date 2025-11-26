@@ -1,7 +1,7 @@
 #![cfg(feature = "integration-tests")]
 
 use async_nats::jetstream;
-use cdc_worker::{CdcConfig, CdcProcess, EntityConfig, GatewayConverter};
+use cdc_worker::domain::{CdcConfig, CdcProcess, EntityConfig, GatewayConverter};
 use common::domain::{
     CreateGatewayInputWithId, CreateOrganizationInputWithId, EmqxGatewayConfig, GatewayConfig,
     GatewayRepository, OrganizationRepository, UpdateGatewayInput,

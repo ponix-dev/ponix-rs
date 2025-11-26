@@ -48,7 +48,7 @@
 //! - [Cayenne LPP Specification](https://developers.mydevices.com/cayenne/docs/lora/)
 //! - [ElectronicCats Extended Types](https://github.com/ElectronicCats/CayenneLPP)
 
-use crate::{PayloadDecoder, PayloadError, Result};
+use crate::domain::{PayloadDecoder, PayloadError, Result};
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -504,7 +504,7 @@ impl PayloadDecoder for CayenneLppDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PayloadDecoder;
+    use crate::domain::PayloadDecoder;
 
     #[test]
     fn test_empty_payload() {

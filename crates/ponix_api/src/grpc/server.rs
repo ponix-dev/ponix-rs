@@ -10,9 +10,9 @@ use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDevi
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServiceServer;
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationServiceServer;
 
-use crate::device_handler::DeviceServiceHandler;
-use crate::gateway_handler::GatewayServiceHandler;
-use crate::organization_handler::OrganizationServiceHandler;
+use crate::grpc::device_handler::DeviceServiceHandler;
+use crate::grpc::gateway_handler::GatewayServiceHandler;
+use crate::grpc::organization_handler::OrganizationServiceHandler;
 
 /// Build reflection service descriptor for all services
 fn build_reflection_service(

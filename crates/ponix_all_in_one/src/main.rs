@@ -1,8 +1,8 @@
 mod config;
 
-use analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
-use cdc_worker::{CdcConfig, EntityConfig, GatewayConverter};
-use cdc_worker::{CdcWorker, CdcWorkerConfig};
+use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
+use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
+use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
 use common::clickhouse::ClickHouseClient;
 use common::nats::NatsClient;
 use common::postgres::{
@@ -10,9 +10,10 @@ use common::postgres::{
     PostgresOrganizationRepository,
 };
 use config::ServiceConfig;
-use gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
+use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
-use ponix_api::{DeviceService, GatewayService, OrganizationService, PonixApi, PonixApiConfig};
+use ponix_api::domain::{DeviceService, GatewayService, OrganizationService};
+use ponix_api::ponix_api::{PonixApi, PonixApiConfig};
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
