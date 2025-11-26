@@ -2,9 +2,8 @@
 
 use analytics_worker::ClickHouseEnvelopeRepository;
 use chrono::Utc;
-use common::{
-    ClickHouseClient, ProcessedEnvelope, ProcessedEnvelopeRepository, StoreEnvelopesInput,
-};
+use common::clickhouse::ClickHouseClient;
+use common::domain::{ProcessedEnvelope, ProcessedEnvelopeRepository, StoreEnvelopesInput};
 use goose::MigrationRunner;
 use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;

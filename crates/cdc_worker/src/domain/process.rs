@@ -2,7 +2,7 @@ use crate::domain::{CdcConfig, EntityConfig};
 use crate::nats::NatsSink;
 
 use anyhow::Result;
-use common::NatsClient;
+use common::nats::NatsClient;
 use etl::config::{BatchConfig, PgConnectionConfig, PipelineConfig, TlsConfig};
 use etl::pipeline::Pipeline;
 use etl::store::both::memory::MemoryStore;

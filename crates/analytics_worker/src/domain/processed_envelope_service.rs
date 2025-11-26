@@ -1,4 +1,4 @@
-use common::{DomainResult, ProcessedEnvelopeRepository, StoreEnvelopesInput};
+use common::domain::{DomainResult, ProcessedEnvelopeRepository, StoreEnvelopesInput};
 use std::sync::Arc;
 use tracing::debug;
 
@@ -27,7 +27,7 @@ impl ProcessedEnvelopeService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{DomainError, MockProcessedEnvelopeRepository, ProcessedEnvelope};
+    use common::domain::{DomainError, MockProcessedEnvelopeRepository, ProcessedEnvelope};
 
     // ProcessedEnvelope already imported via use super::*;
     use chrono::Utc;

@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use clickhouse::Row;
-use common::{
-    ClickHouseClient, DomainError, DomainResult, ProcessedEnvelope, ProcessedEnvelopeRepository,
-    StoreEnvelopesInput,
+use common::clickhouse::ClickHouseClient;
+use common::domain::{
+    DomainError, DomainResult, ProcessedEnvelope, ProcessedEnvelopeRepository, StoreEnvelopesInput,
 };
 
 use serde::{Deserialize, Serialize};

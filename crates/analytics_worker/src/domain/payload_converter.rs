@@ -1,4 +1,4 @@
-use common::DomainResult;
+use common::domain::DomainResult;
 
 /// Trait for converting binary payloads to JSON using CEL expressions
 ///

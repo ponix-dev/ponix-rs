@@ -1,4 +1,4 @@
-use crate::{BatchProcessor, ProcessingResult};
+use crate::nats::{BatchProcessor, ProcessingResult};
 use anyhow::Result;
 use async_nats::jetstream::Message;
 use futures::future::BoxFuture;

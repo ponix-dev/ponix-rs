@@ -1,6 +1,6 @@
 #![cfg(feature = "integration-tests")]
 
-use common::{
+use common::domain::{
     CreateGatewayInputWithId, DomainError, DomainResult, EmqxGatewayConfig, Gateway, GatewayConfig,
     GatewayRepository, UpdateGatewayInput,
 };

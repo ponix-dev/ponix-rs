@@ -1,10 +1,10 @@
 #![cfg(feature = "integration-tests")]
 
-use common::{
-    CreateOrganizationInputWithId, DeleteOrganizationInput, GetOrganizationInput,
-    ListOrganizationsInput, OrganizationRepository, PostgresClient, PostgresOrganizationRepository,
-    UpdateOrganizationInput,
+use common::domain::{
+    CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError, GetOrganizationInput,
+    ListOrganizationsInput, OrganizationRepository, UpdateOrganizationInput,
 };
+use common::postgres::{PostgresClient, PostgresOrganizationRepository};
 use goose::MigrationRunner;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
@@ -134,7 +134,7 @@ async fn test_update_nonexistent_organization() {
     let result = repo.update_organization(update_input).await;
     assert!(matches!(
         result,
-        Err(common::DomainError::OrganizationNotFound(_))
+        Err(DomainError::OrganizationNotFound(_))
     ));
 }
 
@@ -175,7 +175,7 @@ async fn test_delete_nonexistent_organization() {
     let result = repo.delete_organization(delete_input).await;
     assert!(matches!(
         result,
-        Err(common::DomainError::OrganizationNotFound(_))
+        Err(DomainError::OrganizationNotFound(_))
     ));
 }
 
@@ -247,6 +247,6 @@ async fn test_create_duplicate_organization() {
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        common::DomainError::OrganizationAlreadyExists(_)
+        DomainError::OrganizationAlreadyExists(_)
     ));
 }

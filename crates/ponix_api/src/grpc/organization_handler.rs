@@ -9,9 +9,10 @@ use ponix_proto_prost::organization::v1::{
 };
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationService as OrganizationServiceTrait;
 
-use common::{
-    datetime_to_timestamp, domain_error_to_status, to_create_organization_input,
-    to_delete_organization_input, to_get_organization_input, to_proto_organization,
+use common::grpc::domain_error_to_status;
+use common::proto::{
+    datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
+    to_get_organization_input, to_proto_organization,
 };
 
 /// gRPC handler for OrganizationService

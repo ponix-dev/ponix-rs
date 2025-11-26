@@ -1,6 +1,6 @@
 use crate::domain::RawEnvelopeService;
 use async_nats::jetstream::Message;
-use common::{BatchProcessor, ProcessingResult};
+use common::nats::{BatchProcessor, ProcessingResult};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
@@ -41,7 +41,7 @@ pub fn create_raw_envelope_processor(service: Arc<RawEnvelopeService>) -> BatchP
                     };
 
                 // Convert to domain type
-                let domain_envelope = match common::raw_envelope_proto_to_domain(proto_envelope) {
+                let domain_envelope = match common::proto::raw_envelope_proto_to_domain(proto_envelope) {
                     Ok(envelope) => envelope,
                     Err(e) => {
                         error!(

@@ -3,9 +3,11 @@ mod config;
 use analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::{CdcConfig, EntityConfig, GatewayConverter};
 use cdc_worker::{CdcWorker, CdcWorkerConfig};
-use common::{
-    ClickHouseClient, NatsClient, PostgresClient, PostgresDeviceRepository,
-    PostgresGatewayRepository, PostgresOrganizationRepository,
+use common::clickhouse::ClickHouseClient;
+use common::nats::NatsClient;
+use common::postgres::{
+    PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
+    PostgresOrganizationRepository,
 };
 use config::ServiceConfig;
 use gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};

@@ -1,4 +1,4 @@
-use common::{
+use common::domain::{
     CreateDeviceInput, CreateDeviceInputWithId, Device, DeviceRepository, DomainError,
     DomainResult, GetDeviceInput, GetOrganizationInput, ListDevicesInput, OrganizationRepository,
 };
@@ -126,7 +126,7 @@ impl DeviceService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{MockDeviceRepository, MockOrganizationRepository, Organization};
+    use common::domain::{MockDeviceRepository, MockOrganizationRepository, Organization};
 
     #[tokio::test]
     async fn test_create_device_success() {

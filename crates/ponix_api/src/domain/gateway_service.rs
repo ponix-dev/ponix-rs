@@ -1,4 +1,4 @@
-use common::{
+use common::domain::{
     CreateGatewayInput, CreateGatewayInputWithId, DeleteGatewayInput, DomainError, DomainResult,
     Gateway, GatewayRepository, GetGatewayInput, GetOrganizationInput, ListGatewaysInput,
     OrganizationRepository, UpdateGatewayInput,
@@ -162,14 +162,17 @@ impl GatewayService {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use common::{MockGatewayRepository, MockOrganizationRepository};
+    use common::domain::{
+        EmqxGatewayConfig, GatewayConfig, MockGatewayRepository, MockOrganizationRepository,
+        Organization,
+    };
 
     #[tokio::test]
     async fn test_create_gateway_success() {
         let mut mock_gateway_repo = MockGatewayRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
 
-        let test_config = common::GatewayConfig::Emqx(common::EmqxGatewayConfig {
+        let test_config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
         });
 
@@ -178,7 +181,7 @@ mod tests {
             .withf(|input| input.organization_id == "org-001")
             .times(1)
             .return_once(|_| {
-                Ok(Some(common::Organization {
+                Ok(Some(Organization {
                     id: "org-001".to_string(),
                     name: "Test Org".to_string(),
                     deleted_at: None,
@@ -237,7 +240,7 @@ mod tests {
         let input = CreateGatewayInput {
             organization_id: "org-999".to_string(),
             gateway_type: "emqx".to_string(),
-            gateway_config: common::GatewayConfig::Emqx(common::EmqxGatewayConfig {
+            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: String::new(),
             }),
         };
@@ -255,7 +258,7 @@ mod tests {
             .expect_get_organization()
             .times(1)
             .return_once(|_| {
-                Ok(Some(common::Organization {
+                Ok(Some(Organization {
                     id: "org-001".to_string(),
                     name: "Test Org".to_string(),
                     deleted_at: Some(Utc::now()),
@@ -269,7 +272,7 @@ mod tests {
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),
             gateway_type: "emqx".to_string(),
-            gateway_config: common::GatewayConfig::Emqx(common::EmqxGatewayConfig {
+            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: String::new(),
             }),
         };

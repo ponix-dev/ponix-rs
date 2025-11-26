@@ -1,6 +1,6 @@
 use anyhow::Context;
 
-use common::JetStreamPublisher;
+use common::nats::JetStreamPublisher;
 
 use prost::Message;
 
@@ -29,7 +29,7 @@ impl ProcessedEnvelopeProducer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::MockJetStreamPublisher;
+    use common::nats::MockJetStreamPublisher;
 
     #[tokio::test]
     async fn test_producer_creation() {
@@ -45,7 +45,7 @@ mod tests {
 
 // Domain trait implementation
 
-use common::{
+use common::domain::{
     DomainError, DomainResult, ProcessedEnvelope as DomainProcessedEnvelope,
     ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait,
 };
@@ -54,7 +54,7 @@ use common::{
 impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
     async fn publish(&self, envelope: &DomainProcessedEnvelope) -> DomainResult<()> {
         // Convert domain ProcessedEnvelope to protobuf
-        let proto_envelope = common::domain_to_proto_envelope(envelope);
+        let proto_envelope = common::proto::domain_to_proto_envelope(envelope);
 
         // Serialize protobuf message
         let payload = proto_envelope.encode_to_vec();
@@ -89,10 +89,11 @@ impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
 #[cfg(test)]
 mod domain_trait_tests {
     use super::*;
-    use common::{
-        MockJetStreamPublisher, ProcessedEnvelope as DomainProcessedEnvelope,
+    use common::domain::{
+        ProcessedEnvelope as DomainProcessedEnvelope,
         ProcessedEnvelopeProducer as ProcessedEnvelopeProducerTrait,
     };
+    use common::nats::MockJetStreamPublisher;
 
     #[tokio::test]
     async fn test_domain_trait_publish_success() {
@@ -156,7 +157,7 @@ mod domain_trait_tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(common::DomainError::RepositoryError(_))
+            Err(common::domain::DomainError::RepositoryError(_))
         ));
     }
 }

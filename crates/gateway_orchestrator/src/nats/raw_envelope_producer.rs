@@ -1,9 +1,7 @@
 use anyhow::Context;
 use async_trait::async_trait;
-use common::{
-    DomainError, DomainResult, JetStreamPublisher, RawEnvelope,
-    RawEnvelopeProducer as RawEnvelopeProducerTrait,
-};
+use common::domain::{DomainError, DomainResult, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait};
+use common::nats::JetStreamPublisher;
 
 use prost::Message as ProstMessage;
 use std::sync::Arc;
@@ -33,7 +31,7 @@ impl RawEnvelopeProducer {
 impl RawEnvelopeProducerTrait for RawEnvelopeProducer {
     async fn publish(&self, envelope: &RawEnvelope) -> DomainResult<()> {
         // Convert domain RawEnvelope to protobuf
-        let proto_envelope = common::raw_envelope_domain_to_proto(envelope);
+        let proto_envelope = common::proto::raw_envelope_domain_to_proto(envelope);
 
         // Serialize protobuf message
         let payload = proto_envelope.encode_to_vec();
@@ -69,7 +67,7 @@ impl RawEnvelopeProducerTrait for RawEnvelopeProducer {
 mod tests {
     use super::*;
     use bytes::Bytes;
-    use common::MockJetStreamPublisher;
+    use common::nats::MockJetStreamPublisher;
 
     #[tokio::test]
     async fn test_publish_success() {
