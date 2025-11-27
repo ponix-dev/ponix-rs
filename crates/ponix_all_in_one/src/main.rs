@@ -1,9 +1,11 @@
 mod config;
+mod telemetry;
 
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
 use common::clickhouse::ClickHouseClient;
+use common::grpc::GrpcLoggingConfig;
 use common::nats::NatsClient;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
@@ -17,8 +19,8 @@ use ponix_api::ponix_api::{PonixApi, PonixApiConfig};
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
+use telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use tracing::{debug, error, info};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() {
@@ -31,19 +33,25 @@ async fn main() {
         }
     };
 
-    tracing_subscriber::registry()
-        .with(
-            fmt::layer()
-                .json()
-                .with_span_list(true)
-                .with_current_span(true),
-        )
-        .with(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level)),
-        )
-        .init();
+    // Initialize telemetry (tracing + OpenTelemetry for traces and logs)
+    let telemetry_providers: Option<TelemetryProviders> = match init_telemetry(&TelemetryConfig {
+        service_name: config.otel_service_name.clone(),
+        otel_endpoint: config.otel_endpoint.clone(),
+        otel_enabled: config.otel_enabled,
+        log_level: config.log_level.clone(),
+    }) {
+        Ok(provider) => provider,
+        Err(e) => {
+            eprintln!("Failed to initialize telemetry: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-    info!("Starting ponix-all-in-one service");
+    info!(
+        otel_enabled = config.otel_enabled,
+        otel_endpoint = %config.otel_endpoint,
+        "Starting ponix-all-in-one service"
+    );
     debug!("Configuration: {:?}", config);
 
     // Initialize shared dependencies
@@ -69,6 +77,14 @@ async fn main() {
         postgres_repos.organization.clone(),
     ));
 
+    // Parse ignored paths from config (comma-separated)
+    let ignored_paths: Vec<String> = config
+        .grpc_ignored_paths
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
     // Initialize application modules
     let ponix_api = PonixApi::new(
         device_service.clone(),
@@ -77,6 +93,7 @@ async fn main() {
         PonixApiConfig {
             grpc_host: config.grpc_host.clone(),
             grpc_port: config.grpc_port,
+            grpc_logging_config: GrpcLoggingConfig::new(ignored_paths),
         },
     );
 
@@ -146,7 +163,10 @@ async fn main() {
     runner = runner.with_named_process("ponix_api", ponix_api.into_runner_process());
 
     // Add Gateway API process (handles NATS CDC events → orchestrator)
-    runner = runner.with_named_process("gateway_orchestrator", gateway_orchestrator.into_runner_process());
+    runner = runner.with_named_process(
+        "gateway_orchestrator",
+        gateway_orchestrator.into_runner_process(),
+    );
 
     // Add CDC Worker process (handles Postgres → NATS CDC events)
     runner = runner.with_named_process("cdc_worker", cdc_worker.into_runner_process());
@@ -169,6 +189,10 @@ async fn main() {
                     if let Ok(client) = Arc::try_unwrap(nats_for_close) {
                         client.close().await;
                     }
+
+                    // Shutdown telemetry and flush pending traces and logs
+                    shutdown_telemetry(telemetry_providers);
+
                     info!("Cleanup complete");
                     Ok(())
                 })

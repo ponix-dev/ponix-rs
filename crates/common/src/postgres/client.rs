@@ -1,7 +1,7 @@
 use anyhow::Result;
 use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
-use tracing::info;
+use tracing::debug;
 
 /// PostgreSQL client wrapper with connection pooling
 #[derive(Clone)]
@@ -49,7 +49,7 @@ impl PostgresClient {
     pub async fn ping(&self) -> Result<()> {
         let client = self.pool.get().await?;
         client.execute("SELECT 1", &[]).await?;
-        info!("PostgreSQL connection successful");
+        debug!("postgreSQL connection successful");
         Ok(())
     }
 

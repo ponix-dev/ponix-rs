@@ -7,7 +7,7 @@ use common::domain::{DomainResult, Gateway, GatewayConfig, GatewayRepository};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 pub struct GatewayOrchestrationService {
     gateway_repository: Arc<dyn GatewayRepository>,
@@ -32,16 +32,17 @@ impl GatewayOrchestrationService {
     }
 
     /// Load all non-deleted gateways and start their processes
-    pub async fn start(&self) -> DomainResult<()> {
-        info!("Starting GatewayOrchestrator - loading all non-deleted gateways");
+    #[instrument(skip(self))]
+    pub async fn launch_gateways(&self) -> DomainResult<()> {
+        debug!("starting GatewayOrchestrator - loading all non-deleted gateways");
 
         let gateways = self.gateway_repository.list_all_gateways().await?;
-        info!("Found {} non-deleted gateways to start", gateways.len());
+        debug!("found {} non-deleted gateways to start", gateways.len());
 
         for gateway in gateways {
             if let Err(e) = self.start_gateway_process(&gateway).await {
                 error!(
-                    "Failed to start process for gateway {}: {}",
+                    "failed to start process for gateway {}: {}",
                     gateway.gateway_id, e
                 );
                 // Continue starting other processes even if one fails
@@ -52,19 +53,21 @@ impl GatewayOrchestrationService {
     }
 
     /// Handle gateway created event
+    #[instrument(skip(self), fields(gateway_id = %gateway.gateway_id))]
     pub async fn handle_gateway_created(&self, gateway: Gateway) -> DomainResult<()> {
-        info!("Handling gateway created: {}", gateway.gateway_id);
+        debug!("handling gateway created: {}", gateway.gateway_id);
         self.start_gateway_process(&gateway).await
     }
 
     /// Handle gateway updated event
+    #[instrument(skip(self), fields(gateway_id = %gateway.gateway_id))]
     pub async fn handle_gateway_updated(&self, gateway: Gateway) -> DomainResult<()> {
-        info!("Handling gateway updated: {}", gateway.gateway_id);
+        debug!("handling gateway updated: {}", gateway.gateway_id);
 
         // Check if soft deleted
         if gateway.deleted_at.is_some() {
-            info!(
-                "Gateway {} has been soft deleted, stopping process",
+            debug!(
+                "gateway {} has been soft deleted, stopping process",
                 gateway.gateway_id
             );
             return self.stop_gateway_process(&gateway.gateway_id).await;
@@ -78,7 +81,7 @@ impl GatewayOrchestrationService {
             Some(old_gateway) => old_gateway.gateway_config != gateway.gateway_config,
             None => {
                 warn!(
-                    "Old gateway state not found for {}, starting new process",
+                    "old gateway state not found for {}, starting new process",
                     gateway.gateway_id
                 );
                 true
@@ -86,8 +89,8 @@ impl GatewayOrchestrationService {
         };
 
         if config_changed {
-            info!(
-                "Gateway {} config changed, restarting process",
+            debug!(
+                "gateway {} config changed, restarting process",
                 gateway.gateway_id
             );
             // Stop existing process
@@ -95,8 +98,8 @@ impl GatewayOrchestrationService {
             // Start with new config
             self.start_gateway_process(&gateway).await?;
         } else {
-            info!(
-                "Gateway {} updated but config unchanged, no action needed",
+            debug!(
+                "gateway {} updated but config unchanged, no action needed",
                 gateway.gateway_id
             );
         }
@@ -105,17 +108,19 @@ impl GatewayOrchestrationService {
     }
 
     /// Handle gateway deleted event
+    #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     pub async fn handle_gateway_deleted(&self, gateway_id: &str) -> DomainResult<()> {
-        info!("Handling gateway deleted: {}", gateway_id);
+        debug!("handling gateway deleted: {}", gateway_id);
         self.stop_gateway_process(gateway_id).await
     }
 
     /// Stop all running gateway processes
+    #[instrument(skip(self))]
     pub async fn shutdown(&self) -> DomainResult<()> {
-        info!("Shutting down GatewayOrchestrator");
+        info!("shutting down GatewayOrchestrator");
 
         let gateway_ids = self.process_store.list_gateway_ids().await?;
-        info!("Stopping {} gateway processes", gateway_ids.len());
+        info!("stopping {} gateway processes", gateway_ids.len());
 
         for gateway_id in gateway_ids {
             if let Err(e) = self.stop_gateway_process(&gateway_id).await {
@@ -124,16 +129,17 @@ impl GatewayOrchestrationService {
             }
         }
 
-        info!("GatewayOrchestrator shutdown complete");
+        debug!("GatewayOrchestrator shutdown complete");
         Ok(())
     }
 
     /// Start a gateway process
+    #[instrument(skip(self), fields(gateway_id = %gateway.gateway_id))]
     async fn start_gateway_process(&self, gateway: &Gateway) -> DomainResult<()> {
         // Check if process already exists
         if self.process_store.exists(&gateway.gateway_id).await? {
             warn!(
-                "Process already exists for gateway {}, skipping",
+                "process already exists for gateway {}, skipping",
                 gateway.gateway_id
             );
             return Ok(());
@@ -157,29 +163,30 @@ impl GatewayOrchestrationService {
             .upsert(gateway.gateway_id.clone(), handle)
             .await?;
 
-        info!("Started process for gateway {}", gateway.gateway_id);
+        info!("started process for gateway {}", gateway.gateway_id);
         Ok(())
     }
 
     /// Stop a gateway process
+    #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     async fn stop_gateway_process(&self, gateway_id: &str) -> DomainResult<()> {
         match self.process_store.remove(gateway_id).await? {
             Some(handle) => {
-                info!("Stopping process for gateway {}", gateway_id);
+                info!("stopping process for gateway {}", gateway_id);
                 handle.cancel();
 
                 // Wait for process to complete with timeout
                 let timeout = tokio::time::Duration::from_secs(5);
                 match tokio::time::timeout(timeout, handle.join_handle).await {
                     Ok(Ok(())) => {
-                        info!("Process for gateway {} stopped gracefully", gateway_id);
+                        debug!("process for gateway {} stopped gracefully", gateway_id);
                     }
                     Ok(Err(e)) => {
-                        error!("Process for gateway {} panicked: {:?}", gateway_id, e);
+                        error!("process for gateway {} panicked: {:?}", gateway_id, e);
                     }
                     Err(_) => {
                         warn!(
-                            "Process for gateway {} did not stop within timeout",
+                            "process for gateway {} did not stop within timeout",
                             gateway_id
                         );
                         // Process will be dropped and cleaned up by tokio
@@ -189,7 +196,7 @@ impl GatewayOrchestrationService {
                 Ok(())
             }
             None => {
-                warn!("No process found for gateway {}", gateway_id);
+                warn!("no process found for gateway {}", gateway_id);
                 Ok(())
             }
         }
@@ -203,8 +210,8 @@ async fn run_gateway_print_process(
     process_token: CancellationToken,
     shutdown_token: CancellationToken,
 ) {
-    info!(
-        "Starting print process for gateway: {} ({})",
+    debug!(
+        "starting print process for gateway: {} ({})",
         gateway.gateway_id, gateway.organization_id
     );
 
@@ -213,7 +220,7 @@ async fn run_gateway_print_process(
     loop {
         // Check for cancellation
         if process_token.is_cancelled() || shutdown_token.is_cancelled() {
-            info!("Print process for gateway {} cancelled", gateway.gateway_id);
+            debug!("print process for gateway {} cancelled", gateway.gateway_id);
             break;
         }
 
@@ -224,21 +231,21 @@ async fn run_gateway_print_process(
             }
             Err(e) => {
                 error!(
-                    "Error printing config for gateway {}: {}",
+                    "error printing config for gateway {}: {}",
                     gateway.gateway_id, e
                 );
 
                 retry_count += 1;
                 if retry_count >= config.max_retry_attempts {
                     error!(
-                        "Max retry attempts ({}) reached for gateway {}, stopping process",
+                        "max retry attempts ({}) reached for gateway {}, stopping process",
                         config.max_retry_attempts, gateway.gateway_id
                     );
                     break;
                 }
 
-                info!(
-                    "Retrying print for gateway {} (attempt {}/{})",
+                debug!(
+                    "retrying print for gateway {} (attempt {}/{})",
                     gateway.gateway_id, retry_count, config.max_retry_attempts
                 );
 
@@ -255,27 +262,27 @@ async fn run_gateway_print_process(
         // Wait for next print interval (hard-coded 5 seconds)
         tokio::select! {
             _ = process_token.cancelled() => {
-                info!("Print process for gateway {} cancelled", gateway.gateway_id);
+                debug!("print process for gateway {} cancelled", gateway.gateway_id);
                 break;
             }
             _ = shutdown_token.cancelled() => {
-                info!("Print process for gateway {} shutdown signal received", gateway.gateway_id);
+                debug!("print process for gateway {} shutdown signal received", gateway.gateway_id);
                 break;
             }
             _ = tokio::time::sleep(Duration::from_secs(PRINT_INTERVAL_SECS)) => {}
         }
     }
 
-    info!("Print process for gateway {} stopped", gateway.gateway_id);
+    debug!("print process for gateway {} stopped", gateway.gateway_id);
 }
 
 /// Print gateway configuration to stdout
 fn print_gateway_config(gateway: &Gateway) -> DomainResult<()> {
     match &gateway.gateway_config {
         GatewayConfig::Emqx(emqx) => {
-            println!(
+            info!(
                 "[GATEWAY {}] org={} type={} broker_url={}",
-                gateway.gateway_id, gateway.organization_id, gateway.gateway_type, emqx.broker_url
+                gateway.gateway_id, gateway.organization_id, gateway.gateway_type, emqx.broker_url,
             );
         }
     }
@@ -325,7 +332,7 @@ mod tests {
             CancellationToken::new(),
         );
 
-        let result = orchestrator.start().await;
+        let result = orchestrator.launch_gateways().await;
         assert!(result.is_ok());
 
         // Verify processes were started

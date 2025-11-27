@@ -2,7 +2,7 @@ use crate::domain::RawEnvelopeService;
 use async_nats::jetstream::Message;
 use common::nats::{BatchProcessor, ProcessingResult};
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, warn};
 
 /// Create a BatchProcessor for RawEnvelope messages that processes them through the domain service
 pub fn create_raw_envelope_processor(service: Arc<RawEnvelopeService>) -> BatchProcessor {
@@ -33,7 +33,7 @@ pub fn create_raw_envelope_processor(service: Arc<RawEnvelopeService>) -> BatchP
                             error!(
                                 error = %e,
                                 subject = %subject,
-                                "Failed to decode RawEnvelope protobuf message"
+                                "failed to decode RawEnvelope protobuf message"
                             );
                             nak.push((idx, Some(format!("Decode error: {}", e))));
                             continue;
@@ -47,7 +47,7 @@ pub fn create_raw_envelope_processor(service: Arc<RawEnvelopeService>) -> BatchP
                         error!(
                             error = %e,
                             subject = %subject,
-                            "Failed to convert protobuf RawEnvelope to domain type"
+                            "failed to convert protobuf RawEnvelope to domain type"
                         );
                         nak.push((idx, Some(format!("Conversion error: {}", e))));
                         continue;
@@ -57,14 +57,14 @@ pub fn create_raw_envelope_processor(service: Arc<RawEnvelopeService>) -> BatchP
                 // Process through domain service
                 match service.process_raw_envelope(domain_envelope).await {
                     Ok(()) => {
-                        info!(index = idx, "Successfully processed RawEnvelope");
+                        debug!(index = idx, "successfully processed RawEnvelope");
                         ack.push(idx);
                     }
                     Err(e) => {
                         warn!(
                             error = %e,
                             index = idx,
-                            "Failed to process RawEnvelope through domain service"
+                            "failed to process RawEnvelope through domain service"
                         );
                         nak.push((idx, Some(e.to_string())));
                     }

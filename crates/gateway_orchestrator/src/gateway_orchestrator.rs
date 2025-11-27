@@ -6,7 +6,7 @@ use common::nats::NatsClient;
 use common::postgres::PostgresGatewayRepository;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::debug;
 
 pub struct GatewayOrchestratorConfig {
     pub gateway_stream: String,
@@ -25,7 +25,7 @@ impl GatewayOrchestrator {
         orchestrator_shutdown_token: CancellationToken,
         config: GatewayOrchestratorConfig,
     ) -> anyhow::Result<Self> {
-        info!("Initializing Gateway API module");
+        debug!("initializing gateway API module");
 
         // Initialize orchestrator
         let orchestrator_config = GatewayOrchestrationServiceConfig::default();
@@ -38,8 +38,8 @@ impl GatewayOrchestrator {
         ));
 
         // Start orchestrator to load existing gateways
-        orchestrator.start().await?;
-        info!("Gateway orchestrator started");
+        orchestrator.launch_gateways().await?;
+        debug!("gateway orchestrator started");
 
         // Setup CDC consumer
         let cdc_consumer = GatewayCdcConsumer::new(

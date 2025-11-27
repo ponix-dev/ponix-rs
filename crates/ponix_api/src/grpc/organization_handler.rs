@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 
 use crate::domain::OrganizationService;
 use ponix_proto_prost::organization::v1::{
@@ -9,7 +9,7 @@ use ponix_proto_prost::organization::v1::{
 };
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationService as OrganizationServiceTrait;
 
-use common::grpc::domain_error_to_status;
+use common::grpc::{domain_error_to_status, RecordGrpcStatus};
 use common::proto::{
     datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
     to_get_organization_input, to_proto_organization,
@@ -32,7 +32,10 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
     #[instrument(
         name = "CreateOrganization",
         skip(self, request),
-        fields(organization_name = %request.get_ref().name)
+        fields(
+            organization_name = %request.get_ref().name,
+            rpc.grpc.status_code = tracing::field::Empty
+        )
     )]
     async fn create_organization(
         &self,
@@ -50,7 +53,7 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(organization_id = %organization.id, "Organization created successfully");
+        debug!(organization_id = %organization.id, "Organization created successfully");
 
         // Return the created organization details
         Ok(Response::new(CreateOrganizationResponse {
@@ -63,12 +66,16 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
             },
             created_at: datetime_to_timestamp(organization.created_at),
         }))
+        .record_status()
     }
 
     #[instrument(
         name = "GetOrganization",
         skip(self, request),
-        fields(organization_id = %request.get_ref().organization_id)
+        fields(
+            organization_id = %request.get_ref().organization_id,
+            rpc.grpc.status_code = tracing::field::Empty
+        )
     )]
     async fn get_organization(
         &self,
@@ -92,12 +99,16 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         Ok(Response::new(GetOrganizationResponse {
             organization: Some(proto_organization),
         }))
+        .record_status()
     }
 
     #[instrument(
         name = "DeleteOrganization",
         skip(self, request),
-        fields(organization_id = %request.get_ref().organization_id)
+        fields(
+            organization_id = %request.get_ref().organization_id,
+            rpc.grpc.status_code = tracing::field::Empty
+        )
     )]
     async fn delete_organization(
         &self,
@@ -115,11 +126,12 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(organization_id = %organization_id, "Organization deleted successfully");
+        debug!(organization_id = %organization_id, "Organization deleted successfully");
 
         // Return empty response with organization field (required by proto)
         Ok(Response::new(DeleteOrganizationResponse {
             organization: None, // Organization is soft-deleted, not returned
         }))
+        .record_status()
     }
 }

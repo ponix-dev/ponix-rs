@@ -34,6 +34,14 @@ ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "
 prost-types = { workspace = true }
 xid.workspace = true
 
+# OpenTelemetry
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry-semantic-conventions.workspace = true
+tracing-opentelemetry.workspace = true
+opentelemetry-appender-tracing.workspace = true
+
 [features]
 integration-tests = []
 

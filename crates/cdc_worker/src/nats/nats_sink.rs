@@ -8,7 +8,7 @@ use etl_postgres::types::TableSchema;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tracing::{error, info, warn};
+use tracing::{debug, debug_span, error, warn, Instrument};
 
 /// Configuration for an entity's CDC
 
@@ -49,10 +49,10 @@ impl NatsSink {
             .map(|config| (config.table_name.clone(), Arc::new(config)))
             .collect();
 
-        info!(
+        debug!(
             entity_count = configs_by_name.len(),
             entities = ?configs_by_name.keys().collect::<Vec<_>>(),
-            "Initialized NatsSink for CDC events"
+            "initialized NatsSink for CDC events"
         );
 
         Self {
@@ -96,164 +96,182 @@ impl NatsSink {
 
     /// Handles an insert event by converting and publishing to NATS.
     async fn handle_insert(&self, event: InsertEvent) -> EtlResult<()> {
-        // Clone the Arc to avoid holding the lock across await
-        let config = {
-            let configs = self.configs_by_id.read().map_err(|e| {
-                etl_error!(
-                    ErrorKind::ConversionError,
-                    "Failed to acquire config lock",
-                    e.to_string()
-                )
-            })?;
+        let span = debug_span!("handle_insert");
 
-            match configs.get(&event.table_id) {
-                Some(c) => Arc::clone(c),
-                None => {
-                    warn!(
-                        "No CDC config for table {:?}, skipping insert event",
-                        event.table_id
-                    );
-                    return Ok(());
+        async {
+            // Clone the Arc to avoid holding the lock across await
+            let config = {
+                let configs = self.configs_by_id.read().map_err(|e| {
+                    etl_error!(
+                        ErrorKind::ConversionError,
+                        "Failed to acquire config lock",
+                        e.to_string()
+                    )
+                })?;
+
+                match configs.get(&event.table_id) {
+                    Some(c) => Arc::clone(c),
+                    None => {
+                        warn!(
+                            "no CDC config for table {:?}, skipping insert event",
+                            event.table_id
+                        );
+                        return Ok(());
+                    }
                 }
-            }
-        };
+            };
 
-        let data = self.table_row_to_json(&event.table_id, &event.table_row)?;
+            let data = self.table_row_to_json(&event.table_id, &event.table_row)?;
 
-        match config.converter.convert_insert(data).await {
-            Ok(payload) => {
-                let subject = self.get_subject(&config.entity_name, "create");
-                if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
-                    error!("Failed to publish insert event to {}: {}", subject, e);
-                    return Err(etl_error!(
-                        ErrorKind::DestinationIoError,
-                        "Failed to publish insert event",
-                        format!("Failed to publish to {}: {}", subject, e)
-                    ));
+            match config.converter.convert_insert(data).await {
+                Ok(payload) => {
+                    let subject = self.get_subject(&config.entity_name, "create");
+                    if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
+                        error!("failed to publish insert event to {}: {}", subject, e);
+                        return Err(etl_error!(
+                            ErrorKind::DestinationIoError,
+                            "Failed to publish insert event",
+                            format!("Failed to publish to {}: {}", subject, e)
+                        ));
+                    }
+                    debug!("published insert event to {}", subject);
+                    Ok(())
                 }
-                info!("Published insert event to {}", subject);
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to convert insert event: {}", e);
-                Err(etl_error!(
-                    ErrorKind::ConversionError,
-                    "Failed to convert insert event",
-                    format!("Conversion error: {}", e)
-                ))
+                Err(e) => {
+                    error!("failed to convert insert event: {}", e);
+                    Err(etl_error!(
+                        ErrorKind::ConversionError,
+                        "Failed to convert insert event",
+                        format!("Conversion error: {}", e)
+                    ))
+                }
             }
         }
+        .instrument(span)
+        .await
     }
 
     /// Handles an update event by converting and publishing to NATS.
     async fn handle_update(&self, event: UpdateEvent) -> EtlResult<()> {
-        // Clone the Arc to avoid holding the lock across await
-        let config = {
-            let configs = self.configs_by_id.read().map_err(|e| {
-                etl_error!(
-                    ErrorKind::ConversionError,
-                    "Failed to acquire config lock",
-                    e.to_string()
-                )
-            })?;
+        let span = debug_span!("handle_update");
 
-            match configs.get(&event.table_id) {
-                Some(c) => Arc::clone(c),
-                None => {
-                    warn!(
-                        "No CDC config for table {:?}, skipping update event",
-                        event.table_id
-                    );
-                    return Ok(());
+        async {
+            // Clone the Arc to avoid holding the lock across await
+            let config = {
+                let configs = self.configs_by_id.read().map_err(|e| {
+                    etl_error!(
+                        ErrorKind::ConversionError,
+                        "Failed to acquire config lock",
+                        e.to_string()
+                    )
+                })?;
+
+                match configs.get(&event.table_id) {
+                    Some(c) => Arc::clone(c),
+                    None => {
+                        warn!(
+                            "no CDC config for table {:?}, skipping update event",
+                            event.table_id
+                        );
+                        return Ok(());
+                    }
                 }
-            }
-        };
+            };
 
-        let new_data = self.table_row_to_json(&event.table_id, &event.table_row)?;
-        let old_data = if let Some((_, ref old_row)) = event.old_table_row {
-            self.table_row_to_json(&event.table_id, old_row)?
-        } else {
-            json!({})
-        };
+            let new_data = self.table_row_to_json(&event.table_id, &event.table_row)?;
+            let old_data = if let Some((_, ref old_row)) = event.old_table_row {
+                self.table_row_to_json(&event.table_id, old_row)?
+            } else {
+                json!({})
+            };
 
-        match config.converter.convert_update(old_data, new_data).await {
-            Ok(payload) => {
-                let subject = self.get_subject(&config.entity_name, "update");
-                if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
-                    error!("Failed to publish update event to {}: {}", subject, e);
-                    return Err(etl_error!(
-                        ErrorKind::DestinationIoError,
-                        "Failed to publish update event",
-                        format!("Failed to publish to {}: {}", subject, e)
-                    ));
+            match config.converter.convert_update(old_data, new_data).await {
+                Ok(payload) => {
+                    let subject = self.get_subject(&config.entity_name, "update");
+                    if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
+                        error!("Failed to publish update event to {}: {}", subject, e);
+                        return Err(etl_error!(
+                            ErrorKind::DestinationIoError,
+                            "Failed to publish update event",
+                            format!("Failed to publish to {}: {}", subject, e)
+                        ));
+                    }
+                    debug!("Published update event to {}", subject);
+                    Ok(())
                 }
-                info!("Published update event to {}", subject);
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to convert update event: {}", e);
-                Err(etl_error!(
-                    ErrorKind::ConversionError,
-                    "Failed to convert update event",
-                    format!("Conversion error: {}", e)
-                ))
+                Err(e) => {
+                    error!("Failed to convert update event: {}", e);
+                    Err(etl_error!(
+                        ErrorKind::ConversionError,
+                        "Failed to convert update event",
+                        format!("Conversion error: {}", e)
+                    ))
+                }
             }
         }
+        .instrument(span)
+        .await
     }
 
     /// Handles a delete event by converting and publishing to NATS.
     async fn handle_delete(&self, event: DeleteEvent) -> EtlResult<()> {
-        // Clone the Arc to avoid holding the lock across await
-        let config = {
-            let configs = self.configs_by_id.read().map_err(|e| {
-                etl_error!(
-                    ErrorKind::ConversionError,
-                    "Failed to acquire config lock",
-                    e.to_string()
-                )
-            })?;
+        let span = debug_span!("handle_delete");
 
-            match configs.get(&event.table_id) {
-                Some(c) => Arc::clone(c),
-                None => {
-                    warn!(
-                        "No CDC config for table {:?}, skipping delete event",
-                        event.table_id
-                    );
-                    return Ok(());
+        async {
+            // Clone the Arc to avoid holding the lock across await
+            let config = {
+                let configs = self.configs_by_id.read().map_err(|e| {
+                    etl_error!(
+                        ErrorKind::ConversionError,
+                        "Failed to acquire config lock",
+                        e.to_string()
+                    )
+                })?;
+
+                match configs.get(&event.table_id) {
+                    Some(c) => Arc::clone(c),
+                    None => {
+                        warn!(
+                            "No CDC config for table {:?}, skipping delete event",
+                            event.table_id
+                        );
+                        return Ok(());
+                    }
                 }
-            }
-        };
+            };
 
-        let data = if let Some((_, ref old_row)) = event.old_table_row {
-            self.table_row_to_json(&event.table_id, old_row)?
-        } else {
-            json!({})
-        };
+            let data = if let Some((_, ref old_row)) = event.old_table_row {
+                self.table_row_to_json(&event.table_id, old_row)?
+            } else {
+                json!({})
+            };
 
-        match config.converter.convert_delete(data).await {
-            Ok(payload) => {
-                let subject = self.get_subject(&config.entity_name, "delete");
-                if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
-                    error!("Failed to publish delete event to {}: {}", subject, e);
-                    return Err(etl_error!(
-                        ErrorKind::DestinationIoError,
-                        "Failed to publish delete event",
-                        format!("Failed to publish to {}: {}", subject, e)
-                    ));
+            match config.converter.convert_delete(data).await {
+                Ok(payload) => {
+                    let subject = self.get_subject(&config.entity_name, "delete");
+                    if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
+                        error!("Failed to publish delete event to {}: {}", subject, e);
+                        return Err(etl_error!(
+                            ErrorKind::DestinationIoError,
+                            "Failed to publish delete event",
+                            format!("Failed to publish to {}: {}", subject, e)
+                        ));
+                    }
+                    debug!("Published delete event to {}", subject);
+                    Ok(())
                 }
-                info!("Published delete event to {}", subject);
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to convert delete event: {}", e);
-                Err(etl_error!(
-                    ErrorKind::ConversionError,
-                    "Failed to convert delete event",
-                    format!("Conversion error: {}", e)
-                ))
+                Err(e) => {
+                    error!("Failed to convert delete event: {}", e);
+                    Err(etl_error!(
+                        ErrorKind::ConversionError,
+                        "Failed to convert delete event",
+                        format!("Conversion error: {}", e)
+                    ))
+                }
             }
         }
+        .instrument(span)
+        .await
     }
 }
 
@@ -263,7 +281,7 @@ impl Destination for NatsSink {
     }
 
     async fn truncate_table(&self, table_id: TableId) -> EtlResult<()> {
-        info!(
+        debug!(
             "Truncate table requested for {:?} (no-op for NATS sink)",
             table_id
         );
@@ -276,7 +294,7 @@ impl Destination for NatsSink {
         table_id: TableId,
         table_rows: Vec<TableRow>,
     ) -> EtlResult<()> {
-        info!(
+        debug!(
             "Write table rows for {:?}: {} rows (skipping initial sync for NATS sink)",
             table_id,
             table_rows.len()
@@ -286,78 +304,85 @@ impl Destination for NatsSink {
     }
 
     async fn write_events(&self, events: Vec<Event>) -> EtlResult<()> {
-        info!("Processing batch of {} events", events.len());
+        // Create a root span for CDC events - break from any inherited trace context
+        let span = debug_span!(parent: None, "write_events", event_count = events.len());
+        let _enter = span.enter();
+
+        debug!("Processing batch of {} events", events.len());
 
         for event in events {
             match event {
                 Event::Relation(rel_event) => {
-                    let table_name = &rel_event.table_schema.name.name;
-                    let table_id = rel_event.table_schema.id;
+                        let table_name = &rel_event.table_schema.name.name;
+                        let table_id = rel_event.table_schema.id;
 
-                    info!(
-                        "Received relation event for table: {} (ID: {:?})",
-                        table_name, table_id
-                    );
-
-                    // Store the table schema
-                    if let Ok(mut schemas) = self.table_schemas.write() {
-                        schemas.insert(table_id, rel_event.table_schema.clone());
-                    } else {
-                        error!("Failed to acquire write lock for table_schemas");
-                    }
-
-                    // Map table ID to config if we have one for this table name
-                    if let Some(config) = self.configs_by_name.get(table_name) {
-                        info!(
-                            "Mapping table '{}' (ID: {:?}) to entity '{}'",
-                            table_name, table_id, config.entity_name
+                        debug!(
+                            "Received relation event for table: {} (ID: {:?})",
+                            table_name, table_id
                         );
 
-                        if let Ok(mut configs) = self.configs_by_id.write() {
-                            configs.insert(table_id, Arc::clone(config));
+                        // Store the table schema
+                        if let Ok(mut schemas) = self.table_schemas.write() {
+                            schemas.insert(table_id, rel_event.table_schema.clone());
                         } else {
-                            error!("Failed to acquire write lock for configs_by_id");
+                            error!("Failed to acquire write lock for table_schemas");
+                        }
+
+                        // Map table ID to config if we have one for this table name
+                        if let Some(config) = self.configs_by_name.get(table_name) {
+                            debug!(
+                                "Mapping table '{}' (ID: {:?}) to entity '{}'",
+                                table_name, table_id, config.entity_name
+                            );
+
+                            if let Ok(mut configs) = self.configs_by_id.write() {
+                                configs.insert(table_id, Arc::clone(config));
+                            } else {
+                                error!("Failed to acquire write lock for configs_by_id");
+                            }
                         }
                     }
-                }
-                Event::Insert(insert_event) => {
-                    if let Err(e) = self.handle_insert(insert_event).await {
-                        error!("Failed to handle insert event: {:?}", e);
-                        // Continue processing other events
+                    Event::Insert(insert_event) => {
+                        if let Err(e) = self.handle_insert(insert_event).await {
+                            error!("Failed to handle insert event: {:?}", e);
+                            // Continue processing other events
+                        }
                     }
-                }
-                Event::Update(update_event) => {
-                    if let Err(e) = self.handle_update(update_event).await {
-                        error!("Failed to handle update event: {:?}", e);
-                        // Continue processing other events
+                    Event::Update(update_event) => {
+                        if let Err(e) = self.handle_update(update_event).await {
+                            error!("Failed to handle update event: {:?}", e);
+                            // Continue processing other events
+                        }
                     }
-                }
-                Event::Delete(delete_event) => {
-                    if let Err(e) = self.handle_delete(delete_event).await {
-                        error!("Failed to handle delete event: {:?}", e);
-                        // Continue processing other events
+                    Event::Delete(delete_event) => {
+                        if let Err(e) = self.handle_delete(delete_event).await {
+                            error!("Failed to handle delete event: {:?}", e);
+                            // Continue processing other events
+                        }
                     }
-                }
-                Event::Begin(_) => {
-                    // Transaction begin - we don't need to do anything
-                }
-                Event::Commit(_) => {
-                    // Transaction commit - we don't need to do anything
-                }
-                Event::Truncate(truncate_event) => {
-                    info!(
-                        "Received truncate event for tables: {:?}",
-                        truncate_event.rel_ids
-                    );
-                    // For NATS, we don't publish truncate events
-                }
-                Event::Unsupported => {
-                    warn!("Received unsupported event type");
+                    Event::Begin(_) => {
+                        // Transaction begin - we don't need to do anything
+                    }
+                    Event::Commit(_) => {
+                        // Transaction commit - we don't need to do anything
+                    }
+                    Event::Truncate(truncate_event) => {
+                        debug!(
+                            "Received truncate event for tables: {:?}",
+                            truncate_event.rel_ids
+                        );
+                        // For NATS, we don't publish truncate events
+                    }
+                    Event::Unsupported => {
+                        warn!("Received unsupported event type");
+                    }
                 }
             }
-        }
 
-        Ok(())
+            Ok(())
+        }
+        .instrument(span)
+        .await
     }
 }
 

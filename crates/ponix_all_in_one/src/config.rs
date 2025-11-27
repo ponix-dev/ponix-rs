@@ -156,6 +156,24 @@ pub struct ServiceConfig {
     /// Gateway CDC filter subject pattern
     #[serde(default = "default_gateway_filter_subject")]
     pub gateway_filter_subject: String,
+
+    // OpenTelemetry configuration
+    /// OpenTelemetry OTLP endpoint (gRPC)
+    #[serde(default = "default_otel_endpoint")]
+    pub otel_endpoint: String,
+
+    /// Enable OpenTelemetry export
+    #[serde(default = "default_otel_enabled")]
+    pub otel_enabled: bool,
+
+    /// Service name for OpenTelemetry resource
+    #[serde(default = "default_otel_service_name")]
+    pub otel_service_name: String,
+
+    // Telemetry configuration
+    /// gRPC paths to ignore in logging (comma-separated)
+    #[serde(default = "default_grpc_ignored_paths")]
+    pub grpc_ignored_paths: String,
 }
 
 fn default_log_level() -> String {
@@ -310,6 +328,24 @@ fn default_gateway_consumer_name() -> String {
 
 fn default_gateway_filter_subject() -> String {
     "gateways.>".to_string()
+}
+
+// OpenTelemetry defaults
+fn default_otel_endpoint() -> String {
+    "http://localhost:4317".to_string()
+}
+
+fn default_otel_enabled() -> bool {
+    true
+}
+
+fn default_otel_service_name() -> String {
+    "ponix-all-in-one".to_string()
+}
+
+// Telemetry defaults
+fn default_grpc_ignored_paths() -> String {
+    "/grpc.reflection.".to_string()
 }
 
 impl ServiceConfig {

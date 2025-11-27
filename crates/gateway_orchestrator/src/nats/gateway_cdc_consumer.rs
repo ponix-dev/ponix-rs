@@ -1,12 +1,12 @@
 use crate::domain::GatewayOrchestrationService;
 use anyhow::{Context, Result};
 use common::domain::GatewayCdcEvent;
-use common::nats::NatsClient;
+use common::nats::{set_parent_from_headers, NatsClient};
 use common::proto::parse_gateway_cdc_event;
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{debug, error, info_span, Instrument};
 
 pub struct GatewayCdcConsumer {
     nats_client: Arc<NatsClient>,
@@ -35,7 +35,7 @@ impl GatewayCdcConsumer {
 
     /// Run the CDC consumer loop
     pub async fn run(&self, ctx: CancellationToken) -> Result<()> {
-        info!("Starting GatewayCdcConsumer");
+        debug!("starting gateway_cdc_consumer");
 
         // Create durable consumer if not exists
         let consumer = self.create_or_get_consumer().await?;
@@ -43,19 +43,19 @@ impl GatewayCdcConsumer {
         loop {
             tokio::select! {
                 _ = ctx.cancelled() => {
-                    info!("GatewayCdcConsumer shutdown signal received");
+                    debug!("gateway_cdc_consumer shutdown signal received");
                     break;
                 }
                 result = self.fetch_and_process_batch(&consumer) => {
                     if let Err(e) = result {
-                        error!("Error processing CDC batch: {}", e);
+                        error!("error processing CDC batch: {}", e);
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     }
                 }
             }
         }
 
-        info!("GatewayCdcConsumer stopped");
+        debug!("gateway_cdc_consumer stopped");
         Ok(())
     }
 
@@ -74,7 +74,7 @@ impl GatewayCdcConsumer {
         let consumer = js
             .create_consumer_on_stream(config, &self.stream_name)
             .await
-            .context("Failed to create gateway CDC consumer")?;
+            .context("failed to create gateway CDC consumer")?;
 
         Ok(consumer)
     }
@@ -89,13 +89,13 @@ impl GatewayCdcConsumer {
             .expires(tokio::time::Duration::from_secs(5))
             .messages()
             .await
-            .context("Failed to fetch messages")?;
+            .context("failed to fetch messages")?;
 
         while let Some(message) = messages.next().await {
             let msg = match message {
                 Ok(m) => m,
                 Err(e) => {
-                    error!("Error receiving message: {}", e);
+                    error!("error receiving message: {}", e);
                     continue;
                 }
             };
@@ -103,19 +103,19 @@ impl GatewayCdcConsumer {
             match self.process_message(&msg).await {
                 Ok(()) => {
                     if let Err(e) = msg.ack().await {
-                        error!("Failed to ack message: {}", e);
+                        error!("failed to ack message: {}", e);
                     }
                 }
                 Err(e) => {
                     error!(
-                        "Failed to process CDC message from subject {}: {}",
+                        "failed to process CDC message from subject {}: {}",
                         msg.subject, e
                     );
                     if let Err(e) = msg
                         .ack_with(async_nats::jetstream::AckKind::Nak(None))
                         .await
                     {
-                        error!("Failed to nak message: {}", e);
+                        error!("failed to nak message: {}", e);
                     }
                 }
             }
@@ -127,29 +127,45 @@ impl GatewayCdcConsumer {
     async fn process_message(&self, msg: &async_nats::jetstream::Message) -> Result<()> {
         let event = parse_gateway_cdc_event(&msg.subject, &msg.payload)?;
 
-        info!("Processing CDC event for gateway: {}", event.gateway_id());
+        // Create a span for processing this CDC event
+        let headers = msg.headers.as_ref().cloned().unwrap_or_default();
+        let span = info_span!(
+            "process_gateway_cdc_event",
+            gateway_id = %event.gateway_id(),
+            subject = %msg.subject
+        );
 
-        match event {
-            GatewayCdcEvent::Created { gateway } => {
-                self.orchestrator
-                    .handle_gateway_created(gateway)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+        async move {
+            // Set the parent context from NATS headers on the current span
+            // This connects this span to the trace that published the message
+            set_parent_from_headers(&headers);
+
+            debug!("processing CDC event for gateway: {}", event.gateway_id());
+
+            match event {
+                GatewayCdcEvent::Created { gateway } => {
+                    self.orchestrator
+                        .handle_gateway_created(gateway)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+                }
+                GatewayCdcEvent::Updated { gateway: new } => {
+                    self.orchestrator
+                        .handle_gateway_updated(new)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+                }
+                GatewayCdcEvent::Deleted { gateway_id } => {
+                    self.orchestrator
+                        .handle_gateway_deleted(&gateway_id)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+                }
             }
-            GatewayCdcEvent::Updated { gateway: new } => {
-                self.orchestrator
-                    .handle_gateway_updated(new)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
-            }
-            GatewayCdcEvent::Deleted { gateway_id } => {
-                self.orchestrator
-                    .handle_gateway_deleted(&gateway_id)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
-            }
+
+            Ok(())
         }
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 }

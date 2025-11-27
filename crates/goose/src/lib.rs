@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use std::process::Command;
-use tracing::info;
+use tracing::debug;
 
 /// Generic migration runner for goose-compatible databases.
 ///
@@ -63,7 +63,7 @@ impl MigrationRunner {
     /// - Migration execution fails
     /// - Database connection fails
     pub async fn run_migrations(&self) -> Result<()> {
-        info!("Running migrations from directory: {}", self.migrations_dir);
+        debug!("running migrations from directory: {}", self.migrations_dir);
 
         let output = Command::new(&self.goose_binary_path)
             .arg("-dir")
@@ -80,7 +80,7 @@ impl MigrationRunner {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        info!("Migrations completed successfully:\n{}", stdout);
+        debug!("migrations completed successfully:\n{}", stdout);
 
         Ok(())
     }
@@ -89,7 +89,7 @@ impl MigrationRunner {
     ///
     /// Executes `goose -dir {migrations_dir} {driver} {dsn} down`
     pub async fn rollback_migration(&self) -> Result<()> {
-        info!("Rolling back most recent migration");
+        debug!("rolling back most recent migration");
 
         let output = Command::new(&self.goose_binary_path)
             .arg("-dir")
@@ -106,7 +106,7 @@ impl MigrationRunner {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        info!("Rollback completed successfully:\n{}", stdout);
+        debug!("rollback completed successfully:\n{}", stdout);
 
         Ok(())
     }

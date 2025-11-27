@@ -32,7 +32,7 @@ impl AnalyticsWorker {
         nats_client: Arc<NatsClient>,
         config: AnalyticsWorkerConfig,
     ) -> anyhow::Result<Self> {
-        info!("Initializing Analytics Ingester module");
+        info!("initializing analytics ingester module");
 
         // Initialize ProcessedEnvelope infrastructure
         let envelope_repository =
@@ -83,7 +83,7 @@ impl AnalyticsWorker {
         )
         .await?;
 
-        info!("Analytics Ingester initialized");
+        info!("analytics ingester initialized");
 
         Ok(Self {
             processed_consumer,

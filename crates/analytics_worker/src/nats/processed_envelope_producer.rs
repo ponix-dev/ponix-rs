@@ -6,7 +6,7 @@ use prost::Message;
 
 use std::sync::Arc;
 
-use tracing::{debug, info};
+use tracing::debug;
 
 pub struct ProcessedEnvelopeProducer {
     jetstream: Arc<dyn JetStreamPublisher>,
@@ -15,10 +15,10 @@ pub struct ProcessedEnvelopeProducer {
 
 impl ProcessedEnvelopeProducer {
     pub fn new(jetstream: Arc<dyn JetStreamPublisher>, base_subject: String) -> Self {
-        info!(
+        debug!(
             stream = "processed_envelopes",
             base_subject = %base_subject,
-            "Initialized ProcessedEnvelopeProducer"
+            "initialized ProcessedEnvelopeProducer"
         );
         Self {
             jetstream,
@@ -53,7 +53,10 @@ use common::domain::{
 
 #[async_trait::async_trait]
 impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
-    async fn publish(&self, envelope: &DomainProcessedEnvelope) -> DomainResult<()> {
+    async fn publish_processed_envelope(
+        &self,
+        envelope: &DomainProcessedEnvelope,
+    ) -> DomainResult<()> {
         // Convert domain ProcessedEnvelope to protobuf
         let proto_envelope = common::proto::domain_to_proto_envelope(envelope);
 
@@ -67,7 +70,7 @@ impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
             subject = %subject,
             end_device_id = %proto_envelope.end_device_id,
             size_bytes = payload.len(),
-            "Publishing ProcessedEnvelope"
+            "publishing ProcessedEnvelope"
         );
 
         // Use the trait method
@@ -77,10 +80,10 @@ impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
             .context("Failed to publish and acknowledge message")
             .map_err(DomainError::RepositoryError)?;
 
-        info!(
+        debug!(
             subject = %subject,
             end_device_id = %proto_envelope.end_device_id,
-            "Successfully published ProcessedEnvelope"
+            "successfully published ProcessedEnvelope"
         );
 
         Ok(())
@@ -121,7 +124,8 @@ mod domain_trait_tests {
         };
 
         // Act
-        let result = ProcessedEnvelopeProducerTrait::publish(&producer, &envelope).await;
+        let result =
+            ProcessedEnvelopeProducerTrait::publish_processed_envelope(&producer, &envelope).await;
 
         // Assert
         assert!(result.is_ok());
@@ -152,7 +156,8 @@ mod domain_trait_tests {
         };
 
         // Act
-        let result = ProcessedEnvelopeProducerTrait::publish(&producer, &envelope).await;
+        let result =
+            ProcessedEnvelopeProducerTrait::publish_processed_envelope(&producer, &envelope).await;
 
         // Assert
         assert!(result.is_err());

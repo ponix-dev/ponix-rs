@@ -24,6 +24,8 @@ serde_json = { workspace = true }
 bytes = "1.9"
 base64 = "0.22"
 prost-types = { workspace = true }
+opentelemetry = { workspace = true }
+tracing-opentelemetry = { workspace = true }
 
 [dev-dependencies]
 common = { path = "../common", features = ["testing"] }

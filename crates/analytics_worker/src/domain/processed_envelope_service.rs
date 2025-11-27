@@ -1,6 +1,6 @@
 use common::domain::{DomainResult, ProcessedEnvelopeRepository, StoreEnvelopesInput};
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 /// Domain service for processed envelope operations
 pub struct ProcessedEnvelopeService {
@@ -14,10 +14,11 @@ impl ProcessedEnvelopeService {
 
     /// Store a batch of processed envelopes
     /// Currently a pass-through to repository, but provides extension point for future validation
+    #[instrument(skip(self), fields(envelope_count = input.envelopes.len()))]
     pub async fn store_batch(&self, input: StoreEnvelopesInput) -> DomainResult<()> {
         debug!(
             envelope_count = input.envelopes.len(),
-            "Storing batch of envelopes"
+            "storing batch of envelopes"
         );
 
         self.repository.store_batch(input).await

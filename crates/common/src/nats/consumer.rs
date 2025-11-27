@@ -68,11 +68,11 @@ impl NatsConsumer {
         max_wait_secs: u64,
         processor: BatchProcessor,
     ) -> Result<Self> {
-        info!(
+        debug!(
             stream = %stream_name,
             consumer = %consumer_name,
             filter_subject = %subject_filter,
-            "Creating NATS consumer"
+            "creating nats consumer"
         );
 
         let config = jetstream::consumer::pull::Config {
@@ -86,13 +86,13 @@ impl NatsConsumer {
         let consumer = jetstream
             .create_consumer(config, stream_name)
             .await
-            .context("Failed to create consumer")?;
+            .context("failed to create consumer")?;
 
-        info!(
+        debug!(
             stream = %stream_name,
             consumer = %consumer_name,
             filter_subject = %subject_filter,
-            "NATS consumer created successfully"
+            "nats consumer created successfully"
         );
 
         Ok(Self {
@@ -106,10 +106,10 @@ impl NatsConsumer {
     }
 
     pub async fn run(&self, ctx: CancellationToken) -> Result<()> {
-        info!(
+        debug!(
             stream = %self.stream_name,
             consumer = %self.consumer_name,
-            "Starting NATS consumer loop"
+            "starting nats consumer"
         );
 
         loop {
@@ -118,7 +118,7 @@ impl NatsConsumer {
                     info!(
                         stream = %self.stream_name,
                         consumer = %self.consumer_name,
-                        "Received shutdown signal, stopping consumer"
+                        "received shutdown signal, stopping consumer"
                     );
                     break;
                 }
@@ -128,7 +128,7 @@ impl NatsConsumer {
                             stream = %self.stream_name,
                             consumer = %self.consumer_name,
                             error = %e,
-                            "Error processing batch"
+                            "error processing batch"
                         );
                         // Continue processing despite errors
                         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -137,10 +137,10 @@ impl NatsConsumer {
             }
         }
 
-        info!(
+        debug!(
             stream = %self.stream_name,
             consumer = %self.consumer_name,
-            "Consumer stopped gracefully"
+            "consumer stopped gracefully"
         );
         Ok(())
     }
@@ -149,7 +149,7 @@ impl NatsConsumer {
         debug!(
             batch_size = self.batch_size,
             max_wait_secs = self.max_wait.as_secs(),
-            "Fetching message batch"
+            "fetching message batch"
         );
 
         // Fetch messages using the trait method
@@ -159,19 +159,18 @@ impl NatsConsumer {
             .await?;
 
         if raw_messages.is_empty() {
-            debug!("No messages in batch");
+            debug!("no messages in batch");
             return Ok(());
         }
 
-        debug!(message_count = raw_messages.len(), "Received message batch");
-
+        debug!(message_count = raw_messages.len(), "received message batch");
         // Process batch using the custom processor
         // The processor is responsible for deserialization and business logic
         let processing_result = match (self.processor)(&raw_messages).await {
             Ok(result) => result,
             Err(e) => {
                 // If the processor returns an error, Nak all messages
-                error!(error = %e, "Processor returned error, rejecting all messages");
+                error!(error = %e, "processor returned error, rejecting all messages");
                 ProcessingResult::nak_all(raw_messages.len(), Some(e.to_string()))
             }
         };
@@ -184,20 +183,20 @@ impl NatsConsumer {
                     error!(
                         error = %e,
                         message_index = idx,
-                        "Failed to acknowledge message"
+                        "failed to acknowledge message"
                     );
                 }
             } else {
                 warn!(
                     message_index = idx,
                     batch_size = raw_messages.len(),
-                    "Invalid ack index in ProcessingResult"
+                    "invalid ack index"
                 );
             }
         }
 
         if ack_count > 0 {
-            debug!(ack_count, "Acknowledged messages");
+            debug!(ack_count, "acknowledged messages");
         }
 
         // Process rejections
@@ -209,13 +208,13 @@ impl NatsConsumer {
                         message_index = idx,
                         subject = %msg.subject,
                         error = %err,
-                        "Rejecting message due to processing error"
+                        "rejecting message due to processing error"
                     );
                 } else {
                     warn!(
                         message_index = idx,
                         subject = %msg.subject,
-                        "Rejecting message"
+                        "rejecting message"
                     );
                 }
 
@@ -223,20 +222,20 @@ impl NatsConsumer {
                     error!(
                         error = %e,
                         message_index = idx,
-                        "Failed to reject message"
+                        "failed to reject message"
                     );
                 }
             } else {
                 warn!(
                     message_index = idx,
                     batch_size = raw_messages.len(),
-                    "Invalid nak index in ProcessingResult"
+                    "invalid nak index"
                 );
             }
         }
 
         if nak_count > 0 {
-            debug!(nak_count, "Rejected messages for redelivery");
+            debug!(nak_count, "rejected messages for redelivery");
         }
 
         Ok(())

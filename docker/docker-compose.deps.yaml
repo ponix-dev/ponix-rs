@@ -66,6 +66,21 @@ services:
       timeout: 5s
       retries: 5
 
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: ponix-otel-lgtm
+    ports:
+      - "3000:3000"   # Grafana UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    volumes:
+      - otel-data:/data
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - ponix
+    restart: unless-stopped
+
 networks:
   ponix:
     name: ponix
@@ -76,4 +91,6 @@ volumes:
   clickhouse-data:
     driver: local
   postgres-data:
+    driver: local
+  otel-data:
     driver: local

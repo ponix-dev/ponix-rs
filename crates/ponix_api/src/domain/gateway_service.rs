@@ -4,7 +4,7 @@ use common::domain::{
     OrganizationRepository, UpdateGatewayInput,
 };
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, instrument};
 
 /// Service for gateway business logic
 pub struct GatewayService {
@@ -24,6 +24,7 @@ impl GatewayService {
     }
 
     /// Create a new gateway for an organization
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id, gateway_type = %input.gateway_type))]
     pub async fn create_gateway(&self, input: CreateGatewayInput) -> DomainResult<Gateway> {
         debug!(organization_id = %input.organization_id, gateway_type = %input.gateway_type, "Creating gateway");
 
@@ -72,11 +73,12 @@ impl GatewayService {
 
         let gateway = self.gateway_repository.create_gateway(repo_input).await?;
 
-        info!(gateway_id = %gateway.gateway_id, "Gateway created successfully");
+        debug!(gateway_id = %gateway.gateway_id, "Gateway created successfully");
         Ok(gateway)
     }
 
     /// Get a gateway by ID
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
     pub async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, "Getting gateway");
 
@@ -96,6 +98,7 @@ impl GatewayService {
     }
 
     /// Update a gateway
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
     pub async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, "Updating gateway");
 
@@ -116,11 +119,12 @@ impl GatewayService {
 
         let gateway = self.gateway_repository.update_gateway(input).await?;
 
-        info!(gateway_id = %gateway.gateway_id, "Gateway updated successfully");
+        debug!(gateway_id = %gateway.gateway_id, "Gateway updated successfully");
         Ok(gateway)
     }
 
     /// Soft delete a gateway
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
     pub async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()> {
         debug!(gateway_id = %input.gateway_id, "Deleting gateway");
 
@@ -134,11 +138,12 @@ impl GatewayService {
             .delete_gateway(&input.gateway_id)
             .await?;
 
-        info!("Gateway soft deleted successfully");
+        debug!("Gateway soft deleted successfully");
         Ok(())
     }
 
     /// List gateways by organization
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     pub async fn list_gateways(&self, input: ListGatewaysInput) -> DomainResult<Vec<Gateway>> {
         debug!(organization_id = %input.organization_id, "Listing gateways");
 
@@ -153,7 +158,7 @@ impl GatewayService {
             .list_gateways(&input.organization_id)
             .await?;
 
-        info!(count = gateways.len(), "Listed gateways");
+        debug!(count = gateways.len(), "Listed gateways");
         Ok(gateways)
     }
 }

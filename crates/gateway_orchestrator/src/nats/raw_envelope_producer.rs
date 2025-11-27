@@ -1,6 +1,8 @@
 use anyhow::Context;
 use async_trait::async_trait;
-use common::domain::{DomainError, DomainResult, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait};
+use common::domain::{
+    DomainError, DomainResult, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait,
+};
 use common::nats::JetStreamPublisher;
 
 use prost::Message as ProstMessage;
@@ -30,7 +32,7 @@ impl RawEnvelopeProducer {
 
 #[async_trait]
 impl RawEnvelopeProducerTrait for RawEnvelopeProducer {
-    async fn publish(&self, envelope: &RawEnvelope) -> DomainResult<()> {
+    async fn publish_raw_envelope(&self, envelope: &RawEnvelope) -> DomainResult<()> {
         // Convert domain RawEnvelope to protobuf
         let proto_envelope = common::proto::raw_envelope_domain_to_proto(envelope);
 
@@ -54,7 +56,7 @@ impl RawEnvelopeProducerTrait for RawEnvelopeProducer {
             .context("Failed to publish and acknowledge message")
             .map_err(DomainError::RepositoryError)?;
 
-        info!(
+        debug!(
             subject = %subject,
             device_id = %proto_envelope.device_id,
             "Successfully published RawEnvelope"
@@ -94,7 +96,7 @@ mod tests {
         };
 
         // Act
-        let result = producer.publish(&envelope).await;
+        let result = producer.publish_raw_envelope(&envelope).await;
 
         // Assert
         assert!(result.is_ok());
@@ -121,7 +123,7 @@ mod tests {
         };
 
         // Act
-        let result = producer.publish(&envelope).await;
+        let result = producer.publish_raw_envelope(&envelope).await;
 
         // Assert
         assert!(result.is_err());

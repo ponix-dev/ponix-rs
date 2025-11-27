@@ -31,7 +31,7 @@ impl PayloadConverter for CelPayloadConverter {
         debug!(
             expression = %expression,
             payload_size = payload.len(),
-            "Converting payload with CEL expression"
+            "converting payload with CEL expression"
         );
 
         self.cel_env.execute(expression, payload).map_err(|e| {

@@ -4,7 +4,7 @@ use common::domain::{
     OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer, RawEnvelope,
 };
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, instrument, warn};
 
 /// Domain service that orchestrates raw → processed envelope conversion
 ///
@@ -38,12 +38,13 @@ impl RawEnvelopeService {
     }
 
     /// Process a raw envelope: fetch device, validate org, convert payload, publish result
+    #[instrument(skip(self), fields(device_id = %raw.end_device_id, organization_id = %raw.organization_id))]
     pub async fn process_raw_envelope(&self, raw: RawEnvelope) -> DomainResult<()> {
         debug!(
             device_id = %raw.end_device_id,
             org_id = %raw.organization_id,
             payload_size = raw.payload.len(),
-            "Processing raw envelope"
+            "processing raw envelope"
         );
 
         // 1. Fetch device to get CEL expression
@@ -56,7 +57,7 @@ impl RawEnvelopeService {
             .ok_or_else(|| DomainError::DeviceNotFound(raw.end_device_id.clone()))?;
 
         // 2. Validate organization is not deleted
-        debug!(organization_id = %device.organization_id, "Validating organization status");
+        debug!(organization_id = %device.organization_id, "validating organization status");
         match self
             .organization_repository
             .get_organization(GetOrganizationInput {
@@ -68,7 +69,7 @@ impl RawEnvelopeService {
                 warn!(
                     device_id = %raw.end_device_id,
                     org_id = %device.organization_id,
-                    "Rejecting envelope from deleted organization"
+                    "rejecting envelope from deleted organization"
                 );
                 return Err(DomainError::OrganizationDeleted(format!(
                     "Cannot process envelope from deleted organization: {}",
@@ -79,7 +80,7 @@ impl RawEnvelopeService {
                 warn!(
                     device_id = %raw.end_device_id,
                     org_id = %device.organization_id,
-                    "Rejecting envelope from non-existent organization"
+                    "rejecting envelope from non-existent organization"
                 );
                 return Err(DomainError::OrganizationNotFound(format!(
                     "Organization not found: {}",
@@ -95,7 +96,7 @@ impl RawEnvelopeService {
         if device.payload_conversion.is_empty() {
             error!(
                 device_id = %raw.end_device_id,
-                "Device has empty CEL expression"
+                "device has empty CEL expression"
             );
             return Err(DomainError::MissingCelExpression(raw.end_device_id.clone()));
         }
@@ -103,7 +104,7 @@ impl RawEnvelopeService {
         debug!(
             device_id = %raw.end_device_id,
             expression = %device.payload_conversion,
-            "Converting payload with CEL expression"
+            "converting payload with CEL expression"
         );
 
         // 4. Convert binary payload using CEL expression
@@ -137,16 +138,18 @@ impl RawEnvelopeService {
         debug!(
             device_id = %raw.end_device_id,
             field_count = processed_envelope.data.len(),
-            "Successfully converted payload"
+            "successfully converted payload"
         );
 
         // 7. Publish via producer trait
-        self.producer.publish(&processed_envelope).await?;
+        self.producer
+            .publish_processed_envelope(&processed_envelope)
+            .await?;
 
-        info!(
+        debug!(
             device_id = %raw.end_device_id,
             org_id = %raw.organization_id,
-            "Successfully processed and published envelope"
+            "successfully processed and published envelope"
         );
 
         Ok(())
@@ -220,7 +223,7 @@ mod tests {
             .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
 
         mock_producer
-            .expect_publish()
+            .expect_publish_processed_envelope()
             .withf(|env: &ProcessedEnvelope| {
                 env.end_device_id == "device-123"
                     && env.organization_id == "org-456"
@@ -511,11 +514,14 @@ mod tests {
             .times(1)
             .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
 
-        mock_producer.expect_publish().times(1).return_once(|_| {
-            Err(DomainError::RepositoryError(anyhow::anyhow!(
-                "NATS publish failed"
-            )))
-        });
+        mock_producer
+            .expect_publish_processed_envelope()
+            .times(1)
+            .return_once(|_| {
+                Err(DomainError::RepositoryError(anyhow::anyhow!(
+                    "NATS publish failed"
+                )))
+            });
 
         let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),

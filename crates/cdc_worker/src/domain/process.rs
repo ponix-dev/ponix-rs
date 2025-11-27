@@ -8,7 +8,7 @@ use etl::pipeline::Pipeline;
 use etl::store::both::memory::MemoryStore;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 pub struct CdcProcess {
     config: CdcConfig,
@@ -33,9 +33,9 @@ impl CdcProcess {
     }
 
     pub async fn run(self) -> Result<()> {
-        info!(
+        debug!(
             entity_count = self.entity_configs.len(),
-            "Starting CDC process"
+            "starting CDC process"
         );
 
         // Create NATS publisher
@@ -84,21 +84,21 @@ impl CdcProcess {
             result = pipeline.start() => {
                 match result {
                     Ok(_) => {
-                        info!("CDC pipeline started, waiting for completion");
+                        info!("cdc pipeline started, waiting for completion");
                         // Wait for pipeline to complete
                         if let Err(e) = pipeline.wait().await {
-                            error!(error = %e, "CDC pipeline error");
+                            error!(error = %e, "cdc pipeline error");
                             return Err(e.into());
                         }
                     }
                     Err(e) => {
-                        error!(error = %e, "CDC pipeline start error");
+                        error!(error = %e, "cdc pipeline start error");
                         return Err(e.into());
                     }
                 }
             }
             _ = self.cancellation_token.cancelled() => {
-                info!("CDC process cancelled, shutting down");
+                debug!("cdc process cancelled, shutting down");
             }
         }
 

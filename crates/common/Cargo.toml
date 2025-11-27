@@ -33,6 +33,14 @@ tokio-postgres = { version = "0.7", features = [
 # Connection pooling
 deadpool-postgres = "0.14"
 
+# OpenTelemetry for trace context propagation
+opentelemetry.workspace = true
+tracing-opentelemetry.workspace = true
+
+# Tower for middleware
+tower = "0.5"
+http = "1.0"
+
 [dev-dependencies]
 mockall = "0.13"
 testcontainers = "0.23"
