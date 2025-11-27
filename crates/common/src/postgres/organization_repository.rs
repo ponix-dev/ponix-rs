@@ -7,7 +7,7 @@ use crate::postgres::PostgresClient;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 /// Organization row for PostgreSQL storage with timestamp metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +45,7 @@ impl PostgresOrganizationRepository {
 
 #[async_trait]
 impl OrganizationRepository for PostgresOrganizationRepository {
+    #[instrument(skip(self), fields(organization_id = %input.id))]
     async fn create_organization(
         &self,
         input: CreateOrganizationInputWithId,
@@ -90,6 +91,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         })
     }
 
+    #[instrument(skip(self), fields(organization_id = %input.organization_id))]
     async fn get_organization(
         &self,
         input: GetOrganizationInput,
@@ -127,6 +129,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         }
     }
 
+    #[instrument(skip(self), fields(organization_id = %input.organization_id))]
     async fn update_organization(
         &self,
         input: UpdateOrganizationInput,
@@ -169,6 +172,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         }
     }
 
+    #[instrument(skip(self), fields(organization_id = %input.organization_id))]
     async fn delete_organization(&self, input: DeleteOrganizationInput) -> DomainResult<()> {
         let conn = self
             .client
@@ -199,6 +203,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         Ok(())
     }
 
+    #[instrument(skip(self, _input))]
     async fn list_organizations(
         &self,
         _input: ListOrganizationsInput,

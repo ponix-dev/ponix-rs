@@ -7,7 +7,7 @@ use common::domain::{DomainResult, Gateway, GatewayConfig, GatewayRepository};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{error, info, instrument, warn};
 
 pub struct GatewayOrchestrationService {
     gateway_repository: Arc<dyn GatewayRepository>,
@@ -32,7 +32,8 @@ impl GatewayOrchestrationService {
     }
 
     /// Load all non-deleted gateways and start their processes
-    pub async fn start(&self) -> DomainResult<()> {
+    #[instrument(skip(self))]
+    pub async fn launch_gateways(&self) -> DomainResult<()> {
         info!("Starting GatewayOrchestrator - loading all non-deleted gateways");
 
         let gateways = self.gateway_repository.list_all_gateways().await?;
@@ -52,12 +53,14 @@ impl GatewayOrchestrationService {
     }
 
     /// Handle gateway created event
+    #[instrument(skip(self), fields(gateway_id = %gateway.gateway_id))]
     pub async fn handle_gateway_created(&self, gateway: Gateway) -> DomainResult<()> {
         info!("Handling gateway created: {}", gateway.gateway_id);
         self.start_gateway_process(&gateway).await
     }
 
     /// Handle gateway updated event
+    #[instrument(skip(self), fields(gateway_id = %gateway.gateway_id))]
     pub async fn handle_gateway_updated(&self, gateway: Gateway) -> DomainResult<()> {
         info!("Handling gateway updated: {}", gateway.gateway_id);
 
@@ -105,12 +108,14 @@ impl GatewayOrchestrationService {
     }
 
     /// Handle gateway deleted event
+    #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     pub async fn handle_gateway_deleted(&self, gateway_id: &str) -> DomainResult<()> {
         info!("Handling gateway deleted: {}", gateway_id);
         self.stop_gateway_process(gateway_id).await
     }
 
     /// Stop all running gateway processes
+    #[instrument(skip(self))]
     pub async fn shutdown(&self) -> DomainResult<()> {
         info!("Shutting down GatewayOrchestrator");
 
@@ -129,6 +134,7 @@ impl GatewayOrchestrationService {
     }
 
     /// Start a gateway process
+    #[instrument(skip(self), fields(gateway_id = %gateway.gateway_id))]
     async fn start_gateway_process(&self, gateway: &Gateway) -> DomainResult<()> {
         // Check if process already exists
         if self.process_store.exists(&gateway.gateway_id).await? {
@@ -162,6 +168,7 @@ impl GatewayOrchestrationService {
     }
 
     /// Stop a gateway process
+    #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     async fn stop_gateway_process(&self, gateway_id: &str) -> DomainResult<()> {
         match self.process_store.remove(gateway_id).await? {
             Some(handle) => {
@@ -325,7 +332,7 @@ mod tests {
             CancellationToken::new(),
         );
 
-        let result = orchestrator.start().await;
+        let result = orchestrator.launch_gateways().await;
         assert!(result.is_ok());
 
         // Verify processes were started

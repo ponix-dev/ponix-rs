@@ -6,7 +6,7 @@ use crate::postgres::PostgresClient;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 /// Gateway row for PostgreSQL storage with timestamp metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +76,7 @@ impl PostgresGatewayRepository {
 
 #[async_trait]
 impl GatewayRepository for PostgresGatewayRepository {
+    #[instrument(skip(self), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     async fn create_gateway(&self, input: CreateGatewayInputWithId) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, "Creating gateway in database");
 
@@ -127,6 +128,7 @@ impl GatewayRepository for PostgresGatewayRepository {
         })
     }
 
+    #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     async fn get_gateway(&self, gateway_id: &str) -> DomainResult<Option<Gateway>> {
         debug!(gateway_id = %gateway_id, "Getting gateway from database");
 
@@ -162,6 +164,7 @@ impl GatewayRepository for PostgresGatewayRepository {
         Ok(gateway)
     }
 
+    #[instrument(skip(self), fields(gateway_id = %input.gateway_id))]
     async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, "Updating gateway in database");
 
@@ -226,6 +229,7 @@ impl GatewayRepository for PostgresGatewayRepository {
         }
     }
 
+    #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     async fn delete_gateway(&self, gateway_id: &str) -> DomainResult<()> {
         debug!(gateway_id = %gateway_id, "Soft deleting gateway");
 
@@ -255,6 +259,7 @@ impl GatewayRepository for PostgresGatewayRepository {
         Ok(())
     }
 
+    #[instrument(skip(self), fields(organization_id = %organization_id))]
     async fn list_gateways(&self, organization_id: &str) -> DomainResult<Vec<Gateway>> {
         debug!(organization_id = %organization_id, "Listing gateways from database");
 
@@ -295,6 +300,7 @@ impl GatewayRepository for PostgresGatewayRepository {
         Ok(gateways)
     }
 
+    #[instrument(skip(self))]
     async fn list_all_gateways(&self) -> DomainResult<Vec<Gateway>> {
         debug!("Listing all non-deleted gateways from database");
 

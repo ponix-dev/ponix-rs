@@ -4,7 +4,7 @@ use common::domain::{
     OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer, RawEnvelope,
 };
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Domain service that orchestrates raw → processed envelope conversion
 ///
@@ -38,6 +38,7 @@ impl RawEnvelopeService {
     }
 
     /// Process a raw envelope: fetch device, validate org, convert payload, publish result
+    #[instrument(skip(self), fields(device_id = %raw.end_device_id, organization_id = %raw.organization_id))]
     pub async fn process_raw_envelope(&self, raw: RawEnvelope) -> DomainResult<()> {
         debug!(
             device_id = %raw.end_device_id,
@@ -141,7 +142,9 @@ impl RawEnvelopeService {
         );
 
         // 7. Publish via producer trait
-        self.producer.publish(&processed_envelope).await?;
+        self.producer
+            .publish_processed_envelope(&processed_envelope)
+            .await?;
 
         info!(
             device_id = %raw.end_device_id,
@@ -220,7 +223,7 @@ mod tests {
             .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
 
         mock_producer
-            .expect_publish()
+            .expect_publish_processed_envelope()
             .withf(|env: &ProcessedEnvelope| {
                 env.end_device_id == "device-123"
                     && env.organization_id == "org-456"
@@ -511,11 +514,14 @@ mod tests {
             .times(1)
             .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
 
-        mock_producer.expect_publish().times(1).return_once(|_| {
-            Err(DomainError::RepositoryError(anyhow::anyhow!(
-                "NATS publish failed"
-            )))
-        });
+        mock_producer
+            .expect_publish_processed_envelope()
+            .times(1)
+            .return_once(|_| {
+                Err(DomainError::RepositoryError(anyhow::anyhow!(
+                    "NATS publish failed"
+                )))
+            });
 
         let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),

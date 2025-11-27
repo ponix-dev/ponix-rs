@@ -6,7 +6,7 @@ use crate::postgres::PostgresClient;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 /// Device row for PostgreSQL storage with timestamp metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +47,7 @@ impl PostgresDeviceRepository {
 
 #[async_trait]
 impl DeviceRepository for PostgresDeviceRepository {
+    #[instrument(skip(self), fields(device_id = %input.device_id, organization_id = %input.organization_id))]
     async fn create_device(&self, input: CreateDeviceInputWithId) -> DomainResult<Device> {
         let conn = self
             .client
@@ -96,6 +97,7 @@ impl DeviceRepository for PostgresDeviceRepository {
         })
     }
 
+    #[instrument(skip(self), fields(device_id = %input.device_id))]
     async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Option<Device>> {
         let conn = self
             .client
@@ -129,6 +131,7 @@ impl DeviceRepository for PostgresDeviceRepository {
         }
     }
 
+    #[instrument(skip(self), fields(organization_id = %input.organization_id))]
     async fn list_devices(&self, input: ListDevicesInput) -> DomainResult<Vec<Device>> {
         let conn = self
             .client

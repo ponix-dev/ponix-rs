@@ -38,7 +38,7 @@ impl GatewayOrchestrator {
         ));
 
         // Start orchestrator to load existing gateways
-        orchestrator.start().await?;
+        orchestrator.launch_gateways().await?;
         info!("Gateway orchestrator started");
 
         // Setup CDC consumer

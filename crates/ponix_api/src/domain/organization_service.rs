@@ -4,7 +4,7 @@ use common::domain::{
     OrganizationRepository, UpdateOrganizationInput,
 };
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 /// Domain service for organization business logic
 pub struct OrganizationService {
@@ -17,6 +17,7 @@ impl OrganizationService {
     }
 
     /// Create a new organization with generated ID
+    #[instrument(skip(self, input), fields(name = %input.name))]
     pub async fn create_organization(
         &self,
         input: CreateOrganizationInput,
@@ -45,6 +46,7 @@ impl OrganizationService {
     }
 
     /// Get organization by ID (excludes soft deleted)
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     pub async fn get_organization(
         &self,
         input: GetOrganizationInput,
@@ -67,6 +69,7 @@ impl OrganizationService {
     }
 
     /// Update organization name
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     pub async fn update_organization(
         &self,
         input: UpdateOrganizationInput,
@@ -92,6 +95,7 @@ impl OrganizationService {
     }
 
     /// Soft delete organization
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     pub async fn delete_organization(&self, input: DeleteOrganizationInput) -> DomainResult<()> {
         debug!(organization_id = %input.organization_id, "Deleting organization");
 
@@ -108,6 +112,7 @@ impl OrganizationService {
     }
 
     /// List all active organizations (excludes soft deleted)
+    #[instrument(skip(self, input))]
     pub async fn list_organizations(
         &self,
         input: ListOrganizationsInput,

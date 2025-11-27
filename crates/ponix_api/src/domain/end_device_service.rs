@@ -3,7 +3,7 @@ use common::domain::{
     DomainResult, GetDeviceInput, GetOrganizationInput, ListDevicesInput, OrganizationRepository,
 };
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 /// Domain service for device management business logic
 /// This is the orchestration layer that handlers call
@@ -26,6 +26,7 @@ impl DeviceService {
     /// Create a new device with business logic validation
     /// Generates a unique device_id using xid
     /// Validates that the organization exists and is not deleted
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id, device_name = %input.name))]
     pub async fn create_device(&self, input: CreateDeviceInput) -> DomainResult<Device> {
         // Business logic: validate inputs
         if input.organization_id.is_empty() {
@@ -88,6 +89,7 @@ impl DeviceService {
     }
 
     /// Get a device by ID
+    #[instrument(skip(self, input), fields(device_id = %input.device_id))]
     pub async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Device> {
         if input.device_id.is_empty() {
             return Err(DomainError::InvalidDeviceId(
@@ -107,6 +109,7 @@ impl DeviceService {
     }
 
     /// List devices for an organization
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     pub async fn list_devices(&self, input: ListDevicesInput) -> DomainResult<Vec<Device>> {
         if input.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(

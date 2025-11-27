@@ -1,10 +1,10 @@
-use crate::nats::{BatchProcessor, ProcessingResult};
+use crate::nats::{set_parent_from_headers, BatchProcessor, ProcessingResult};
 use anyhow::Result;
 use async_nats::jetstream::Message;
 use futures::future::BoxFuture;
 use prost::Message as ProstMessage;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, info_span, Instrument};
 
 /// Wrapper type that pairs a decoded protobuf message with its original NATS message
 /// This allows business handlers to process decoded data while maintaining access
@@ -67,57 +67,73 @@ where
         let handler = handler.clone();
 
         Box::pin(async move {
-            debug!(batch_size = messages.len(), "Decoding protobuf batch");
+            // Create a span for the batch processing
+            let batch_span = info_span!(
+                "process_nats_batch",
+                batch_size = messages.len(),
+                message_type = std::any::type_name::<T>()
+            );
 
-            let mut decoded_messages = Vec::new();
-            let mut decode_failure_acks = Vec::new();
+            async move {
+                debug!(batch_size = messages.len(), "Decoding protobuf batch");
 
-            // Phase 1: Decode all messages, track failures for acking
-            for (idx, msg) in messages.into_iter().enumerate() {
-                match T::decode(msg.payload.as_ref()) {
-                    Ok(decoded) => {
-                        decoded_messages.push(DecodedMessage::new(idx, msg, decoded));
+                let mut decoded_messages = Vec::new();
+                let mut decode_failure_acks = Vec::new();
+
+                // Phase 1: Decode all messages, track failures for acking
+                for (idx, msg) in messages.into_iter().enumerate() {
+                    // Extract trace context from message headers for distributed tracing
+                    if let Some(headers) = msg.headers.as_ref() {
+                        set_parent_from_headers(headers);
                     }
-                    Err(e) => {
-                        error!(
-                            error = %e,
-                            subject = %msg.subject,
-                            message_index = idx,
-                            payload_size = msg.payload.len(),
-                            "Failed to decode protobuf message - acking to prevent poison pill"
-                        );
-                        // Ack failed decodes to remove poison pills from stream
-                        decode_failure_acks.push(idx);
+
+                    match T::decode(msg.payload.as_ref()) {
+                        Ok(decoded) => {
+                            decoded_messages.push(DecodedMessage::new(idx, msg, decoded));
+                        }
+                        Err(e) => {
+                            error!(
+                                error = %e,
+                                subject = %msg.subject,
+                                message_index = idx,
+                                payload_size = msg.payload.len(),
+                                "Failed to decode protobuf message - acking to prevent poison pill"
+                            );
+                            // Ack failed decodes to remove poison pills from stream
+                            decode_failure_acks.push(idx);
+                        }
                     }
                 }
+
+                debug!(
+                    decoded_count = decoded_messages.len(),
+                    failed_count = decode_failure_acks.len(),
+                    "Protobuf decode phase complete"
+                );
+
+                // Phase 2: Process successfully decoded messages with business handler
+                let mut handler_result = if decoded_messages.is_empty() {
+                    // No messages to process, return empty result
+                    ProcessingResult::new(vec![], vec![])
+                } else {
+                    handler(decoded_messages).await?
+                };
+
+                // Phase 3: Merge decode failure acks into handler result
+                // Decode failures are always ack'd to prevent poison pill redelivery
+                handler_result.ack.extend(decode_failure_acks);
+
+                debug!(
+                    total_ack = handler_result.ack.len(),
+                    total_nak = handler_result.nak.len(),
+                    "Protobuf processor complete"
+                );
+
+                Ok(handler_result)
             }
-
-            debug!(
-                decoded_count = decoded_messages.len(),
-                failed_count = decode_failure_acks.len(),
-                "Protobuf decode phase complete"
-            );
-
-            // Phase 2: Process successfully decoded messages with business handler
-            let mut handler_result = if decoded_messages.is_empty() {
-                // No messages to process, return empty result
-                ProcessingResult::new(vec![], vec![])
-            } else {
-                handler(decoded_messages).await?
-            };
-
-            // Phase 3: Merge decode failure acks into handler result
-            // Decode failures are always ack'd to prevent poison pill redelivery
-            handler_result.ack.extend(decode_failure_acks);
-
-            debug!(
-                total_ack = handler_result.ack.len(),
-                total_nak = handler_result.nak.len(),
-                "Protobuf processor complete"
-            );
-
-            Ok(handler_result)
-        }) as BoxFuture<'static, Result<ProcessingResult>>
+            .instrument(batch_span)
+            .await
+        })
     })
 }
 

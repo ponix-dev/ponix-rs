@@ -53,7 +53,10 @@ use common::domain::{
 
 #[async_trait::async_trait]
 impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
-    async fn publish(&self, envelope: &DomainProcessedEnvelope) -> DomainResult<()> {
+    async fn publish_processed_envelope(
+        &self,
+        envelope: &DomainProcessedEnvelope,
+    ) -> DomainResult<()> {
         // Convert domain ProcessedEnvelope to protobuf
         let proto_envelope = common::proto::domain_to_proto_envelope(envelope);
 
@@ -121,7 +124,8 @@ mod domain_trait_tests {
         };
 
         // Act
-        let result = ProcessedEnvelopeProducerTrait::publish(&producer, &envelope).await;
+        let result =
+            ProcessedEnvelopeProducerTrait::publish_processed_envelope(&producer, &envelope).await;
 
         // Assert
         assert!(result.is_ok());
@@ -152,7 +156,8 @@ mod domain_trait_tests {
         };
 
         // Act
-        let result = ProcessedEnvelopeProducerTrait::publish(&producer, &envelope).await;
+        let result =
+            ProcessedEnvelopeProducerTrait::publish_processed_envelope(&producer, &envelope).await;
 
         // Assert
         assert!(result.is_err());

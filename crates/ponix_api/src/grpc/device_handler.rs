@@ -9,7 +9,7 @@ use ponix_proto_prost::end_device::v1::{
 };
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceService as DeviceServiceTrait;
 
-use common::grpc::domain_error_to_status;
+use common::grpc::{domain_error_to_status, RecordGrpcStatus};
 use common::proto::{
     to_create_device_input, to_get_device_input, to_list_devices_input, to_proto_device,
 };
@@ -33,7 +33,8 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         skip(self, request),
         fields(
             organization_id = %request.get_ref().organization_id,
-            device_name = %request.get_ref().name
+            device_name = %request.get_ref().name,
+            rpc.grpc.status_code = tracing::field::Empty
         )
     )]
     async fn create_end_device(
@@ -60,12 +61,16 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         Ok(Response::new(CreateEndDeviceResponse {
             end_device: Some(proto_device),
         }))
+        .record_status()
     }
 
     #[instrument(
         name = "GetEndDevice",
         skip(self, request),
-        fields(device_id = %request.get_ref().device_id)
+        fields(
+            device_id = %request.get_ref().device_id,
+            rpc.grpc.status_code = tracing::field::Empty
+        )
     )]
     async fn get_end_device(
         &self,
@@ -89,12 +94,16 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         Ok(Response::new(GetEndDeviceResponse {
             end_device: Some(proto_device),
         }))
+        .record_status()
     }
 
     #[instrument(
         name = "ListEndDevices",
         skip(self, request),
-        fields(organization_id = %request.get_ref().organization_id)
+        fields(
+            organization_id = %request.get_ref().organization_id,
+            rpc.grpc.status_code = tracing::field::Empty
+        )
     )]
     async fn list_end_devices(
         &self,
@@ -120,5 +129,6 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         Ok(Response::new(ListEndDevicesResponse {
             end_devices: proto_devices,
         }))
+        .record_status()
     }
 }

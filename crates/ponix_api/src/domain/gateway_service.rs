@@ -4,7 +4,7 @@ use common::domain::{
     OrganizationRepository, UpdateGatewayInput,
 };
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 /// Service for gateway business logic
 pub struct GatewayService {
@@ -24,6 +24,7 @@ impl GatewayService {
     }
 
     /// Create a new gateway for an organization
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id, gateway_type = %input.gateway_type))]
     pub async fn create_gateway(&self, input: CreateGatewayInput) -> DomainResult<Gateway> {
         debug!(organization_id = %input.organization_id, gateway_type = %input.gateway_type, "Creating gateway");
 
@@ -77,6 +78,7 @@ impl GatewayService {
     }
 
     /// Get a gateway by ID
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
     pub async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, "Getting gateway");
 
@@ -96,6 +98,7 @@ impl GatewayService {
     }
 
     /// Update a gateway
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
     pub async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, "Updating gateway");
 
@@ -121,6 +124,7 @@ impl GatewayService {
     }
 
     /// Soft delete a gateway
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
     pub async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()> {
         debug!(gateway_id = %input.gateway_id, "Deleting gateway");
 
@@ -139,6 +143,7 @@ impl GatewayService {
     }
 
     /// List gateways by organization
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     pub async fn list_gateways(&self, input: ListGatewaysInput) -> DomainResult<Vec<Gateway>> {
         debug!(organization_id = %input.organization_id, "Listing gateways");
 

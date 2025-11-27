@@ -1,9 +1,11 @@
+use crate::nats::trace_context::inject_trace_context;
 use crate::nats::traits::{JetStreamConsumer, JetStreamPublisher, PullConsumer};
 use anyhow::{Context, Result};
 use async_nats::jetstream::{self, stream::Config as StreamConfig};
+use async_nats::HeaderMap;
 use async_trait::async_trait;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 
 pub struct NatsClient {
     client: async_nats::Client,
@@ -175,10 +177,15 @@ impl JetStreamPublisher for NatsJetStreamPublisher {
         Ok(())
     }
 
+    #[instrument(skip(self, payload), fields(subject = %subject, payload_size = payload.len()))]
     async fn publish(&self, subject: String, payload: bytes::Bytes) -> Result<()> {
+        // Inject trace context into headers for distributed tracing
+        let mut headers = HeaderMap::new();
+        inject_trace_context(&mut headers);
+
         let ack = self
             .context
-            .publish(subject, payload)
+            .publish_with_headers(subject, headers, payload)
             .await
             .context("Failed to publish message to JetStream")?;
 

@@ -1,4 +1,5 @@
 mod config;
+mod telemetry;
 
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
@@ -17,8 +18,8 @@ use ponix_api::ponix_api::{PonixApi, PonixApiConfig};
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
+use telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig};
 use tracing::{debug, error, info};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() {
@@ -31,19 +32,25 @@ async fn main() {
         }
     };
 
-    tracing_subscriber::registry()
-        .with(
-            fmt::layer()
-                .json()
-                .with_span_list(true)
-                .with_current_span(true),
-        )
-        .with(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level)),
-        )
-        .init();
+    // Initialize telemetry (tracing + OpenTelemetry)
+    let tracer_provider = match init_telemetry(&TelemetryConfig {
+        service_name: config.otel_service_name.clone(),
+        otel_endpoint: config.otel_endpoint.clone(),
+        otel_enabled: config.otel_enabled,
+        log_level: config.log_level.clone(),
+    }) {
+        Ok(provider) => provider,
+        Err(e) => {
+            eprintln!("Failed to initialize telemetry: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-    info!("Starting ponix-all-in-one service");
+    info!(
+        otel_enabled = config.otel_enabled,
+        otel_endpoint = %config.otel_endpoint,
+        "Starting ponix-all-in-one service"
+    );
     debug!("Configuration: {:?}", config);
 
     // Initialize shared dependencies
@@ -169,6 +176,10 @@ async fn main() {
                     if let Ok(client) = Arc::try_unwrap(nats_for_close) {
                         client.close().await;
                     }
+
+                    // Shutdown telemetry and flush pending traces
+                    shutdown_telemetry(tracer_provider);
+
                     info!("Cleanup complete");
                     Ok(())
                 })

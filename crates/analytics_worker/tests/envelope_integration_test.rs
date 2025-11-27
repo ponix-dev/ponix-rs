@@ -121,7 +121,10 @@ mod mocks {
 
     #[async_trait]
     impl ProcessedEnvelopeProducer for InMemoryProducer {
-        async fn publish(&self, envelope: &ProcessedEnvelope) -> DomainResult<()> {
+        async fn publish_processed_envelope(
+            &self,
+            envelope: &ProcessedEnvelope,
+        ) -> DomainResult<()> {
             let mut published = self.published.lock().unwrap();
             published.push(envelope.clone());
             Ok(())

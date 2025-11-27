@@ -58,10 +58,13 @@ services:
       PONIX_CDC_BATCH_TIMEOUT_MS: "5000"
       PONIX_CDC_RETRY_DELAY_MS: "10000"
       PONIX_CDC_MAX_RETRY_ATTEMPTS: "5"
+
+      PONIX_OTEL_ENDPOINT: "http://otel-lgtm:4317"
     depends_on:
       - nats
       - clickhouse
       - postgres
+      - otel-lgtm
     restart: unless-stopped
     networks:
       - ponix

@@ -42,7 +42,7 @@ pub trait ProcessedEnvelopeProducer: Send + Sync {
     ///
     /// # Returns
     /// () on success, DomainError on failure
-    async fn publish(&self, envelope: &ProcessedEnvelope) -> DomainResult<()>;
+    async fn publish_processed_envelope(&self, envelope: &ProcessedEnvelope) -> DomainResult<()>;
 }
 
 /// Trait for publishing raw envelopes to message broker
@@ -61,7 +61,7 @@ pub trait RawEnvelopeProducer: Send + Sync {
     ///
     /// # Returns
     /// () on success, DomainError on failure
-    async fn publish(&self, envelope: &RawEnvelope) -> DomainResult<()>;
+    async fn publish_raw_envelope(&self, envelope: &RawEnvelope) -> DomainResult<()>;
 }
 
 /// Repository trait for processed envelope storage operations

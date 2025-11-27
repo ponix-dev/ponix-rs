@@ -1,12 +1,12 @@
 use crate::domain::GatewayOrchestrationService;
 use anyhow::{Context, Result};
 use common::domain::GatewayCdcEvent;
-use common::nats::NatsClient;
+use common::nats::{set_parent_from_headers, NatsClient};
 use common::proto::parse_gateway_cdc_event;
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, info_span, Instrument};
 
 pub struct GatewayCdcConsumer {
     nats_client: Arc<NatsClient>,
@@ -127,29 +127,45 @@ impl GatewayCdcConsumer {
     async fn process_message(&self, msg: &async_nats::jetstream::Message) -> Result<()> {
         let event = parse_gateway_cdc_event(&msg.subject, &msg.payload)?;
 
-        info!("Processing CDC event for gateway: {}", event.gateway_id());
+        // Create a span for processing this CDC event
+        let headers = msg.headers.as_ref().cloned().unwrap_or_default();
+        let span = info_span!(
+            "process_gateway_cdc_event",
+            gateway_id = %event.gateway_id(),
+            subject = %msg.subject
+        );
 
-        match event {
-            GatewayCdcEvent::Created { gateway } => {
-                self.orchestrator
-                    .handle_gateway_created(gateway)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+        async move {
+            // Set the parent context from NATS headers on the current span
+            // This connects this span to the trace that published the message
+            set_parent_from_headers(&headers);
+
+            info!("Processing CDC event for gateway: {}", event.gateway_id());
+
+            match event {
+                GatewayCdcEvent::Created { gateway } => {
+                    self.orchestrator
+                        .handle_gateway_created(gateway)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+                }
+                GatewayCdcEvent::Updated { gateway: new } => {
+                    self.orchestrator
+                        .handle_gateway_updated(new)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+                }
+                GatewayCdcEvent::Deleted { gateway_id } => {
+                    self.orchestrator
+                        .handle_gateway_deleted(&gateway_id)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
+                }
             }
-            GatewayCdcEvent::Updated { gateway: new } => {
-                self.orchestrator
-                    .handle_gateway_updated(new)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
-            }
-            GatewayCdcEvent::Deleted { gateway_id } => {
-                self.orchestrator
-                    .handle_gateway_deleted(&gateway_id)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Orchestrator error: {}", e))?;
-            }
+
+            Ok(())
         }
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 }
