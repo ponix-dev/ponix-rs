@@ -47,7 +47,7 @@ impl PostgresDeviceRepository {
 
 #[async_trait]
 impl DeviceRepository for PostgresDeviceRepository {
-    #[instrument(skip(self), fields(device_id = %input.device_id, organization_id = %input.organization_id))]
+    #[instrument(skip(self, input), fields(device_id = %input.device_id, organization_id = %input.organization_id))]
     async fn create_device(&self, input: CreateDeviceInputWithId) -> DomainResult<Device> {
         let conn = self
             .client
@@ -84,7 +84,7 @@ impl DeviceRepository for PostgresDeviceRepository {
             return Err(DomainError::RepositoryError(e.into()));
         }
 
-        debug!("Registered device: {}", input.device_id);
+        debug!("registered device: {}", input.device_id);
 
         // Return created device
         Ok(Device {
@@ -97,7 +97,7 @@ impl DeviceRepository for PostgresDeviceRepository {
         })
     }
 
-    #[instrument(skip(self), fields(device_id = %input.device_id))]
+    #[instrument(skip(self, input), fields(device_id = %input.device_id))]
     async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Option<Device>> {
         let conn = self
             .client
@@ -131,7 +131,7 @@ impl DeviceRepository for PostgresDeviceRepository {
         }
     }
 
-    #[instrument(skip(self), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     async fn list_devices(&self, input: ListDevicesInput) -> DomainResult<Vec<Device>> {
         let conn = self
             .client
@@ -166,7 +166,7 @@ impl DeviceRepository for PostgresDeviceRepository {
             .collect();
 
         debug!(
-            "Found {} devices for organization: {}",
+            "found {} devices for organization: {}",
             rows.len(),
             input.organization_id
         );

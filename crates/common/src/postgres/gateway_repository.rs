@@ -6,7 +6,7 @@ use crate::postgres::PostgresClient;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, instrument};
+use tracing::{debug, instrument};
 
 /// Gateway row for PostgreSQL storage with timestamp metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,9 +76,9 @@ impl PostgresGatewayRepository {
 
 #[async_trait]
 impl GatewayRepository for PostgresGatewayRepository {
-    #[instrument(skip(self), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     async fn create_gateway(&self, input: CreateGatewayInputWithId) -> DomainResult<Gateway> {
-        debug!(gateway_id = %input.gateway_id, "Creating gateway in database");
+        debug!(gateway_id = %input.gateway_id, "creating gateway in database");
 
         let conn = self
             .client
@@ -115,7 +115,7 @@ impl GatewayRepository for PostgresGatewayRepository {
             return Err(DomainError::RepositoryError(e.into()));
         }
 
-        info!(gateway_id = %input.gateway_id, "Gateway created in database");
+        debug!(gateway_id = %input.gateway_id, "gateway created in database");
 
         Ok(Gateway {
             gateway_id: input.gateway_id,
@@ -130,7 +130,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
     #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     async fn get_gateway(&self, gateway_id: &str) -> DomainResult<Option<Gateway>> {
-        debug!(gateway_id = %gateway_id, "Getting gateway from database");
+        debug!(gateway_id = %gateway_id, "getting gateway from database");
 
         let conn = self
             .client
@@ -164,9 +164,9 @@ impl GatewayRepository for PostgresGatewayRepository {
         Ok(gateway)
     }
 
-    #[instrument(skip(self), fields(gateway_id = %input.gateway_id))]
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
     async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
-        debug!(gateway_id = %input.gateway_id, "Updating gateway in database");
+        debug!(gateway_id = %input.gateway_id, "updating gateway in database");
 
         let conn = self
             .client
@@ -222,7 +222,7 @@ impl GatewayRepository for PostgresGatewayRepository {
                     created_at: row.get(5),
                     updated_at: row.get(6),
                 };
-                info!(gateway_id = %gateway_row.gateway_id, "Gateway updated in database");
+                debug!(gateway_id = %gateway_row.gateway_id, "gateway updated in database");
                 Ok(gateway_row.into())
             }
             None => Err(DomainError::GatewayNotFound(input.gateway_id)),
@@ -231,7 +231,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
     #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     async fn delete_gateway(&self, gateway_id: &str) -> DomainResult<()> {
-        debug!(gateway_id = %gateway_id, "Soft deleting gateway");
+        debug!(gateway_id = %gateway_id, "soft deleting gateway");
 
         let conn = self
             .client
@@ -255,13 +255,13 @@ impl GatewayRepository for PostgresGatewayRepository {
             return Err(DomainError::GatewayNotFound(gateway_id.to_string()));
         }
 
-        info!(gateway_id = %gateway_id, "Gateway soft deleted");
+        debug!(gateway_id = %gateway_id, "gateway soft deleted");
         Ok(())
     }
 
     #[instrument(skip(self), fields(organization_id = %organization_id))]
     async fn list_gateways(&self, organization_id: &str) -> DomainResult<Vec<Gateway>> {
-        debug!(organization_id = %organization_id, "Listing gateways from database");
+        debug!(organization_id = %organization_id, "listing gateways from database");
 
         let conn = self
             .client
@@ -296,13 +296,13 @@ impl GatewayRepository for PostgresGatewayRepository {
             })
             .collect();
 
-        info!(count = gateways.len(), "Listed gateways from database");
+        debug!(count = gateways.len(), "listed gateways from database");
         Ok(gateways)
     }
 
     #[instrument(skip(self))]
     async fn list_all_gateways(&self) -> DomainResult<Vec<Gateway>> {
-        debug!("Listing all non-deleted gateways from database");
+        debug!("listing all non-deleted gateways from database");
 
         let conn = self
             .client
@@ -337,7 +337,7 @@ impl GatewayRepository for PostgresGatewayRepository {
             })
             .collect();
 
-        info!(count = gateways.len(), "Listed all gateways from database");
+        debug!(count = gateways.len(), "listed all gateways from database");
         Ok(gateways)
     }
 }

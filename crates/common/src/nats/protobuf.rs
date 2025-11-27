@@ -75,7 +75,7 @@ where
             );
 
             async move {
-                debug!(batch_size = messages.len(), "Decoding protobuf batch");
+                debug!(batch_size = messages.len(), "decoding protobuf batch");
 
                 let mut decoded_messages = Vec::new();
                 let mut decode_failure_acks = Vec::new();
@@ -97,7 +97,7 @@ where
                                 subject = %msg.subject,
                                 message_index = idx,
                                 payload_size = msg.payload.len(),
-                                "Failed to decode protobuf message - acking to prevent poison pill"
+                                "failed to decode protobuf message - acking to prevent poison pill"
                             );
                             // Ack failed decodes to remove poison pills from stream
                             decode_failure_acks.push(idx);
@@ -108,7 +108,7 @@ where
                 debug!(
                     decoded_count = decoded_messages.len(),
                     failed_count = decode_failure_acks.len(),
-                    "Protobuf decode phase complete"
+                    "protobuf decode phase complete"
                 );
 
                 // Phase 2: Process successfully decoded messages with business handler
@@ -126,7 +126,7 @@ where
                 debug!(
                     total_ack = handler_result.ack.len(),
                     total_nak = handler_result.nak.len(),
-                    "Protobuf processor complete"
+                    "protobuf processor complete"
                 );
 
                 Ok(handler_result)

@@ -45,7 +45,7 @@ impl PostgresOrganizationRepository {
 
 #[async_trait]
 impl OrganizationRepository for PostgresOrganizationRepository {
-    #[instrument(skip(self), fields(organization_id = %input.id))]
+    #[instrument(skip(self, input), fields(organization_id = %input.id))]
     async fn create_organization(
         &self,
         input: CreateOrganizationInputWithId,
@@ -79,7 +79,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
             return Err(DomainError::RepositoryError(e.into()));
         }
 
-        debug!(organization_id = %input.id, "Organization created in database");
+        debug!(organization_id = %input.id, "organization created in database");
 
         // Return created organization
         Ok(Organization {
@@ -91,7 +91,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         })
     }
 
-    #[instrument(skip(self), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     async fn get_organization(
         &self,
         input: GetOrganizationInput,
@@ -102,7 +102,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
             .await
             .map_err(DomainError::RepositoryError)?;
 
-        debug!(organization_id = %input.organization_id, "Fetching organization from database");
+        debug!(organization_id = %input.organization_id, "fetching organization from database");
 
         let row = conn
             .query_opt(
@@ -129,7 +129,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         }
     }
 
-    #[instrument(skip(self), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     async fn update_organization(
         &self,
         input: UpdateOrganizationInput,
@@ -142,7 +142,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
 
         let now = Utc::now();
 
-        debug!(organization_id = %input.organization_id, "Updating organization in database");
+        debug!(organization_id = %input.organization_id, "updating organization in database");
 
         let row = conn
             .query_opt(
@@ -172,7 +172,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         }
     }
 
-    #[instrument(skip(self), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     async fn delete_organization(&self, input: DeleteOrganizationInput) -> DomainResult<()> {
         let conn = self
             .client
@@ -182,7 +182,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
 
         let now = Utc::now();
 
-        debug!(organization_id = %input.organization_id, "Soft deleting organization in database");
+        debug!(organization_id = %input.organization_id, "soft deleting organization in database");
 
         let rows_affected = conn
             .execute(
@@ -214,7 +214,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
             .await
             .map_err(DomainError::RepositoryError)?;
 
-        debug!("Listing all active organizations from database");
+        debug!("listing all active organizations from database");
 
         let rows = conn
             .query(

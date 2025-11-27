@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Server;
-use tracing::{error, info};
+use tracing::{debug, error};
 
 use crate::domain::{DeviceService, GatewayService, OrganizationService};
 use ponix_proto_prost;
@@ -60,21 +60,21 @@ pub async fn run_grpc_server(
         .parse()
         .expect("Invalid server address");
 
-    info!(address = %addr, "Starting gRPC server");
+    debug!(address = %addr, "Starting gRPC server");
 
     // Log registered routes
-    info!("Registered gRPC routes:");
-    info!("  POST /ponix.end_device.v1.EndDeviceService/CreateEndDevice");
-    info!("  POST /ponix.end_device.v1.EndDeviceService/GetEndDevice");
-    info!("  POST /ponix.end_device.v1.EndDeviceService/ListEndDevices");
-    info!("  POST /ponix.organization.v1.OrganizationService/CreateOrganization");
-    info!("  POST /ponix.organization.v1.OrganizationService/GetOrganization");
-    info!("  POST /ponix.organization.v1.OrganizationService/DeleteOrganization");
-    info!("  POST /ponix.gateway.v1.GatewayService/CreateGateway");
-    info!("  POST /ponix.gateway.v1.GatewayService/GetGateway");
-    info!("  POST /ponix.gateway.v1.GatewayService/ListGateways");
-    info!("  POST /ponix.gateway.v1.GatewayService/UpdateGateway");
-    info!("  POST /ponix.gateway.v1.GatewayService/DeleteGateway");
+    debug!("Registered gRPC routes:");
+    debug!("  POST /ponix.end_device.v1.EndDeviceService/CreateEndDevice");
+    debug!("  POST /ponix.end_device.v1.EndDeviceService/GetEndDevice");
+    debug!("  POST /ponix.end_device.v1.EndDeviceService/ListEndDevices");
+    debug!("  POST /ponix.organization.v1.OrganizationService/CreateOrganization");
+    debug!("  POST /ponix.organization.v1.OrganizationService/GetOrganization");
+    debug!("  POST /ponix.organization.v1.OrganizationService/DeleteOrganization");
+    debug!("  POST /ponix.gateway.v1.GatewayService/CreateGateway");
+    debug!("  POST /ponix.gateway.v1.GatewayService/GetGateway");
+    debug!("  POST /ponix.gateway.v1.GatewayService/ListGateways");
+    debug!("  POST /ponix.gateway.v1.GatewayService/UpdateGateway");
+    debug!("  POST /ponix.gateway.v1.GatewayService/DeleteGateway");
 
     // Create handlers
     let device_handler = DeviceServiceHandler::new(device_service);
@@ -92,12 +92,12 @@ pub async fn run_grpc_server(
         .add_service(GatewayServiceServer::new(gateway_handler))
         .serve_with_shutdown(addr, async move {
             cancellation_token.cancelled().await;
-            info!("gRPC server shutdown signal received");
+            debug!("gRPC server shutdown signal received");
         });
 
     match server.await {
         Ok(_) => {
-            info!("gRPC server stopped gracefully");
+            debug!("gRPC server stopped gracefully");
             Ok(())
         }
         Err(e) => {

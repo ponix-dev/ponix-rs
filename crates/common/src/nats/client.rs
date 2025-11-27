@@ -5,7 +5,7 @@ use async_nats::jetstream::{self, stream::Config as StreamConfig};
 use async_nats::HeaderMap;
 use async_trait::async_trait;
 use std::sync::Arc;
-use tracing::{error, info, instrument};
+use tracing::{debug, error, instrument};
 
 pub struct NatsClient {
     client: async_nats::Client,
@@ -14,41 +14,41 @@ pub struct NatsClient {
 
 impl NatsClient {
     pub async fn connect(url: &str, timeout: std::time::Duration) -> Result<Self> {
-        info!(url = %url, timeout_ms = timeout.as_millis(), "Connecting to NATS");
+        debug!(url = %url, timeout_ms = timeout.as_millis(), "connecting to nats");
 
         // Configure connection timeout for establishing the TCP connection
         let client = async_nats::ConnectOptions::new()
             .connection_timeout(timeout)
             .connect(url)
             .await
-            .context("Failed to connect to NATS")?;
+            .context("failed to connect to nats")?;
 
         let jetstream = jetstream::new(client.clone());
 
-        info!("Successfully connected to NATS");
+        debug!("successfully connected to nats");
         Ok(Self { client, jetstream })
     }
 
     pub async fn ensure_stream(&self, stream_name: &str) -> Result<()> {
-        info!(stream = %stream_name, "Ensuring stream exists");
+        debug!(stream = %stream_name, "ensuring stream exists");
 
         let stream_config = StreamConfig {
             name: stream_name.to_string(),
             subjects: vec![format!("{}.*", stream_name)],
-            description: Some("Stream for processed envelopes".to_string()),
+            description: Some("stream for processed envelopes".to_string()),
             ..Default::default()
         };
 
         match self.jetstream.get_stream(stream_name).await {
             Ok(_) => {
-                info!(stream = %stream_name, "Stream already exists");
+                debug!(stream = %stream_name, "stream already exists");
             }
             Err(_) => {
                 self.jetstream
                     .create_stream(stream_config)
                     .await
-                    .context("Failed to create stream")?;
-                info!(stream = %stream_name, "Created stream");
+                    .context("failed to create stream")?;
+                debug!(stream = %stream_name, "created stream");
             }
         }
 
@@ -70,7 +70,7 @@ impl NatsClient {
     }
 
     pub async fn close(self) {
-        info!("Closing NATS connection");
+        debug!("closing nats connection");
         // Connection closes automatically when dropped
     }
 }
@@ -105,7 +105,7 @@ impl JetStreamConsumer for NatsJetStreamConsumer {
             .context
             .create_consumer_on_stream(config, stream_name)
             .await
-            .context("Failed to create consumer")?;
+            .context("failed to create consumer")?;
 
         Ok(Box::new(NatsPullConsumer { consumer }))
     }
@@ -132,14 +132,14 @@ impl PullConsumer for NatsPullConsumer {
             .expires(expires)
             .messages()
             .await
-            .context("Failed to fetch messages")?;
+            .context("failed to fetch messages")?;
 
         let mut result = Vec::new();
         while let Some(msg) = messages.next().await {
             match msg {
                 Ok(message) => result.push(message),
                 Err(e) => {
-                    error!(error = %e, "Error receiving message");
+                    error!(error = %e, "error receiving message");
                     // Continue processing other messages
                 }
             }
@@ -165,7 +165,7 @@ impl JetStreamPublisher for NatsJetStreamPublisher {
         self.context
             .get_stream(stream_name)
             .await
-            .context("Failed to get stream")?;
+            .context("failed to get stream")?;
         Ok(())
     }
 
@@ -173,7 +173,7 @@ impl JetStreamPublisher for NatsJetStreamPublisher {
         self.context
             .create_stream(config)
             .await
-            .context("Failed to create stream")?;
+            .context("failed to create stream")?;
         Ok(())
     }
 
@@ -187,10 +187,10 @@ impl JetStreamPublisher for NatsJetStreamPublisher {
             .context
             .publish_with_headers(subject, headers, payload)
             .await
-            .context("Failed to publish message to JetStream")?;
+            .context("failed to publish message to JetStream")?;
 
         ack.await
-            .context("Failed to receive JetStream acknowledgment")?;
+            .context("failed to receive JetStream acknowledgment")?;
         Ok(())
     }
 }

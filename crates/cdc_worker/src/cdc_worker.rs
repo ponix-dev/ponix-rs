@@ -2,7 +2,7 @@ use crate::domain::{CdcConfig, CdcProcess, EntityConfig};
 use common::nats::NatsClient;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::debug;
 
 pub struct CdcWorkerConfig {
     pub cdc_config: CdcConfig,
@@ -17,7 +17,7 @@ pub struct CdcWorker {
 
 impl CdcWorker {
     pub fn new(nats_client: Arc<NatsClient>, config: CdcWorkerConfig) -> Self {
-        info!("Initializing CDC Worker module");
+        debug!("initializing CDC worker module");
         Self {
             cdc_config: config.cdc_config,
             entity_configs: config.entity_configs,

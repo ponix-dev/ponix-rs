@@ -207,7 +207,7 @@ impl Runner {
         // Hello message
         tracing::info!(
             process_count = self.app_processes.len(),
-            "Hello! Starting application"
+            "hello! starting application"
         );
 
         let token = Arc::new(self.cancellation_token);
@@ -220,7 +220,7 @@ impl Runner {
             let process_token = token.clone();
             let process_name = named_process.name.clone();
 
-            tracing::info!(process = %process_name, "Starting process");
+            tracing::info!(process = %process_name, "starting process");
 
             join_set.spawn(async move {
                 let result = (named_process.process)((*process_token).clone()).await;
@@ -233,11 +233,11 @@ impl Runner {
         tokio::spawn(async move {
             match tokio::signal::ctrl_c().await {
                 Ok(()) => {
-                    tracing::info!("Received shutdown signal");
+                    tracing::info!("received shutdown signal");
                     signal_token.cancel();
                 }
                 Err(err) => {
-                    tracing::error!(error = %err, "Error setting up signal handler");
+                    tracing::error!(error = %err, "error setting up signal handler");
                 }
             }
         });
@@ -251,7 +251,7 @@ impl Runner {
                 let mut sigterm =
                     signal(SignalKind::terminate()).expect("Failed to set up SIGTERM handler");
                 sigterm.recv().await;
-                tracing::info!("Received SIGTERM signal");
+                tracing::info!("received SIGTERM signal");
                 sigterm_token.cancel();
             });
         }
@@ -262,19 +262,19 @@ impl Runner {
             match result {
                 Ok((name, Ok(()))) => {
                     // Process completed successfully
-                    tracing::info!(process = %name, "Process completed successfully");
+                    tracing::info!(process = %name, "process completed successfully");
                 }
                 Ok((name, Err(err))) => {
                     // Process returned an error
                     if !token.is_cancelled() {
-                        tracing::error!(process = %name, error = %err, "Process error");
+                        tracing::error!(process = %name, error = %err, "process error");
                         first_error = Some(err);
                         token.cancel();
                     }
                 }
                 Err(err) => {
                     // Task panicked
-                    tracing::error!(error = %err, "Process panicked");
+                    tracing::error!(error = %err, "process panicked");
                     if !token.is_cancelled() {
                         token.cancel();
                     }
@@ -292,27 +292,27 @@ impl Runner {
 
         // Execute closers with timeout
         if !closers.is_empty() {
-            tracing::info!(timeout_secs = closer_timeout.as_secs(), "Running closers");
+            tracing::info!(timeout_secs = closer_timeout.as_secs(), "running closers");
 
             let closer_result =
                 tokio::time::timeout(closer_timeout, Self::run_closers_static(closers)).await;
 
             match closer_result {
                 Ok(_) => {
-                    tracing::info!("All closers completed");
+                    tracing::info!("all closers completed");
                 }
                 Err(_) => {
-                    tracing::error!(timeout_secs = closer_timeout.as_secs(), "Closers timed out");
+                    tracing::error!(timeout_secs = closer_timeout.as_secs(), "closers timed out");
                 }
             }
         }
 
         // Goodbye message
         if let Some(err) = first_error {
-            tracing::error!(error = %err, "Goodbye! Application exiting with error");
+            tracing::error!(error = %err, "goodbye! application exiting with error");
             std::process::exit(1);
         } else {
-            tracing::info!("Goodbye! Application exiting normally");
+            tracing::info!("goodbye! application exiting normally");
             std::process::exit(0);
         }
     }
@@ -328,13 +328,13 @@ impl Runner {
         while let Some(result) = closer_set.join_next().await {
             match result {
                 Ok(Ok(())) => {
-                    tracing::debug!("Closer completed successfully");
+                    tracing::debug!("closer completed successfully");
                 }
                 Ok(Err(err)) => {
-                    tracing::error!("Closer error: {:#}", err);
+                    tracing::error!("closer error: {:#}", err);
                 }
                 Err(err) => {
-                    tracing::error!("Closer panicked: {}", err);
+                    tracing::error!("closer panicked: {}", err);
                 }
             }
         }

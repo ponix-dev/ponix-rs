@@ -6,7 +6,7 @@ use prost::Message;
 
 use std::sync::Arc;
 
-use tracing::{debug, info};
+use tracing::debug;
 
 pub struct ProcessedEnvelopeProducer {
     jetstream: Arc<dyn JetStreamPublisher>,
@@ -15,10 +15,10 @@ pub struct ProcessedEnvelopeProducer {
 
 impl ProcessedEnvelopeProducer {
     pub fn new(jetstream: Arc<dyn JetStreamPublisher>, base_subject: String) -> Self {
-        info!(
+        debug!(
             stream = "processed_envelopes",
             base_subject = %base_subject,
-            "Initialized ProcessedEnvelopeProducer"
+            "initialized ProcessedEnvelopeProducer"
         );
         Self {
             jetstream,
@@ -70,7 +70,7 @@ impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
             subject = %subject,
             end_device_id = %proto_envelope.end_device_id,
             size_bytes = payload.len(),
-            "Publishing ProcessedEnvelope"
+            "publishing ProcessedEnvelope"
         );
 
         // Use the trait method
@@ -80,10 +80,10 @@ impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
             .context("Failed to publish and acknowledge message")
             .map_err(DomainError::RepositoryError)?;
 
-        info!(
+        debug!(
             subject = %subject,
             end_device_id = %proto_envelope.end_device_id,
-            "Successfully published ProcessedEnvelope"
+            "successfully published ProcessedEnvelope"
         );
 
         Ok(())

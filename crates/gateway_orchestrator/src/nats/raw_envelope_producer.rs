@@ -56,7 +56,7 @@ impl RawEnvelopeProducerTrait for RawEnvelopeProducer {
             .context("Failed to publish and acknowledge message")
             .map_err(DomainError::RepositoryError)?;
 
-        info!(
+        debug!(
             subject = %subject,
             device_id = %proto_envelope.device_id,
             "Successfully published RawEnvelope"

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 
 use crate::domain::GatewayService;
 use ponix_proto_prost::gateway::v1::{
@@ -53,7 +53,7 @@ impl GatewayServiceTrait for GatewayServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(gateway_id = %gateway.gateway_id, "Gateway created successfully");
+        debug!(gateway_id = %gateway.gateway_id, "Gateway created successfully");
 
         Ok(Response::new(CreateGatewayResponse {
             gateway: Some(to_proto_gateway(gateway)),
@@ -111,7 +111,7 @@ impl GatewayServiceTrait for GatewayServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(count = gateways.len(), "Gateways listed successfully");
+        debug!(count = gateways.len(), "Gateways listed successfully");
 
         let proto_gateways = gateways.into_iter().map(to_proto_gateway).collect();
 
@@ -143,7 +143,7 @@ impl GatewayServiceTrait for GatewayServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(gateway_id = %gateway.gateway_id, "Gateway updated successfully");
+        debug!(gateway_id = %gateway.gateway_id, "Gateway updated successfully");
 
         Ok(Response::new(UpdateGatewayResponse {
             gateway: Some(to_proto_gateway(gateway)),
@@ -173,7 +173,7 @@ impl GatewayServiceTrait for GatewayServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(gateway_id = %gateway_id, "Gateway deleted successfully");
+        debug!(gateway_id = %gateway_id, "Gateway deleted successfully");
 
         Ok(Response::new(DeleteGatewayResponse {})).record_status()
     }

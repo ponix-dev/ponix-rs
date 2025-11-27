@@ -3,7 +3,7 @@ use common::domain::{
     DomainResult, GetDeviceInput, GetOrganizationInput, ListDevicesInput, OrganizationRepository,
 };
 use std::sync::Arc;
-use tracing::{debug, info, instrument};
+use tracing::{debug, instrument};
 
 /// Domain service for device management business logic
 /// This is the orchestration layer that handlers call
@@ -43,7 +43,7 @@ impl DeviceService {
 
         // TODO: this may be more efficient to do at the db layer with a foreign key constraint
         // Validate organization exists and is not deleted
-        debug!(organization_id = %input.organization_id, "Validating organization exists");
+        debug!(organization_id = %input.organization_id, "validating organization exists");
         let org_input = GetOrganizationInput {
             organization_id: input.organization_id.clone(),
         };
@@ -72,7 +72,7 @@ impl DeviceService {
         // Generate unique device ID
         let device_id = xid::new().to_string();
 
-        debug!(device_id = %device_id, organization_id = %input.organization_id, "Creating device");
+        debug!(device_id = %device_id, organization_id = %input.organization_id, "creating device");
 
         // Create input with generated ID for repository
         let repo_input = CreateDeviceInputWithId {
@@ -84,7 +84,6 @@ impl DeviceService {
 
         let device = self.device_repository.create_device(repo_input).await?;
 
-        info!(device_id = %device.device_id, "Device created successfully");
         Ok(device)
     }
 
@@ -97,7 +96,7 @@ impl DeviceService {
             ));
         }
 
-        debug!(device_id = %input.device_id, "Getting device");
+        debug!(device_id = %input.device_id, "getting device");
 
         let device = self
             .device_repository
@@ -117,11 +116,11 @@ impl DeviceService {
             ));
         }
 
-        debug!(organization_id = %input.organization_id, "Listing devices");
+        debug!(organization_id = %input.organization_id, "listing devices");
 
         let devices = self.device_repository.list_devices(input).await?;
 
-        info!(count = devices.len(), "Listed devices");
+        debug!(count = devices.len(), "listed devices");
         Ok(devices)
     }
 }

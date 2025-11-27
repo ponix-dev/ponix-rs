@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 
 use crate::domain::DeviceService;
 use ponix_proto_prost::end_device::v1::{
@@ -53,7 +53,7 @@ impl DeviceServiceTrait for DeviceServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(device_id = %device.device_id, "Device created successfully");
+        debug!(device_id = %device.device_id, "Device created successfully");
 
         // Convert domain → proto
         let proto_device = to_proto_device(device);
@@ -121,7 +121,7 @@ impl DeviceServiceTrait for DeviceServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(count = devices.len(), "Listed devices");
+        debug!(count = devices.len(), "Listed devices");
 
         // Convert domain → proto
         let proto_devices: Vec<EndDevice> = devices.into_iter().map(to_proto_device).collect();

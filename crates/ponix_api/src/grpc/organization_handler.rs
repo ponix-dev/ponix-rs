@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 
 use crate::domain::OrganizationService;
 use ponix_proto_prost::organization::v1::{
@@ -53,7 +53,7 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(organization_id = %organization.id, "Organization created successfully");
+        debug!(organization_id = %organization.id, "Organization created successfully");
 
         // Return the created organization details
         Ok(Response::new(CreateOrganizationResponse {
@@ -126,7 +126,7 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        info!(organization_id = %organization_id, "Organization deleted successfully");
+        debug!(organization_id = %organization_id, "Organization deleted successfully");
 
         // Return empty response with organization field (required by proto)
         Ok(Response::new(DeleteOrganizationResponse {

@@ -4,7 +4,7 @@ use common::domain::{
     OrganizationRepository, UpdateGatewayInput,
 };
 use std::sync::Arc;
-use tracing::{debug, info, instrument};
+use tracing::{debug, instrument};
 
 /// Service for gateway business logic
 pub struct GatewayService {
@@ -73,7 +73,7 @@ impl GatewayService {
 
         let gateway = self.gateway_repository.create_gateway(repo_input).await?;
 
-        info!(gateway_id = %gateway.gateway_id, "Gateway created successfully");
+        debug!(gateway_id = %gateway.gateway_id, "Gateway created successfully");
         Ok(gateway)
     }
 
@@ -119,7 +119,7 @@ impl GatewayService {
 
         let gateway = self.gateway_repository.update_gateway(input).await?;
 
-        info!(gateway_id = %gateway.gateway_id, "Gateway updated successfully");
+        debug!(gateway_id = %gateway.gateway_id, "Gateway updated successfully");
         Ok(gateway)
     }
 
@@ -138,7 +138,7 @@ impl GatewayService {
             .delete_gateway(&input.gateway_id)
             .await?;
 
-        info!("Gateway soft deleted successfully");
+        debug!("Gateway soft deleted successfully");
         Ok(())
     }
 
@@ -158,7 +158,7 @@ impl GatewayService {
             .list_gateways(&input.organization_id)
             .await?;
 
-        info!(count = gateways.len(), "Listed gateways");
+        debug!(count = gateways.len(), "Listed gateways");
         Ok(gateways)
     }
 }

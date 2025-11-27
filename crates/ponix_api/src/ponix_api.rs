@@ -2,7 +2,7 @@ use crate::domain::{DeviceService, GatewayService, OrganizationService};
 use crate::grpc::{run_grpc_server, GrpcServerConfig};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::debug;
 
 pub struct PonixApiConfig {
     pub grpc_host: String,
@@ -23,7 +23,7 @@ impl PonixApi {
         gateway_service: Arc<GatewayService>,
         config: PonixApiConfig,
     ) -> Self {
-        info!("Initializing Ponix API module");
+        debug!("Initializing Ponix API module");
         Self {
             device_service,
             organization_service,

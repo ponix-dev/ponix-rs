@@ -18,7 +18,7 @@ impl ProcessedEnvelopeService {
     pub async fn store_batch(&self, input: StoreEnvelopesInput) -> DomainResult<()> {
         debug!(
             envelope_count = input.envelopes.len(),
-            "Storing batch of envelopes"
+            "storing batch of envelopes"
         );
 
         self.repository.store_batch(input).await

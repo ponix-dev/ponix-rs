@@ -8,7 +8,7 @@ use etl_postgres::types::TableSchema;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tracing::{error, info, info_span, warn, Instrument};
+use tracing::{debug, debug_span, error, warn, Instrument};
 
 /// Configuration for an entity's CDC
 
@@ -49,10 +49,10 @@ impl NatsSink {
             .map(|config| (config.table_name.clone(), Arc::new(config)))
             .collect();
 
-        info!(
+        debug!(
             entity_count = configs_by_name.len(),
             entities = ?configs_by_name.keys().collect::<Vec<_>>(),
-            "Initialized NatsSink for CDC events"
+            "initialized NatsSink for CDC events"
         );
 
         Self {
@@ -96,7 +96,7 @@ impl NatsSink {
 
     /// Handles an insert event by converting and publishing to NATS.
     async fn handle_insert(&self, event: InsertEvent) -> EtlResult<()> {
-        let span = info_span!("handle_insert");
+        let span = debug_span!("handle_insert");
 
         async {
             // Clone the Arc to avoid holding the lock across await
@@ -113,7 +113,7 @@ impl NatsSink {
                     Some(c) => Arc::clone(c),
                     None => {
                         warn!(
-                            "No CDC config for table {:?}, skipping insert event",
+                            "no CDC config for table {:?}, skipping insert event",
                             event.table_id
                         );
                         return Ok(());
@@ -127,18 +127,18 @@ impl NatsSink {
                 Ok(payload) => {
                     let subject = self.get_subject(&config.entity_name, "create");
                     if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
-                        error!("Failed to publish insert event to {}: {}", subject, e);
+                        error!("failed to publish insert event to {}: {}", subject, e);
                         return Err(etl_error!(
                             ErrorKind::DestinationIoError,
                             "Failed to publish insert event",
                             format!("Failed to publish to {}: {}", subject, e)
                         ));
                     }
-                    info!("Published insert event to {}", subject);
+                    debug!("published insert event to {}", subject);
                     Ok(())
                 }
                 Err(e) => {
-                    error!("Failed to convert insert event: {}", e);
+                    error!("failed to convert insert event: {}", e);
                     Err(etl_error!(
                         ErrorKind::ConversionError,
                         "Failed to convert insert event",
@@ -153,7 +153,7 @@ impl NatsSink {
 
     /// Handles an update event by converting and publishing to NATS.
     async fn handle_update(&self, event: UpdateEvent) -> EtlResult<()> {
-        let span = info_span!("handle_update");
+        let span = debug_span!("handle_update");
 
         async {
             // Clone the Arc to avoid holding the lock across await
@@ -170,7 +170,7 @@ impl NatsSink {
                     Some(c) => Arc::clone(c),
                     None => {
                         warn!(
-                            "No CDC config for table {:?}, skipping update event",
+                            "no CDC config for table {:?}, skipping update event",
                             event.table_id
                         );
                         return Ok(());
@@ -196,7 +196,7 @@ impl NatsSink {
                             format!("Failed to publish to {}: {}", subject, e)
                         ));
                     }
-                    info!("Published update event to {}", subject);
+                    debug!("Published update event to {}", subject);
                     Ok(())
                 }
                 Err(e) => {
@@ -215,7 +215,7 @@ impl NatsSink {
 
     /// Handles a delete event by converting and publishing to NATS.
     async fn handle_delete(&self, event: DeleteEvent) -> EtlResult<()> {
-        let span = info_span!("handle_delete");
+        let span = debug_span!("handle_delete");
 
         async {
             // Clone the Arc to avoid holding the lock across await
@@ -257,7 +257,7 @@ impl NatsSink {
                             format!("Failed to publish to {}: {}", subject, e)
                         ));
                     }
-                    info!("Published delete event to {}", subject);
+                    debug!("Published delete event to {}", subject);
                     Ok(())
                 }
                 Err(e) => {
@@ -281,7 +281,7 @@ impl Destination for NatsSink {
     }
 
     async fn truncate_table(&self, table_id: TableId) -> EtlResult<()> {
-        info!(
+        debug!(
             "Truncate table requested for {:?} (no-op for NATS sink)",
             table_id
         );
@@ -294,7 +294,7 @@ impl Destination for NatsSink {
         table_id: TableId,
         table_rows: Vec<TableRow>,
     ) -> EtlResult<()> {
-        info!(
+        debug!(
             "Write table rows for {:?}: {} rows (skipping initial sync for NATS sink)",
             table_id,
             table_rows.len()
@@ -305,10 +305,10 @@ impl Destination for NatsSink {
 
     async fn write_events(&self, events: Vec<Event>) -> EtlResult<()> {
         // Create a root span for CDC events - break from any inherited trace context
-        let span = info_span!(parent: None, "write_events", event_count = events.len());
+        let span = debug_span!(parent: None, "write_events", event_count = events.len());
 
         async {
-            info!("Processing batch of {} events", events.len());
+            debug!("Processing batch of {} events", events.len());
 
             for event in events {
                 match event {
@@ -316,7 +316,7 @@ impl Destination for NatsSink {
                         let table_name = &rel_event.table_schema.name.name;
                         let table_id = rel_event.table_schema.id;
 
-                        info!(
+                        debug!(
                             "Received relation event for table: {} (ID: {:?})",
                             table_name, table_id
                         );
@@ -330,7 +330,7 @@ impl Destination for NatsSink {
 
                         // Map table ID to config if we have one for this table name
                         if let Some(config) = self.configs_by_name.get(table_name) {
-                            info!(
+                            debug!(
                                 "Mapping table '{}' (ID: {:?}) to entity '{}'",
                                 table_name, table_id, config.entity_name
                             );
@@ -367,7 +367,7 @@ impl Destination for NatsSink {
                         // Transaction commit - we don't need to do anything
                     }
                     Event::Truncate(truncate_event) => {
-                        info!(
+                        debug!(
                             "Received truncate event for tables: {:?}",
                             truncate_event.rel_ids
                         );

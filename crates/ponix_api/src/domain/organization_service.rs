@@ -4,7 +4,7 @@ use common::domain::{
     OrganizationRepository, UpdateOrganizationInput,
 };
 use std::sync::Arc;
-use tracing::{debug, info, instrument};
+use tracing::{debug, instrument};
 
 /// Domain service for organization business logic
 pub struct OrganizationService {
@@ -22,7 +22,7 @@ impl OrganizationService {
         &self,
         input: CreateOrganizationInput,
     ) -> DomainResult<Organization> {
-        debug!(name = %input.name, "Creating organization");
+        debug!(name = %input.name, "creating organization");
 
         // Validate name is not empty
         if input.name.trim().is_empty() {
@@ -41,7 +41,7 @@ impl OrganizationService {
 
         let organization = self.repository.create_organization(repo_input).await?;
 
-        info!(organization_id = %organization.id, "Organization created successfully");
+        debug!(organization_id = %organization.id, "organization created successfully");
         Ok(organization)
     }
 
@@ -51,7 +51,7 @@ impl OrganizationService {
         &self,
         input: GetOrganizationInput,
     ) -> DomainResult<Organization> {
-        debug!(organization_id = %input.organization_id, "Getting organization");
+        debug!(organization_id = %input.organization_id, "getting organization");
 
         if input.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
@@ -74,7 +74,7 @@ impl OrganizationService {
         &self,
         input: UpdateOrganizationInput,
     ) -> DomainResult<Organization> {
-        debug!(organization_id = %input.organization_id, "Updating organization");
+        debug!(organization_id = %input.organization_id, "updating organization");
 
         if input.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
@@ -90,7 +90,7 @@ impl OrganizationService {
 
         let organization = self.repository.update_organization(input).await?;
 
-        info!(organization_id = %organization.id, "Organization updated successfully");
+        debug!(organization_id = %organization.id, "organization updated successfully");
         Ok(organization)
     }
 
@@ -107,7 +107,7 @@ impl OrganizationService {
 
         self.repository.delete_organization(input.clone()).await?;
 
-        info!(organization_id = %input.organization_id, "Organization soft deleted successfully");
+        debug!(organization_id = %input.organization_id, "Organization soft deleted successfully");
         Ok(())
     }
 
@@ -121,7 +121,7 @@ impl OrganizationService {
 
         let organizations = self.repository.list_organizations(input).await?;
 
-        info!(count = organizations.len(), "Listed organizations");
+        debug!(count = organizations.len(), "Listed organizations");
         Ok(organizations)
     }
 }

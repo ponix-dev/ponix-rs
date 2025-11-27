@@ -27,7 +27,7 @@ pub fn create_processed_envelope_processor(
                 Ok(proto_envelope) => decoded_envelopes.push((index, proto_envelope)),
                 Err(e) => {
                     error!(
-                        "Failed to decode protobuf message at index {}: {}",
+                        "failed to decode protobuf message at index {}: {}",
                         index, e
                     );
                     decode_errors.push((index, Some(format!("Decode error: {}", e))));
@@ -37,7 +37,7 @@ pub fn create_processed_envelope_processor(
 
         Box::pin(async move {
             if decoded_envelopes.is_empty() {
-                debug!("No ProcessedEnvelope messages to process");
+                debug!("no ProcessedEnvelope messages to process");
                 // Nak all messages that failed to decode
                 return Ok(ProcessingResult::new(vec![], decode_errors));
             }
@@ -51,7 +51,7 @@ pub fn create_processed_envelope_processor(
             let domain_envelopes = match domain_envelopes {
                 Ok(envelopes) => envelopes,
                 Err(e) => {
-                    error!("Failed to convert protobuf to domain: {}", e);
+                    error!("failed to convert protobuf to domain: {}", e);
                     // Nak all messages that failed conversion
                     let mut nak_indices: Vec<(usize, Option<String>)> = decoded_envelopes
                         .iter()
@@ -71,7 +71,7 @@ pub fn create_processed_envelope_processor(
                 Ok(()) => {
                     debug!(
                         envelope_count = decoded_envelopes.len(),
-                        "Successfully processed envelope batch"
+                        "successfully processed envelope batch"
                     );
                     // Ack all successfully processed messages
                     let ack_indices: Vec<usize> =
@@ -79,7 +79,7 @@ pub fn create_processed_envelope_processor(
                     Ok(ProcessingResult::new(ack_indices, decode_errors))
                 }
                 Err(e) => {
-                    error!("Failed to store envelopes: {}", e);
+                    error!("failed to store envelopes: {}", e);
                     // Nak all messages that failed storage
                     let mut nak_indices: Vec<(usize, Option<String>)> = decoded_envelopes
                         .iter()
