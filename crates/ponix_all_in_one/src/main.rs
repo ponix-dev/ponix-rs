@@ -18,7 +18,7 @@ use ponix_api::ponix_api::{PonixApi, PonixApiConfig};
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
-use telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig};
+use telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use tracing::{debug, error, info};
 
 #[tokio::main]
@@ -32,8 +32,8 @@ async fn main() {
         }
     };
 
-    // Initialize telemetry (tracing + OpenTelemetry)
-    let tracer_provider = match init_telemetry(&TelemetryConfig {
+    // Initialize telemetry (tracing + OpenTelemetry for traces and logs)
+    let telemetry_providers: Option<TelemetryProviders> = match init_telemetry(&TelemetryConfig {
         service_name: config.otel_service_name.clone(),
         otel_endpoint: config.otel_endpoint.clone(),
         otel_enabled: config.otel_enabled,
@@ -177,8 +177,8 @@ async fn main() {
                         client.close().await;
                     }
 
-                    // Shutdown telemetry and flush pending traces
-                    shutdown_telemetry(tracer_provider);
+                    // Shutdown telemetry and flush pending traces and logs
+                    shutdown_telemetry(telemetry_providers);
 
                     info!("Cleanup complete");
                     Ok(())
