@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 
 use crate::domain::DeviceService;
 use ponix_proto_prost::end_device::v1::{
@@ -90,6 +90,8 @@ impl DeviceServiceTrait for DeviceServiceHandler {
 
         // Convert domain → proto
         let proto_device = to_proto_device(device);
+
+        info!("testtttt");
 
         Ok(Response::new(GetEndDeviceResponse {
             end_device: Some(proto_device),

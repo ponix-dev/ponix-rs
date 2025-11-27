@@ -5,7 +5,7 @@ use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig}
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
 use common::clickhouse::ClickHouseClient;
-use common::grpc::GrpcLoggingConfig;
+use common::grpc::{GrpcLoggingConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
@@ -93,7 +93,8 @@ async fn main() {
         PonixApiConfig {
             grpc_host: config.grpc_host.clone(),
             grpc_port: config.grpc_port,
-            grpc_logging_config: GrpcLoggingConfig::new(ignored_paths),
+            grpc_logging_config: GrpcLoggingConfig::new(ignored_paths.clone()),
+            grpc_tracing_config: GrpcTracingConfig::new(ignored_paths),
         },
     );
 

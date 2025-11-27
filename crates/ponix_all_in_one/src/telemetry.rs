@@ -42,7 +42,9 @@ pub fn init_telemetry(config: &TelemetryConfig) -> Result<Option<TelemetryProvid
     let fmt_layer = tracing_subscriber::fmt::layer()
         .json()
         .with_span_list(true)
-        .with_current_span(true);
+        .with_current_span(true)
+        .with_file(true)
+        .with_line_number(true);
 
     if config.otel_enabled {
         // Set global propagator for W3C Trace Context
