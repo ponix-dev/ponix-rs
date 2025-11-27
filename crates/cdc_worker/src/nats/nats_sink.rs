@@ -306,13 +306,13 @@ impl Destination for NatsSink {
     async fn write_events(&self, events: Vec<Event>) -> EtlResult<()> {
         // Create a root span for CDC events - break from any inherited trace context
         let span = debug_span!(parent: None, "write_events", event_count = events.len());
+        let _enter = span.enter();
 
-        async {
-            debug!("Processing batch of {} events", events.len());
+        debug!("Processing batch of {} events", events.len());
 
-            for event in events {
-                match event {
-                    Event::Relation(rel_event) => {
+        for event in events {
+            match event {
+                Event::Relation(rel_event) => {
                         let table_name = &rel_event.table_schema.name.name;
                         let table_id = rel_event.table_schema.id;
 

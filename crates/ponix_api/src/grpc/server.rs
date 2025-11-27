@@ -5,6 +5,7 @@ use tonic::transport::Server;
 use tracing::{debug, error};
 
 use crate::domain::{DeviceService, GatewayService, OrganizationService};
+use common::grpc::{GrpcLoggingConfig, GrpcLoggingLayer};
 use ponix_proto_prost;
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceServiceServer;
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServiceServer;
@@ -37,6 +38,7 @@ fn build_reflection_service(
 pub struct GrpcServerConfig {
     pub host: String,
     pub port: u16,
+    pub logging_config: GrpcLoggingConfig,
 }
 
 impl Default for GrpcServerConfig {
@@ -44,6 +46,7 @@ impl Default for GrpcServerConfig {
         Self {
             host: "0.0.0.0".to_string(),
             port: 50051,
+            logging_config: GrpcLoggingConfig::default(),
         }
     }
 }
@@ -84,8 +87,12 @@ pub async fn run_grpc_server(
     // Build reflection service
     let reflection_service = build_reflection_service();
 
+    // Create logging layer with config
+    let logging_layer = GrpcLoggingLayer::new(config.logging_config);
+
     // Build server with graceful shutdown
     let server = Server::builder()
+        .layer(logging_layer)
         .add_service(reflection_service)
         .add_service(EndDeviceServiceServer::new(device_handler))
         .add_service(OrganizationServiceServer::new(organization_handler))

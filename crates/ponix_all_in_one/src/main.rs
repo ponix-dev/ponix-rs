@@ -5,6 +5,7 @@ use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig}
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
 use common::clickhouse::ClickHouseClient;
+use common::grpc::GrpcLoggingConfig;
 use common::nats::NatsClient;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
@@ -76,6 +77,14 @@ async fn main() {
         postgres_repos.organization.clone(),
     ));
 
+    // Parse ignored paths from config (comma-separated)
+    let ignored_paths: Vec<String> = config
+        .grpc_ignored_paths
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
     // Initialize application modules
     let ponix_api = PonixApi::new(
         device_service.clone(),
@@ -84,6 +93,7 @@ async fn main() {
         PonixApiConfig {
             grpc_host: config.grpc_host.clone(),
             grpc_port: config.grpc_port,
+            grpc_logging_config: GrpcLoggingConfig::new(ignored_paths),
         },
     );
 
@@ -153,7 +163,10 @@ async fn main() {
     runner = runner.with_named_process("ponix_api", ponix_api.into_runner_process());
 
     // Add Gateway API process (handles NATS CDC events → orchestrator)
-    runner = runner.with_named_process("gateway_orchestrator", gateway_orchestrator.into_runner_process());
+    runner = runner.with_named_process(
+        "gateway_orchestrator",
+        gateway_orchestrator.into_runner_process(),
+    );
 
     // Add CDC Worker process (handles Postgres → NATS CDC events)
     runner = runner.with_named_process("cdc_worker", cdc_worker.into_runner_process());
