@@ -5,8 +5,8 @@ use crate::nats::{
 };
 use common::clickhouse::ClickHouseClient;
 use common::nats::{
-    NatsClient, NatsConsumeLoggingConfig, NatsConsumeLoggingLayer, NatsConsumeTracingConfig,
-    NatsConsumeTracingLayer, TowerConsumer,
+    NatsClient, NatsConsumeLoggingLayer, NatsConsumeTracingConfig, NatsConsumeTracingLayer,
+    TowerConsumer,
 };
 use common::postgres::{PostgresDeviceRepository, PostgresOrganizationRepository};
 use std::sync::Arc;
@@ -90,7 +90,7 @@ impl AnalyticsWorker {
             .layer(NatsConsumeTracingLayer::new(NatsConsumeTracingConfig::new(
                 "process_processed_envelope",
             )))
-            .layer(NatsConsumeLoggingLayer::new(NatsConsumeLoggingConfig::new()))
+            .layer(NatsConsumeLoggingLayer::new())
             .service(processed_envelope_inner);
 
         // Create processed envelope Tower consumer
@@ -127,7 +127,7 @@ impl AnalyticsWorker {
             .layer(NatsConsumeTracingLayer::new(NatsConsumeTracingConfig::new(
                 "process_raw_envelope",
             )))
-            .layer(NatsConsumeLoggingLayer::new(NatsConsumeLoggingConfig::new()))
+            .layer(NatsConsumeLoggingLayer::new())
             .service(raw_envelope_inner);
 
         // Create raw envelope Tower consumer

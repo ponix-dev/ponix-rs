@@ -3,8 +3,8 @@ use common::domain::{
     DomainError, DomainResult, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait,
 };
 use common::nats::{
-    JetStreamPublisher, LayeredPublisher, NatsLoggingConfig, NatsPublishService,
-    NatsPublisherBuilder, NatsTracingConfig, PublishRequest,
+    JetStreamPublisher, LayeredPublisher, NatsPublishService, NatsPublisherBuilder,
+    NatsTracingConfig, PublishRequest,
 };
 
 use prost::Message as ProstMessage;
@@ -28,7 +28,7 @@ impl RawEnvelopeProducer {
 
         let publisher = NatsPublisherBuilder::new(jetstream)
             .with_tracing(NatsTracingConfig::new("raw_envelope_producer"))
-            .with_logging(NatsLoggingConfig::new())
+            .with_logging()
             .build();
 
         Self {

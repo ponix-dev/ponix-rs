@@ -4,9 +4,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::types::{PublishRequest, PublishResponse};
-use super::{
-    NatsLoggingConfig, NatsPublishLoggingLayer, NatsPublishTracingLayer, NatsTracingConfig,
-};
+use super::{NatsPublishLoggingLayer, NatsPublishTracingLayer, NatsTracingConfig};
 use crate::nats::JetStreamPublisher;
 use anyhow::Result;
 use tower::{Service, ServiceBuilder};
@@ -49,7 +47,7 @@ impl Service<PublishRequest> for NatsPublishService {
 pub struct NatsPublisherBuilder {
     publisher: Arc<dyn JetStreamPublisher>,
     tracing_config: Option<NatsTracingConfig>,
-    logging_config: Option<NatsLoggingConfig>,
+    with_logging: bool,
 }
 
 impl NatsPublisherBuilder {
@@ -57,7 +55,7 @@ impl NatsPublisherBuilder {
         Self {
             publisher,
             tracing_config: None,
-            logging_config: None,
+            with_logging: false,
         }
     }
 
@@ -66,8 +64,8 @@ impl NatsPublisherBuilder {
         self
     }
 
-    pub fn with_logging(mut self, config: NatsLoggingConfig) -> Self {
-        self.logging_config = Some(config);
+    pub fn with_logging(mut self) -> Self {
+        self.with_logging = true;
         self
     }
 
@@ -78,30 +76,30 @@ impl NatsPublisherBuilder {
 
         // Build the service stack with optional layers
         // We need to build conditionally based on which layers are configured
-        match (self.tracing_config, self.logging_config) {
-            (Some(tracing_config), Some(logging_config)) => {
+        match (self.tracing_config, self.with_logging) {
+            (Some(tracing_config), true) => {
                 // Both layers
                 let svc = ServiceBuilder::new()
                     .layer(NatsPublishTracingLayer::new(tracing_config))
-                    .layer(NatsPublishLoggingLayer::new(logging_config))
+                    .layer(NatsPublishLoggingLayer::new())
                     .service(inner);
                 LayeredPublisher::Both(svc)
             }
-            (Some(tracing_config), None) => {
+            (Some(tracing_config), false) => {
                 // Only tracing
                 let svc = ServiceBuilder::new()
                     .layer(NatsPublishTracingLayer::new(tracing_config))
                     .service(inner);
                 LayeredPublisher::TracingOnly(svc)
             }
-            (None, Some(logging_config)) => {
+            (None, true) => {
                 // Only logging
                 let svc = ServiceBuilder::new()
-                    .layer(NatsPublishLoggingLayer::new(logging_config))
+                    .layer(NatsPublishLoggingLayer::new())
                     .service(inner);
                 LayeredPublisher::LoggingOnly(svc)
             }
-            (None, None) => {
+            (None, false) => {
                 // No layers
                 LayeredPublisher::None(inner)
             }

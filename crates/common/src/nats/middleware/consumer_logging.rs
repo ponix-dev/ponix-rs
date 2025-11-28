@@ -5,50 +5,15 @@ use std::time::Instant;
 
 use super::consumer_types::{ConsumeRequest, ConsumeResponse};
 use tower::{Layer, Service};
-use tracing::{debug, error, Instrument, Span};
-
-/// Configuration for consume logging
-#[derive(Clone, Debug)]
-pub struct NatsConsumeLoggingConfig {
-    /// Log level for successful processing (debug by default)
-    pub log_success_level: LogLevel,
-}
-
-#[derive(Clone, Debug, Default)]
-pub enum LogLevel {
-    #[default]
-    Debug,
-    Info,
-}
-
-impl Default for NatsConsumeLoggingConfig {
-    fn default() -> Self {
-        Self {
-            log_success_level: LogLevel::Debug,
-        }
-    }
-}
-
-impl NatsConsumeLoggingConfig {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_info_level(mut self) -> Self {
-        self.log_success_level = LogLevel::Info;
-        self
-    }
-}
+use tracing::{error, info, Instrument, Span};
 
 /// Tower layer for logging single NATS message consumption
 #[derive(Clone, Default)]
-pub struct NatsConsumeLoggingLayer {
-    config: NatsConsumeLoggingConfig,
-}
+pub struct NatsConsumeLoggingLayer;
 
 impl NatsConsumeLoggingLayer {
-    pub fn new(config: NatsConsumeLoggingConfig) -> Self {
-        Self { config }
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -56,10 +21,7 @@ impl<S> Layer<S> for NatsConsumeLoggingLayer {
     type Service = NatsConsumeLoggingService<S>;
 
     fn layer(&self, service: S) -> Self::Service {
-        NatsConsumeLoggingService {
-            inner: service,
-            config: self.config.clone(),
-        }
+        NatsConsumeLoggingService { inner: service }
     }
 }
 
@@ -67,7 +29,6 @@ impl<S> Layer<S> for NatsConsumeLoggingLayer {
 #[derive(Clone)]
 pub struct NatsConsumeLoggingService<S> {
     inner: S,
-    config: NatsConsumeLoggingConfig,
 }
 
 impl<S> Service<ConsumeRequest> for NatsConsumeLoggingService<S>
@@ -89,7 +50,6 @@ where
         let payload_size = req.payload.len();
         let start = Instant::now();
         let mut inner = self.inner.clone();
-        let log_level = self.config.log_success_level.clone();
 
         let span = Span::current();
 
@@ -101,35 +61,25 @@ where
                 match &result {
                     Ok(response) => {
                         let outcome = if response.is_ack() { "ack" } else { "nak" };
+                        let duration_ms = duration.as_millis();
 
-                        match log_level {
-                            LogLevel::Debug => {
-                                debug!(
-                                    subject = %subject,
-                                    payload_bytes = payload_size,
-                                    outcome = %outcome,
-                                    duration_ms = %duration.as_millis(),
-                                    "processed message"
-                                );
-                            }
-                            LogLevel::Info => {
-                                tracing::info!(
-                                    subject = %subject,
-                                    payload_bytes = payload_size,
-                                    outcome = %outcome,
-                                    duration_ms = %duration.as_millis(),
-                                    "processed message"
-                                );
-                            }
-                        }
+                        info!(
+                            subject = %subject,
+                            payload_bytes = payload_size,
+                            outcome = %outcome,
+                            duration_ms = %duration_ms,
+                            "consumed from {subject} in {duration_ms}ms [{outcome}]"
+                        );
                     }
                     Err(e) => {
+                        let duration_ms = duration.as_millis();
+
                         error!(
                             subject = %subject,
                             payload_bytes = payload_size,
-                            duration_ms = %duration.as_millis(),
+                            duration_ms = %duration_ms,
                             error = %e,
-                            "message processing error"
+                            "failed to consume from {subject} in {duration_ms}ms: {e}"
                         );
                     }
                 }

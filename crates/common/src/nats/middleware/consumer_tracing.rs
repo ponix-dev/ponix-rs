@@ -3,11 +3,12 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use super::consumer_types::{ConsumeRequest, ConsumeResponse};
-use crate::nats::trace_context::set_parent_from_headers;
+use crate::nats::trace_context::{extract_trace_context, set_parent_from_headers};
 use async_nats::jetstream::Message;
 use async_nats::HeaderMap;
 use tower::{Layer, Service};
 use tracing::{info_span, Instrument};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Configuration for consume tracing
 #[derive(Clone, Debug)]
@@ -91,9 +92,11 @@ where
             messaging.destination.name = %subject,
         );
 
-        // Set parent context from headers if available
+        // Set parent context from headers if available - this links the consumer
+        // span to the trace from the producer, enabling distributed tracing
         if let Some(ref hdrs) = headers {
-            set_parent_from_headers(hdrs);
+            let parent_ctx = extract_trace_context(hdrs);
+            span.set_parent(parent_ctx);
         }
 
         let mut inner = self.inner.clone();

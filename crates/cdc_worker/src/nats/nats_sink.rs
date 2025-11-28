@@ -1,7 +1,7 @@
 use crate::domain::EntityConfig;
 use common::nats::{
-    JetStreamPublisher, LayeredPublisher, NatsLoggingConfig, NatsPublishService,
-    NatsPublisherBuilder, NatsTracingConfig, PublishRequest,
+    JetStreamPublisher, LayeredPublisher, NatsPublishService, NatsPublisherBuilder,
+    NatsTracingConfig, PublishRequest,
 };
 use etl::destination::Destination;
 use etl::error::{ErrorKind, EtlResult};
@@ -61,7 +61,7 @@ impl NatsSink {
         // rather than appending to the long-running CDC worker trace
         let publisher = NatsPublisherBuilder::new(jetstream)
             .with_tracing(NatsTracingConfig::new("nats_sink_cdc").without_context_propagation())
-            .with_logging(NatsLoggingConfig::new())
+            .with_logging()
             .build();
 
         Self {

@@ -1,6 +1,6 @@
 use common::nats::{
-    JetStreamPublisher, LayeredPublisher, NatsLoggingConfig, NatsPublishService,
-    NatsPublisherBuilder, NatsTracingConfig, PublishRequest,
+    JetStreamPublisher, LayeredPublisher, NatsPublishService, NatsPublisherBuilder,
+    NatsTracingConfig, PublishRequest,
 };
 
 use prost::Message;
@@ -23,7 +23,7 @@ impl ProcessedEnvelopeProducer {
 
         let publisher = NatsPublisherBuilder::new(jetstream)
             .with_tracing(NatsTracingConfig::new("processed_envelope_producer"))
-            .with_logging(NatsLoggingConfig::new())
+            .with_logging()
             .build();
 
         Self {

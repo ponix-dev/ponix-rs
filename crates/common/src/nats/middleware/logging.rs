@@ -5,35 +5,15 @@ use std::time::Instant;
 
 use super::types::{PublishRequest, PublishResponse};
 use tower::{Layer, Service};
-use tracing::{debug, error, Instrument, Span};
-
-/// Configuration for NATS logging middleware
-#[derive(Clone, Debug, Default)]
-pub struct NatsLoggingConfig {
-    /// Whether to log successful publishes at debug level
-    pub log_success: bool,
-}
-
-impl NatsLoggingConfig {
-    pub fn new() -> Self {
-        Self { log_success: true }
-    }
-
-    pub fn with_success_logging(mut self, enabled: bool) -> Self {
-        self.log_success = enabled;
-        self
-    }
-}
+use tracing::{error, info, Instrument, Span};
 
 /// Tower layer for logging NATS publish operations
-#[derive(Clone)]
-pub struct NatsPublishLoggingLayer {
-    config: NatsLoggingConfig,
-}
+#[derive(Clone, Default)]
+pub struct NatsPublishLoggingLayer;
 
 impl NatsPublishLoggingLayer {
-    pub fn new(config: NatsLoggingConfig) -> Self {
-        Self { config }
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -41,10 +21,7 @@ impl<S> Layer<S> for NatsPublishLoggingLayer {
     type Service = NatsPublishLoggingService<S>;
 
     fn layer(&self, service: S) -> Self::Service {
-        NatsPublishLoggingService {
-            inner: service,
-            config: self.config.clone(),
-        }
+        NatsPublishLoggingService { inner: service }
     }
 }
 
@@ -52,7 +29,6 @@ impl<S> Layer<S> for NatsPublishLoggingLayer {
 #[derive(Clone)]
 pub struct NatsPublishLoggingService<S> {
     inner: S,
-    config: NatsLoggingConfig,
 }
 
 impl<S> Service<PublishRequest> for NatsPublishLoggingService<S>
@@ -72,7 +48,6 @@ where
     fn call(&mut self, req: PublishRequest) -> Self::Future {
         let subject = req.subject.clone();
         let payload_size = req.payload.len();
-        let log_success = self.config.log_success;
         let start = Instant::now();
         let mut inner = self.inner.clone();
 
@@ -86,22 +61,24 @@ where
 
                 match &result {
                     Ok(_) => {
-                        if log_success {
-                            debug!(
-                                subject = %subject,
-                                payload_size = payload_size,
-                                duration_ms = %duration.as_millis(),
-                                "published message to nats"
-                            );
-                        }
+                        let duration_ms = duration.as_millis();
+
+                        info!(
+                            subject = %subject,
+                            payload_bytes = payload_size,
+                            duration_ms = %duration_ms,
+                            "published to {subject} in {duration_ms}ms"
+                        );
                     }
                     Err(e) => {
+                        let duration_ms = duration.as_millis();
+
                         error!(
                             subject = %subject,
-                            payload_size = payload_size,
-                            duration_ms = %duration.as_millis(),
+                            payload_bytes = payload_size,
+                            duration_ms = %duration_ms,
                             error = %e,
-                            "failed to publish message to nats"
+                            "failed to publish to {subject} in {duration_ms}ms: {e}"
                         );
                     }
                 }

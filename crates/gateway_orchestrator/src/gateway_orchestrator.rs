@@ -48,7 +48,8 @@ impl GatewayOrchestrator {
             config.gateway_consumer_name.clone(),
             config.gateway_filter_subject.clone(),
             Arc::clone(&orchestrator),
-        );
+        )
+        .await?;
 
         Ok(Self { cdc_consumer })
     }
