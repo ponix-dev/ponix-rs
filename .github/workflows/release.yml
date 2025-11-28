@@ -1,8 +1,10 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
+  workflow_call:
+    secrets:
+      BSR_TOKEN:
+        required: true
 
 permissions:
   contents: write
@@ -10,7 +12,7 @@ permissions:
   id-token: write
 
 jobs:
-  release:
+  semantic-release:
     name: Semantic Release
     runs-on: ubuntu-latest
     outputs:
@@ -42,8 +44,8 @@ jobs:
 
   publish-container:
     name: Publish Container
-    needs: release
-    if: needs.release.outputs.new_release_published == 'true'
+    needs: semantic-release
+    if: needs.semantic-release.outputs.new_release_published == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -65,9 +67,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/ponix-all-in-one
           tags: |
-            type=semver,pattern={{version}},value=${{ needs.release.outputs.new_release_version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.new_release_version }}
-            type=semver,pattern={{major}},value=${{ needs.release.outputs.new_release_version }}
+            type=semver,pattern={{version}},value=${{ needs.semantic-release.outputs.new_release_version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.semantic-release.outputs.new_release_version }}
+            type=semver,pattern={{major}},value=${{ needs.semantic-release.outputs.new_release_version }}
             type=raw,value=latest
 
       - name: Build and push

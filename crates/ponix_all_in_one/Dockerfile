@@ -33,10 +33,15 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
 # Build the service with BSR authentication via secret
+# Use cache mounts for cargo registry and target directory to speed up builds
 RUN --mount=type=secret,id=bsr_token \
+    --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
+    --mount=type=cache,target=/build/target,id=cargo-target \
     if [ -f /run/secrets/bsr_token ]; then \
         export CARGO_REGISTRIES_BUF_TOKEN="Bearer $(cat /run/secrets/bsr_token)" && \
-        cargo build --release --bin ponix-all-in-one; \
+        cargo build --release --bin ponix-all-in-one && \
+        cp /build/target/release/ponix-all-in-one /ponix-all-in-one; \
     else \
         echo "Error: BSR token secret not found" && exit 1; \
     fi
@@ -52,8 +57,8 @@ RUN apt-get update && \
 # Create non-root user
 RUN useradd -ms /bin/bash ponix
 
-# Copy binary from builder
-COPY --from=builder /build/target/release/ponix-all-in-one /home/ponix/ponix-all-in-one
+# Copy binary from builder (copied to root in build stage due to cache mount)
+COPY --from=builder /ponix-all-in-one /home/ponix/ponix-all-in-one
 
 # CRITICAL: Copy goose binary from builder for migrations
 COPY --from=builder /usr/local/bin/goose /usr/local/bin/goose

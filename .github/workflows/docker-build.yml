@@ -1,8 +1,10 @@
-name: Docker Build Check
+name: Docker Build
 
 on:
-  pull_request:
-    branches: [main]
+  workflow_call:
+    secrets:
+      BSR_TOKEN:
+        required: true
 
 jobs:
   docker-build:
@@ -21,7 +23,7 @@ jobs:
           context: .
           file: ./crates/ponix_all_in_one/Dockerfile
           push: false
-          tags: ponix-all-in-one:pr-${{ github.event.pull_request.number }}
+          tags: ponix-all-in-one:${{ github.sha }}
           secrets: |
             bsr_token=${{ secrets.BSR_TOKEN }}
           cache-from: type=gha
