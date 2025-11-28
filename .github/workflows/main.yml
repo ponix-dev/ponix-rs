@@ -5,9 +5,10 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  packages: write
-  id-token: write
+  contents: write # to create releases and push tags
+  issues: write # to comment on issues
+  pull-requests: write # to comment on PRs
+  id-token: write # if using OIDC
 
 jobs:
   unit-tests:
