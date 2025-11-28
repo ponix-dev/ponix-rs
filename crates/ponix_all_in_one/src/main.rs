@@ -145,6 +145,9 @@ async fn main() {
             raw_subject: config.nats_raw_subject.clone(),
             nats_batch_size: config.nats_batch_size,
             nats_batch_wait_secs: config.nats_batch_wait_secs,
+            // ClickHouse inserter settings - using defaults for now
+            clickhouse_inserter_max_entries: 10_000,
+            clickhouse_inserter_period_secs: 1,
         },
     )
     .await

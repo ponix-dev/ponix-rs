@@ -8,17 +8,42 @@ use tower::{Layer, Service};
 use tracing::{field, info_span, Instrument, Span};
 
 /// Configuration for NATS tracing middleware
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct NatsTracingConfig {
     /// Service name for span attributes
     pub service_name: String,
+    /// Whether to propagate trace context to consumers via headers.
+    /// When true (default), the current trace context is injected into message headers.
+    /// When false, each publish starts a fresh trace (useful for CDC/event-sourced systems
+    /// where each event should be its own trace root).
+    pub propagate_context: bool,
+}
+
+impl Default for NatsTracingConfig {
+    fn default() -> Self {
+        Self {
+            service_name: String::new(),
+            propagate_context: true,
+        }
+    }
 }
 
 impl NatsTracingConfig {
     pub fn new(service_name: impl Into<String>) -> Self {
         Self {
             service_name: service_name.into(),
+            propagate_context: true,
         }
+    }
+
+    /// Disable trace context propagation, making each publish a new trace root.
+    ///
+    /// This is useful for CDC workers or event-sourced systems where each
+    /// database change should start a fresh trace rather than appending to
+    /// a long-running worker trace.
+    pub fn without_context_propagation(mut self) -> Self {
+        self.propagate_context = false;
+        self
     }
 }
 
@@ -67,25 +92,52 @@ where
     }
 
     fn call(&mut self, mut req: PublishRequest) -> Self::Future {
-        // Inject trace context into headers
-        inject_trace_context(&mut req.headers);
-
         let subject = req.subject.clone();
         let payload_size = req.payload.len();
         let service_name = self.config.service_name.clone();
+        let propagate_context = self.config.propagate_context;
 
-        // Create span for this publish operation
-        let span = info_span!(
-            target: "nats",
-            "nats_publish",
-            otel.name = "nats_publish",
-            messaging.system = "nats",
-            messaging.operation = "publish",
-            messaging.destination.name = %subject,
-            messaging.message.body.size = payload_size,
-            service.name = %service_name,
-            otel.status_code = field::Empty,
-        );
+        // Create span for this publish operation.
+        // When propagate_context is false, create a root span (parent: None)
+        // to start a fresh trace for each message.
+        let span = if propagate_context {
+            // Inject current trace context into headers for downstream consumers
+            inject_trace_context(&mut req.headers);
+
+            info_span!(
+                target: "nats",
+                "nats_publish",
+                otel.name = "nats_publish",
+                messaging.system = "nats",
+                messaging.operation = "publish",
+                messaging.destination.name = %subject,
+                messaging.message.body.size = payload_size,
+                service.name = %service_name,
+                otel.status_code = field::Empty,
+            )
+        } else {
+            // Create a root span with no parent - this starts a fresh trace
+            let span = info_span!(
+                target: "nats",
+                parent: None,
+                "nats_publish",
+                otel.name = "nats_publish",
+                messaging.system = "nats",
+                messaging.operation = "publish",
+                messaging.destination.name = %subject,
+                messaging.message.body.size = payload_size,
+                service.name = %service_name,
+                otel.status_code = field::Empty,
+            );
+
+            // Inject this NEW span's trace context into headers
+            // (must be done inside the span to capture its context)
+            let _guard = span.enter();
+            inject_trace_context(&mut req.headers);
+            drop(_guard);
+
+            span
+        };
 
         let mut inner = self.inner.clone();
 

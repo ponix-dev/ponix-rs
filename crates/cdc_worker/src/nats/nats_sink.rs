@@ -57,8 +57,10 @@ impl NatsSink {
             "initialized NatsSink for CDC events"
         );
 
+        // Use without_context_propagation() so each CDC event starts a fresh trace
+        // rather than appending to the long-running CDC worker trace
         let publisher = NatsPublisherBuilder::new(jetstream)
-            .with_tracing(NatsTracingConfig::new("nats_sink_cdc"))
+            .with_tracing(NatsTracingConfig::new("nats_sink_cdc").without_context_propagation())
             .with_logging(NatsLoggingConfig::new())
             .build();
 
