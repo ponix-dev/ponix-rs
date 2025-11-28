@@ -26,6 +26,7 @@ base64 = "0.22"
 prost-types = { workspace = true }
 opentelemetry = { workspace = true }
 tracing-opentelemetry = { workspace = true }
+tower = "0.5"
 
 [dev-dependencies]
 common = { path = "../common", features = ["testing"] }

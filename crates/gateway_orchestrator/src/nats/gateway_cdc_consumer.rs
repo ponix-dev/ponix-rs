@@ -1,7 +1,7 @@
 use crate::domain::GatewayOrchestrationService;
 use anyhow::{Context, Result};
 use common::domain::GatewayCdcEvent;
-use common::nats::{set_parent_from_headers, NatsClient};
+use common::nats::{enter_message_trace_context, NatsClient};
 use common::proto::parse_gateway_cdc_event;
 use futures::StreamExt;
 use std::sync::Arc;
@@ -128,7 +128,6 @@ impl GatewayCdcConsumer {
         let event = parse_gateway_cdc_event(&msg.subject, &msg.payload)?;
 
         // Create a span for processing this CDC event
-        let headers = msg.headers.as_ref().cloned().unwrap_or_default();
         let span = info_span!(
             "process_gateway_cdc_event",
             gateway_id = %event.gateway_id(),
@@ -138,7 +137,7 @@ impl GatewayCdcConsumer {
         async move {
             // Set the parent context from NATS headers on the current span
             // This connects this span to the trace that published the message
-            set_parent_from_headers(&headers);
+            enter_message_trace_context(msg);
 
             debug!("processing CDC event for gateway: {}", event.gateway_id());
 

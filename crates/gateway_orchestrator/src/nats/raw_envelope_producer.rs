@@ -1,17 +1,20 @@
-use anyhow::Context;
 use async_trait::async_trait;
 use common::domain::{
     DomainError, DomainResult, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait,
 };
-use common::nats::JetStreamPublisher;
+use common::nats::{
+    JetStreamPublisher, LayeredPublisher, NatsLoggingConfig, NatsPublishService,
+    NatsPublisherBuilder, NatsTracingConfig, PublishRequest,
+};
 
 use prost::Message as ProstMessage;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tower::Service;
+use tracing::info;
 
 /// NATS JetStream producer for RawEnvelope messages
 pub struct RawEnvelopeProducer {
-    jetstream: Arc<dyn JetStreamPublisher>,
+    publisher: LayeredPublisher<NatsPublishService>,
     base_subject: String,
 }
 
@@ -22,8 +25,14 @@ impl RawEnvelopeProducer {
             base_subject = %base_subject,
             "Initialized RawEnvelopeProducer"
         );
+
+        let publisher = NatsPublisherBuilder::new(jetstream)
+            .with_tracing(NatsTracingConfig::new("raw_envelope_producer"))
+            .with_logging(NatsLoggingConfig::new())
+            .build();
+
         Self {
-            jetstream,
+            publisher,
             base_subject,
         }
     }
@@ -41,25 +50,15 @@ impl RawEnvelopeProducerTrait for RawEnvelopeProducer {
         // Build subject: {base_subject}.{device_id}
         let subject = format!("{}.{}", self.base_subject, proto_envelope.device_id);
 
-        debug!(
-            subject = %subject,
-            device_id = %proto_envelope.device_id,
-            size_bytes = payload.len(),
-            "Publishing RawEnvelope"
-        );
+        // Create request and call the middleware stack
+        let request = PublishRequest::new(subject, payload);
 
-        // Publish via JetStream
-        self.jetstream
-            .publish(subject.clone(), payload.into())
+        // Clone the publisher to call the service (Tower services are Clone)
+        self.publisher
+            .clone()
+            .call(request)
             .await
-            .context("Failed to publish and acknowledge message")
             .map_err(DomainError::RepositoryError)?;
-
-        debug!(
-            subject = %subject,
-            device_id = %proto_envelope.device_id,
-            "Successfully published RawEnvelope"
-        );
 
         Ok(())
     }
@@ -68,6 +67,7 @@ impl RawEnvelopeProducerTrait for RawEnvelopeProducer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_nats::HeaderMap;
     use bytes::Bytes;
     use common::nats::MockJetStreamPublisher;
 
@@ -76,13 +76,14 @@ mod tests {
         // Arrange
         let mut mock_jetstream = MockJetStreamPublisher::new();
 
+        // Middleware uses publish_with_headers instead of publish
         mock_jetstream
-            .expect_publish()
-            .withf(|subject: &String, _payload: &Bytes| {
+            .expect_publish_with_headers()
+            .withf(|subject: &String, _headers: &HeaderMap, _payload: &Bytes| {
                 subject.starts_with("raw_envelopes.device-")
             })
             .times(1)
-            .returning(|_, _| Ok(()));
+            .returning(|_, _, _| Ok(()));
 
         let producer =
             RawEnvelopeProducer::new(Arc::new(mock_jetstream), "raw_envelopes".to_string());
@@ -106,10 +107,11 @@ mod tests {
         // Arrange
         let mut mock_jetstream = MockJetStreamPublisher::new();
 
+        // Middleware uses publish_with_headers instead of publish
         mock_jetstream
-            .expect_publish()
+            .expect_publish_with_headers()
             .times(1)
-            .returning(|_, _| Err(anyhow::anyhow!("NATS publish failed")));
+            .returning(|_, _, _| Err(anyhow::anyhow!("NATS publish failed")));
 
         let producer =
             RawEnvelopeProducer::new(Arc::new(mock_jetstream), "raw_envelopes".to_string());
