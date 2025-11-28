@@ -1,3 +1,12 @@
+## [1.0.1](https://github.com/ponix-dev/ponix-rs/compare/v1.0.0...v1.0.1) (2025-11-28)
+
+### Code Refactoring
+
+* adds nats tower layer ([5c797fb](https://github.com/ponix-dev/ponix-rs/commit/5c797fb3dbb38ab57b8eb43ee60c2ca4e04913fb))
+* moves cdc consumer to use nats tower ([fadcf47](https://github.com/ponix-dev/ponix-rs/commit/fadcf47875a868bb6986484bab01dd7a0316387b))
+* nats tower consumer implementation ([650734c](https://github.com/ponix-dev/ponix-rs/commit/650734cf1cd5ff71a8553eec9834e2c049f2c2b9))
+* removes old nats consuming implementation ([e118b01](https://github.com/ponix-dev/ponix-rs/commit/e118b0103b972ea9e5b1b052da6242fb25af8bf9))
+
 ## 1.0.0 (2025-11-28)
 
 ### Features
