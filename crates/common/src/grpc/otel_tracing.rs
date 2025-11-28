@@ -3,10 +3,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use http::{Request, Response};
-use opentelemetry::{global, propagation::Extractor, trace::TraceContextExt as _};
+use opentelemetry::{global, propagation::Extractor};
 use tower::{Layer, Service};
 use tracing::{field, info_span, Instrument, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 /// Configuration for gRPC tracing middleware
 #[derive(Clone, Debug)]
@@ -145,8 +145,6 @@ where
             rpc.service = %service_name,
             rpc.method = %method_name,
             rpc.grpc.status_code = field::Empty,
-            trace_id = field::Empty,
-            span_id = field::Empty,
         );
 
         // Set parent context from extracted headers
@@ -156,17 +154,6 @@ where
 
         Box::pin(
             async move {
-                // Record trace_id and span_id now that we're inside the span
-                // The OTel layer will have assigned IDs at this point
-                let current_span = Span::current();
-                let otel_context = current_span.context();
-                let otel_span = otel_context.span();
-                let span_context = otel_span.span_context();
-                if span_context.is_valid() {
-                    current_span.record("trace_id", span_context.trace_id().to_string());
-                    current_span.record("span_id", span_context.span_id().to_string());
-                }
-
                 let result = inner.call(req).await;
 
                 // Record gRPC status code on the span

@@ -10,7 +10,7 @@ use ponix_proto_prost::gateway::v1::{
 };
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayService as GatewayServiceTrait;
 
-use common::grpc::{domain_error_to_status, RecordGrpcStatus};
+use common::grpc::domain_error_to_status;
 use common::proto::{
     to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input, to_list_gateways_input,
     to_proto_gateway, to_update_gateway_input,
@@ -36,7 +36,6 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         fields(
             organization_id = %request.get_ref().organization_id,
             gateway_name = %request.get_ref().name,
-            rpc.grpc.status_code = tracing::field::Empty
         )
     )]
     async fn create_gateway(
@@ -58,16 +57,12 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         Ok(Response::new(CreateGatewayResponse {
             gateway: Some(to_proto_gateway(gateway)),
         }))
-        .record_status()
     }
 
     #[instrument(
         name = "GetGateway",
         skip(self, request),
-        fields(
-            gateway_id = %request.get_ref().gateway_id,
-            rpc.grpc.status_code = tracing::field::Empty
-        )
+        fields(gateway_id = %request.get_ref().gateway_id)
     )]
     async fn get_gateway(
         &self,
@@ -86,16 +81,12 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         Ok(Response::new(GetGatewayResponse {
             gateway: Some(to_proto_gateway(gateway)),
         }))
-        .record_status()
     }
 
     #[instrument(
         name = "ListGateways",
         skip(self, request),
-        fields(
-            organization_id = %request.get_ref().organization_id,
-            rpc.grpc.status_code = tracing::field::Empty
-        )
+        fields(organization_id = %request.get_ref().organization_id)
     )]
     async fn list_gateways(
         &self,
@@ -118,16 +109,12 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         Ok(Response::new(ListGatewaysResponse {
             gateways: proto_gateways,
         }))
-        .record_status()
     }
 
     #[instrument(
         name = "UpdateGateway",
         skip(self, request),
-        fields(
-            gateway_id = %request.get_ref().gateway_id,
-            rpc.grpc.status_code = tracing::field::Empty
-        )
+        fields(gateway_id = %request.get_ref().gateway_id)
     )]
     async fn update_gateway(
         &self,
@@ -148,16 +135,12 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         Ok(Response::new(UpdateGatewayResponse {
             gateway: Some(to_proto_gateway(gateway)),
         }))
-        .record_status()
     }
 
     #[instrument(
         name = "DeleteGateway",
         skip(self, request),
-        fields(
-            gateway_id = %request.get_ref().gateway_id,
-            rpc.grpc.status_code = tracing::field::Empty
-        )
+        fields(gateway_id = %request.get_ref().gateway_id)
     )]
     async fn delete_gateway(
         &self,
@@ -175,6 +158,6 @@ impl GatewayServiceTrait for GatewayServiceHandler {
 
         debug!(gateway_id = %gateway_id, "Gateway deleted successfully");
 
-        Ok(Response::new(DeleteGatewayResponse {})).record_status()
+        Ok(Response::new(DeleteGatewayResponse {}))
     }
 }
