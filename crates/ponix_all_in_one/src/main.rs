@@ -1,5 +1,4 @@
 mod config;
-mod telemetry;
 
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
@@ -11,6 +10,7 @@ use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
     PostgresOrganizationRepository,
 };
+use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
@@ -19,7 +19,6 @@ use ponix_api::ponix_api::{PonixApi, PonixApiConfig};
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
-use telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use tracing::{debug, error, info};
 
 #[tokio::main]

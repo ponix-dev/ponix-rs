@@ -2,6 +2,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
+
 use tower::{Layer, Service};
 use tracing::{error, info, Instrument, Span};
 
@@ -99,7 +100,6 @@ where
             async move {
                 let result = future.await;
 
-                // Skip logging for ignored paths
                 if !should_ignore {
                     let duration = start.elapsed();
 

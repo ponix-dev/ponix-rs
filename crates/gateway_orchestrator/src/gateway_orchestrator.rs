@@ -53,6 +53,7 @@ impl GatewayOrchestrator {
         Ok(Self { cdc_consumer })
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn into_runner_process(
         self,
     ) -> Box<

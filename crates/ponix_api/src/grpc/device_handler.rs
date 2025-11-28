@@ -91,8 +91,6 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         // Convert domain → proto
         let proto_device = to_proto_device(device);
 
-        info!("testtttt");
-
         Ok(Response::new(GetEndDeviceResponse {
             end_device: Some(proto_device),
         }))

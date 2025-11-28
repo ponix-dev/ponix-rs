@@ -25,6 +25,7 @@ impl CdcWorker {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn into_runner_process(
         self,
     ) -> Box<

@@ -91,6 +91,7 @@ impl AnalyticsWorker {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn into_runner_processes(
         self,
     ) -> Vec<

@@ -11,19 +11,7 @@ use opentelemetry_sdk::{
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-/// Configuration for telemetry initialization
-pub struct TelemetryConfig {
-    pub service_name: String,
-    pub otel_endpoint: String,
-    pub otel_enabled: bool,
-    pub log_level: String,
-}
-
-/// Providers returned from telemetry initialization for proper shutdown
-pub struct TelemetryProviders {
-    pub tracer_provider: SdkTracerProvider,
-    pub logger_provider: LoggerProvider,
-}
+use super::{TelemetryConfig, TelemetryProviders, TraceContextLogProcessor};
 
 /// Initialize telemetry with OpenTelemetry support
 ///
@@ -32,19 +20,13 @@ pub struct TelemetryProviders {
 /// - Sets up OTLP exporter for logs (sends to Loki via OTLP)
 /// - Bridges tracing spans to OpenTelemetry
 /// - Configures W3C Trace Context propagation
+/// - Automatically adds trace_id/span_id to logs via custom LogProcessor
 ///
 /// When OTEL is disabled:
-/// - Falls back to JSON logging only
+/// - Falls back to standard JSON logging
 pub fn init_telemetry(config: &TelemetryConfig) -> Result<Option<TelemetryProviders>> {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level));
-
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .json()
-        .with_span_list(true)
-        .with_current_span(true)
-        .with_file(true)
-        .with_line_number(true);
 
     if config.otel_enabled {
         // Set global propagator for W3C Trace Context
@@ -76,9 +58,17 @@ pub fn init_telemetry(config: &TelemetryConfig) -> Result<Option<TelemetryProvid
             .with_endpoint(&config.otel_endpoint)
             .build()?;
 
-        // Create logger provider
+        // Create batch log processor that exports logs in batches
+        let batch_processor =
+            opentelemetry_sdk::logs::BatchLogProcessor::builder(log_exporter, runtime::Tokio)
+                .build();
+
+        // Wrap with our custom processor that adds trace_id/span_id as visible attributes
+        let trace_context_processor = TraceContextLogProcessor::new(batch_processor);
+
+        // Create logger provider with custom processor
         let logger_provider = LoggerProvider::builder()
-            .with_batch_exporter(log_exporter, runtime::Tokio)
+            .with_log_processor(trace_context_processor)
             .with_resource(resource)
             .build();
 
@@ -89,11 +79,21 @@ pub fn init_telemetry(config: &TelemetryConfig) -> Result<Option<TelemetryProvid
         // Create OpenTelemetry logging layer - bridges tracing events to OTLP logs
         let otel_log_layer = OpenTelemetryTracingBridge::new(&logger_provider);
 
+        // Create fmt layer for stdout (standard JSON format)
+        let fmt_layer = tracing_subscriber::fmt::layer()
+            .json()
+            .with_span_list(true)
+            .with_current_span(true);
+
+        // Layer ordering matters:
+        // 1. otel_trace_layer first - creates OTel spans from tracing spans
+        // 2. otel_log_layer second - can now access OTel context for trace correlation
+        // 3. fmt_layer last - console output with trace IDs
         tracing_subscriber::registry()
             .with(env_filter)
-            .with(fmt_layer)
             .with(otel_trace_layer)
             .with(otel_log_layer)
+            .with(fmt_layer)
             .init();
 
         Ok(Some(TelemetryProviders {
@@ -101,6 +101,12 @@ pub fn init_telemetry(config: &TelemetryConfig) -> Result<Option<TelemetryProvid
             logger_provider,
         }))
     } else {
+        // Standard JSON logging without OTel context
+        let fmt_layer = tracing_subscriber::fmt::layer()
+            .json()
+            .with_span_list(true)
+            .with_current_span(true);
+
         tracing_subscriber::registry()
             .with(env_filter)
             .with(fmt_layer)
@@ -137,5 +143,14 @@ mod tests {
 
         assert_eq!(config.service_name, "test-service");
         assert!(!config.otel_enabled);
+    }
+
+    #[test]
+    fn test_telemetry_config_default() {
+        let config = TelemetryConfig::default();
+        assert_eq!(config.service_name, "unknown-service");
+        assert_eq!(config.otel_endpoint, "http://localhost:4317");
+        assert!(!config.otel_enabled);
+        assert_eq!(config.log_level, "info");
     }
 }
