@@ -22,6 +22,7 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 cel-interpreter = { workspace = true }
 clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
+tower = "0.5"
 
 
 [dev-dependencies]

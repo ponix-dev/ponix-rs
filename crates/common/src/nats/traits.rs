@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_nats::jetstream;
+use async_nats::HeaderMap;
 use async_trait::async_trait;
 
 /// Trait for JetStream consumer operations
@@ -41,5 +42,15 @@ pub trait JetStreamPublisher: Send + Sync {
     async fn create_stream(&self, config: jetstream::stream::Config) -> Result<()>;
 
     /// Publish a message to a subject and await acknowledgment
+    /// Note: This method does NOT inject trace context - use the middleware stack instead
     async fn publish(&self, subject: String, payload: bytes::Bytes) -> Result<()>;
+
+    /// Publish a message with custom headers and await acknowledgment
+    /// Used by the middleware stack to publish with trace context headers
+    async fn publish_with_headers(
+        &self,
+        subject: String,
+        headers: HeaderMap,
+        payload: bytes::Bytes,
+    ) -> Result<()>;
 }

@@ -1,18 +1,23 @@
 #![cfg(feature = "integration-tests")]
 
-use analytics_worker::clickhouse::ClickHouseEnvelopeRepository;
-use analytics_worker::domain::{CelPayloadConverter, ProcessedEnvelopeService, RawEnvelopeService};
+use analytics_worker::clickhouse::{
+    ClickHouseInserterRepository, InserterCommitHandle, InserterConfig,
+};
+use analytics_worker::domain::{CelPayloadConverter, RawEnvelopeService};
+use analytics_worker::nats::{
+    ProcessedEnvelopeConsumerService, ProcessedEnvelopeProducer, RawEnvelopeConsumerService,
+};
 use anyhow::Result;
 use goose::MigrationRunner;
+use tower::ServiceBuilder;
 
 use common::clickhouse::ClickHouseClient;
 use common::domain::{CreateDeviceInput, Device, RawEnvelope, RawEnvelopeProducer as _};
-use common::nats::{NatsClient, NatsConsumer};
-use common::postgres::{PostgresClient, PostgresDeviceRepository, PostgresOrganizationRepository};
-
-use analytics_worker::nats::{
-    create_processed_envelope_processor, create_raw_envelope_processor, ProcessedEnvelopeProducer,
+use common::nats::{
+    NatsClient, NatsConsumeLoggingLayer, NatsConsumeTracingConfig, NatsConsumeTracingLayer,
+    TowerConsumer,
 };
+use common::postgres::{PostgresClient, PostgresDeviceRepository, PostgresOrganizationRepository};
 
 use gateway_orchestrator::nats::RawEnvelopeProducer;
 
@@ -208,12 +213,10 @@ async fn run_migrations(postgres_url: &str, clickhouse_native_url: &str) -> Resu
 /// Initialize all required services (device, envelope, NATS)
 async fn initialize_services(
     postgres_url: &str,
-    clickhouse_http_url: &str,
     nats_url: &str,
 ) -> Result<(
     Arc<DeviceService>,
     Arc<RawEnvelopeService>,
-    Arc<ProcessedEnvelopeService>,
     Arc<NatsClient>,
     PostgresClient,
 )> {
@@ -232,16 +235,6 @@ async fn initialize_services(
 
     // Device service
     let device_service = Arc::new(DeviceService::new(device_repo.clone(), org_repo.clone()));
-
-    // ClickHouse client and repository
-    let ch_client = ClickHouseClient::new(clickhouse_http_url, "default", "default", "");
-    let envelope_repo = Arc::new(ClickHouseEnvelopeRepository::new(
-        ch_client,
-        "processed_envelopes".to_string(),
-    ));
-
-    // Processed envelope service
-    let processed_envelope_service = Arc::new(ProcessedEnvelopeService::new(envelope_repo));
 
     // NATS client - wait a moment for NATS to fully start with JetStream
     sleep(Duration::from_secs(2)).await;
@@ -272,7 +265,6 @@ async fn initialize_services(
     Ok((
         device_service,
         raw_envelope_service,
-        processed_envelope_service,
         nats_client,
         pg_client,
     ))
@@ -358,43 +350,67 @@ async fn produce_raw_messages(
 /// Run consumers to process messages from NATS and write to ClickHouse
 async fn run_consumers(
     raw_envelope_service: Arc<RawEnvelopeService>,
-    processed_envelope_service: Arc<ProcessedEnvelopeService>,
+    clickhouse_http_url: &str,
     nats_client: Arc<NatsClient>,
 ) -> Result<()> {
     // Create cancellation token for graceful shutdown
     let cancel_token = tokio_util::sync::CancellationToken::new();
 
-    // Create raw envelope consumer
-    let raw_processor = create_raw_envelope_processor(raw_envelope_service);
+    // Create ClickHouse inserter for processed envelope consumer
+    let ch_client = ClickHouseClient::new(clickhouse_http_url, "default", "default", "");
+    let inserter_config = InserterConfig {
+        max_entries: 100,
+        period: Duration::from_millis(500),
+    };
+    let inserter_repo =
+        ClickHouseInserterRepository::new(&ch_client, "processed_envelopes", inserter_config)?;
+
+    // Create raw envelope consumer with Tower middleware
+    let raw_service = RawEnvelopeConsumerService::new(raw_envelope_service);
+    let raw_service_stack = ServiceBuilder::new()
+        .layer(NatsConsumeTracingLayer::new(
+            NatsConsumeTracingConfig::new("raw_envelope_consume"),
+        ))
+        .layer(NatsConsumeLoggingLayer::new())
+        .service(raw_service);
 
     let raw_consumer_client = nats_client.create_consumer_client();
-    let raw_consumer = NatsConsumer::new(
+    let raw_consumer = TowerConsumer::new(
         raw_consumer_client,
         "raw_envelopes",
         "test-raw-consumer",
         "raw_envelopes.>",
         30, // batch size
         5,  // max wait secs
-        raw_processor,
+        raw_service_stack,
     )
     .await?;
 
-    // Create processed envelope consumer
-    let processed_processor = create_processed_envelope_processor(processed_envelope_service);
+    // Create processed envelope consumer with Tower middleware
+    let processed_service = ProcessedEnvelopeConsumerService::new(inserter_repo.clone());
+    let processed_service_stack = ServiceBuilder::new()
+        .layer(NatsConsumeTracingLayer::new(
+            NatsConsumeTracingConfig::new("processed_envelope_consume"),
+        ))
+        .layer(NatsConsumeLoggingLayer::new())
+        .service(processed_service);
 
     let processed_consumer_client = nats_client.create_consumer_client();
-    let processed_consumer = NatsConsumer::new(
+    let processed_consumer = TowerConsumer::new(
         processed_consumer_client,
         "processed_envelopes",
         "test-processed-consumer",
         "processed_envelopes.>",
         30, // batch size
         5,  // max wait secs
-        processed_processor,
+        processed_service_stack,
     )
     .await?;
 
-    // Spawn consumers in background
+    // Create inserter commit handle for background commits
+    let commit_handle = InserterCommitHandle::new(inserter_repo);
+
+    // Spawn consumers and commit loop in background
     let raw_handle = tokio::spawn({
         let token = cancel_token.clone();
         async move { raw_consumer.run(token).await }
@@ -405,15 +421,21 @@ async fn run_consumers(
         async move { processed_consumer.run(token).await }
     });
 
+    let commit_handle_task = tokio::spawn({
+        let token = cancel_token.clone();
+        async move { commit_handle.run(token, Duration::from_millis(250)).await }
+    });
+
     // Wait for processing to complete
     sleep(Duration::from_secs(10)).await;
 
-    // Cancel consumers
+    // Cancel consumers and commit loop
     cancel_token.cancel();
 
     // Wait for clean shutdown
     let _ = tokio::time::timeout(Duration::from_secs(5), raw_handle).await;
     let _ = tokio::time::timeout(Duration::from_secs(5), processed_handle).await;
+    let _ = tokio::time::timeout(Duration::from_secs(5), commit_handle_task).await;
 
     Ok(())
 }
@@ -544,8 +566,8 @@ async fn test_end_to_end_raw_to_processed_pipeline() -> Result<()> {
     println!("   - NATS: {}", nats_url);
 
     // Phase 3: Initialize services and create device
-    let (device_service, raw_envelope_service, processed_envelope_service, nats_client, pg_client) =
-        initialize_services(&postgres_url, &clickhouse_http_url, &nats_url).await?;
+    let (device_service, raw_envelope_service, nats_client, pg_client) =
+        initialize_services(&postgres_url, &nats_url).await?;
 
     let device = create_test_device(&device_service, &pg_client).await?;
 
@@ -563,7 +585,7 @@ async fn test_end_to_end_raw_to_processed_pipeline() -> Result<()> {
     // Phase 5: Run consumers to process messages
     run_consumers(
         raw_envelope_service,
-        processed_envelope_service,
+        &clickhouse_http_url,
         nats_client.clone(),
     )
     .await?;

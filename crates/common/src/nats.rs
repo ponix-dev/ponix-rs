@@ -1,11 +1,11 @@
 mod client;
-mod consumer;
-mod protobuf;
+mod middleware;
+mod tower_consumer;
 mod trace_context;
 mod traits;
 
 pub use client::*;
-pub use consumer::*;
-pub use protobuf::*;
+pub use middleware::*;
+pub use tower_consumer::*;
 pub use trace_context::*;
 pub use traits::*;

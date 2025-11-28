@@ -1,5 +1,8 @@
 use crate::domain::EntityConfig;
-use common::nats::JetStreamPublisher;
+use common::nats::{
+    JetStreamPublisher, LayeredPublisher, NatsPublishService, NatsPublisherBuilder,
+    NatsTracingConfig, PublishRequest,
+};
 use etl::destination::Destination;
 use etl::error::{ErrorKind, EtlResult};
 use etl::etl_error;
@@ -8,6 +11,7 @@ use etl_postgres::types::TableSchema;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use tower::Service;
 use tracing::{debug, debug_span, error, warn, Instrument};
 
 /// NATS sink for ETL replication events.
@@ -15,7 +19,7 @@ use tracing::{debug, debug_span, error, warn, Instrument};
 /// `NatsSink` implements the ETL `Destination` trait and publishes
 /// CDC events to NATS JetStream with configurable entity-based routing.
 pub struct NatsSink {
-    publisher: Arc<dyn JetStreamPublisher>,
+    publisher: LayeredPublisher<NatsPublishService>,
     /// Maps table names to entity configurations (set at initialization)
     configs_by_name: Arc<HashMap<String, Arc<EntityConfig>>>,
     /// Maps table IDs to entity configurations (populated from Relation events)
@@ -27,7 +31,7 @@ pub struct NatsSink {
 impl Clone for NatsSink {
     fn clone(&self) -> Self {
         Self {
-            publisher: Arc::clone(&self.publisher),
+            publisher: self.publisher.clone(),
             configs_by_name: Arc::clone(&self.configs_by_name),
             configs_by_id: Arc::clone(&self.configs_by_id),
             table_schemas: Arc::clone(&self.table_schemas),
@@ -40,7 +44,7 @@ impl NatsSink {
     ///
     /// The sink will route events based on table names matched to entity configs.
     /// Table IDs are mapped when Relation events are received.
-    pub fn new(publisher: Arc<dyn JetStreamPublisher>, configs: Vec<EntityConfig>) -> Self {
+    pub fn new(jetstream: Arc<dyn JetStreamPublisher>, configs: Vec<EntityConfig>) -> Self {
         // Create a HashMap of table names to configs (wrapped in Arc for cloning)
         let configs_by_name: HashMap<String, Arc<EntityConfig>> = configs
             .into_iter()
@@ -52,6 +56,13 @@ impl NatsSink {
             entities = ?configs_by_name.keys().collect::<Vec<_>>(),
             "initialized NatsSink for CDC events"
         );
+
+        // Use without_context_propagation() so each CDC event starts a fresh trace
+        // rather than appending to the long-running CDC worker trace
+        let publisher = NatsPublisherBuilder::new(jetstream)
+            .with_tracing(NatsTracingConfig::new("nats_sink_cdc").without_context_propagation())
+            .with_logging()
+            .build();
 
         Self {
             publisher,
@@ -124,7 +135,8 @@ impl NatsSink {
             match config.converter.convert_insert(data).await {
                 Ok(payload) => {
                     let subject = self.get_subject(&config.entity_name, "create");
-                    if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
+                    let request = PublishRequest::new(subject.clone(), payload);
+                    if let Err(e) = self.publisher.clone().call(request).await {
                         error!("failed to publish insert event to {}: {}", subject, e);
                         return Err(etl_error!(
                             ErrorKind::DestinationIoError,
@@ -186,7 +198,8 @@ impl NatsSink {
             match config.converter.convert_update(old_data, new_data).await {
                 Ok(payload) => {
                     let subject = self.get_subject(&config.entity_name, "update");
-                    if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
+                    let request = PublishRequest::new(subject.clone(), payload);
+                    if let Err(e) = self.publisher.clone().call(request).await {
                         error!("Failed to publish update event to {}: {}", subject, e);
                         return Err(etl_error!(
                             ErrorKind::DestinationIoError,
@@ -247,7 +260,8 @@ impl NatsSink {
             match config.converter.convert_delete(data).await {
                 Ok(payload) => {
                     let subject = self.get_subject(&config.entity_name, "delete");
-                    if let Err(e) = self.publisher.publish(subject.clone(), payload).await {
+                    let request = PublishRequest::new(subject.clone(), payload);
+                    if let Err(e) = self.publisher.clone().call(request).await {
                         error!("Failed to publish delete event to {}: {}", subject, e);
                         return Err(etl_error!(
                             ErrorKind::DestinationIoError,

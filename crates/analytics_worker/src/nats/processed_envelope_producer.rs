@@ -1,15 +1,15 @@
-use anyhow::Context;
-
-use common::nats::JetStreamPublisher;
+use common::nats::{
+    JetStreamPublisher, LayeredPublisher, NatsPublishService, NatsPublisherBuilder,
+    NatsTracingConfig, PublishRequest,
+};
 
 use prost::Message;
-
 use std::sync::Arc;
-
+use tower::Service;
 use tracing::debug;
 
 pub struct ProcessedEnvelopeProducer {
-    jetstream: Arc<dyn JetStreamPublisher>,
+    publisher: LayeredPublisher<NatsPublishService>,
     base_subject: String,
 }
 
@@ -20,8 +20,14 @@ impl ProcessedEnvelopeProducer {
             base_subject = %base_subject,
             "initialized ProcessedEnvelopeProducer"
         );
+
+        let publisher = NatsPublisherBuilder::new(jetstream)
+            .with_tracing(NatsTracingConfig::new("processed_envelope_producer"))
+            .with_logging()
+            .build();
+
         Self {
-            jetstream,
+            publisher,
             base_subject,
         }
     }
@@ -66,25 +72,15 @@ impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
         // Build subject: {base_subject}.{end_device_id}
         let subject = format!("{}.{}", self.base_subject, proto_envelope.end_device_id);
 
-        debug!(
-            subject = %subject,
-            end_device_id = %proto_envelope.end_device_id,
-            size_bytes = payload.len(),
-            "publishing ProcessedEnvelope"
-        );
+        // Create request and call the middleware stack
+        let request = PublishRequest::new(subject, payload);
 
-        // Use the trait method
-        self.jetstream
-            .publish(subject.clone(), payload.into())
+        // Clone the publisher to call the service (Tower services are Clone)
+        self.publisher
+            .clone()
+            .call(request)
             .await
-            .context("Failed to publish and acknowledge message")
             .map_err(DomainError::RepositoryError)?;
-
-        debug!(
-            subject = %subject,
-            end_device_id = %proto_envelope.end_device_id,
-            "successfully published ProcessedEnvelope"
-        );
 
         Ok(())
     }
@@ -104,10 +100,11 @@ mod domain_trait_tests {
         // Arrange
         let mut mock_publisher = MockJetStreamPublisher::new();
 
+        // Middleware uses publish_with_headers instead of publish
         mock_publisher
-            .expect_publish()
+            .expect_publish_with_headers()
             .times(1)
-            .returning(|_, _| Ok(()));
+            .returning(|_, _, _| Ok(()));
 
         let producer =
             ProcessedEnvelopeProducer::new(Arc::new(mock_publisher), "test.stream".to_string());
@@ -136,10 +133,11 @@ mod domain_trait_tests {
         // Arrange
         let mut mock_publisher = MockJetStreamPublisher::new();
 
+        // Middleware uses publish_with_headers instead of publish
         mock_publisher
-            .expect_publish()
+            .expect_publish_with_headers()
             .times(1)
-            .returning(|_, _| Err(anyhow::anyhow!("NATS publish failed")));
+            .returning(|_, _, _| Err(anyhow::anyhow!("NATS publish failed")));
 
         let producer =
             ProcessedEnvelopeProducer::new(Arc::new(mock_publisher), "test.stream".to_string());
