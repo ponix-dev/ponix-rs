@@ -177,10 +177,7 @@ impl GatewayRepository for PostgresGatewayRepository {
         let now = Utc::now();
 
         // Convert domain GatewayConfig to JSON if provided
-        let gateway_config_json = input
-            .gateway_config
-            .as_ref()
-            .map(|c| gateway_config_to_json(c));
+        let gateway_config_json = input.gateway_config.as_ref().map(gateway_config_to_json);
 
         // Build dynamic UPDATE query based on provided fields
         let mut query = String::from("UPDATE gateways SET updated_at = $1");

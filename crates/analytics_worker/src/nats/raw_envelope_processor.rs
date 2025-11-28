@@ -41,18 +41,19 @@ pub fn create_raw_envelope_processor(service: Arc<RawEnvelopeService>) -> BatchP
                     };
 
                 // Convert to domain type
-                let domain_envelope = match common::proto::raw_envelope_proto_to_domain(proto_envelope) {
-                    Ok(envelope) => envelope,
-                    Err(e) => {
-                        error!(
-                            error = %e,
-                            subject = %subject,
-                            "failed to convert protobuf RawEnvelope to domain type"
-                        );
-                        nak.push((idx, Some(format!("Conversion error: {}", e))));
-                        continue;
-                    }
-                };
+                let domain_envelope =
+                    match common::proto::raw_envelope_proto_to_domain(proto_envelope) {
+                        Ok(envelope) => envelope,
+                        Err(e) => {
+                            error!(
+                                error = %e,
+                                subject = %subject,
+                                "failed to convert protobuf RawEnvelope to domain type"
+                            );
+                            nak.push((idx, Some(format!("Conversion error: {}", e))));
+                            continue;
+                        }
+                    };
 
                 // Process through domain service
                 match service.process_raw_envelope(domain_envelope).await {

@@ -1,6 +1,6 @@
 use crate::domain::{DeviceService, GatewayService, OrganizationService};
 use crate::grpc::{run_grpc_server, GrpcServerConfig};
-use common::grpc::GrpcLoggingConfig;
+use common::grpc::{GrpcLoggingConfig, GrpcTracingConfig};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
@@ -9,6 +9,18 @@ pub struct PonixApiConfig {
     pub grpc_host: String,
     pub grpc_port: u16,
     pub grpc_logging_config: GrpcLoggingConfig,
+    pub grpc_tracing_config: GrpcTracingConfig,
+}
+
+impl Default for PonixApiConfig {
+    fn default() -> Self {
+        Self {
+            grpc_host: "0.0.0.0".to_string(),
+            grpc_port: 50051,
+            grpc_logging_config: GrpcLoggingConfig::default(),
+            grpc_tracing_config: GrpcTracingConfig::default(),
+        }
+    }
 }
 
 pub struct PonixApi {
@@ -46,6 +58,7 @@ impl PonixApi {
                 host: self.config.grpc_host,
                 port: self.config.grpc_port,
                 logging_config: self.config.grpc_logging_config,
+                tracing_config: self.config.grpc_tracing_config,
             };
             Box::pin(async move {
                 run_grpc_server(

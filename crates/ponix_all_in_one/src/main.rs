@@ -1,16 +1,16 @@
 mod config;
-mod telemetry;
 
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
 use common::clickhouse::ClickHouseClient;
-use common::grpc::GrpcLoggingConfig;
+use common::grpc::{GrpcLoggingConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
     PostgresOrganizationRepository,
 };
+use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
@@ -19,7 +19,6 @@ use ponix_api::ponix_api::{PonixApi, PonixApiConfig};
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
-use telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use tracing::{debug, error, info};
 
 #[tokio::main]
@@ -93,7 +92,8 @@ async fn main() {
         PonixApiConfig {
             grpc_host: config.grpc_host.clone(),
             grpc_port: config.grpc_port,
-            grpc_logging_config: GrpcLoggingConfig::new(ignored_paths),
+            grpc_logging_config: GrpcLoggingConfig::new(ignored_paths.clone()),
+            grpc_tracing_config: GrpcTracingConfig::new(ignored_paths),
         },
     );
 

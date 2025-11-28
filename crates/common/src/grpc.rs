@@ -1,7 +1,7 @@
 mod error;
 mod logging;
-mod tracing;
+mod otel_tracing;
 
 pub use error::*;
 pub use logging::*;
-pub use tracing::*;
+pub use otel_tracing::*;

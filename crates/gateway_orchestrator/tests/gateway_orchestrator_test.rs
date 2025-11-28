@@ -132,7 +132,7 @@ async fn test_orchestrator_starts_existing_gateways() {
 
     // Act
     orchestrator
-        .start()
+        .launch_gateways()
         .await
         .expect("Failed to start orchestrator");
 
@@ -173,7 +173,7 @@ async fn test_orchestrator_handles_gateway_created() {
 
     // Start with no gateways
     orchestrator
-        .start()
+        .launch_gateways()
         .await
         .expect("Failed to start orchestrator");
 
@@ -219,7 +219,7 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
     );
 
     orchestrator
-        .start()
+        .launch_gateways()
         .await
         .expect("Failed to start orchestrator");
     sleep(Duration::from_millis(100)).await;
@@ -280,7 +280,7 @@ async fn test_orchestrator_handles_gateway_soft_delete() {
     );
 
     orchestrator
-        .start()
+        .launch_gateways()
         .await
         .expect("Failed to start orchestrator");
     sleep(Duration::from_millis(100)).await;
@@ -331,7 +331,7 @@ async fn test_orchestrator_handles_gateway_deleted() {
     );
 
     orchestrator
-        .start()
+        .launch_gateways()
         .await
         .expect("Failed to start orchestrator");
     sleep(Duration::from_millis(100)).await;
@@ -391,7 +391,7 @@ async fn test_orchestrator_shutdown_stops_all_processes() {
     );
 
     orchestrator
-        .start()
+        .launch_gateways()
         .await
         .expect("Failed to start orchestrator");
     sleep(Duration::from_millis(100)).await;
@@ -442,7 +442,7 @@ async fn test_orchestrator_ignores_duplicate_create() {
     );
 
     orchestrator
-        .start()
+        .launch_gateways()
         .await
         .expect("Failed to start orchestrator");
     sleep(Duration::from_millis(100)).await;

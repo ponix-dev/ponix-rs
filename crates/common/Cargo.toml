@@ -33,9 +33,14 @@ tokio-postgres = { version = "0.7", features = [
 # Connection pooling
 deadpool-postgres = "0.14"
 
-# OpenTelemetry for trace context propagation
+# OpenTelemetry for trace context propagation and telemetry
 opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry-semantic-conventions.workspace = true
 tracing-opentelemetry.workspace = true
+opentelemetry-appender-tracing.workspace = true
+tracing-subscriber = { workspace = true }
 
 # Tower for middleware
 tower = "0.5"

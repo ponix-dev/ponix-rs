@@ -1,7 +1,7 @@
 #![cfg(feature = "integration-tests")]
 
-use analytics_worker::CelPayloadConverter;
-use analytics_worker::RawEnvelopeService;
+use analytics_worker::domain::CelPayloadConverter;
+use analytics_worker::domain::RawEnvelopeService;
 use common::domain::{DomainError, RawEnvelope};
 use std::sync::Arc;
 

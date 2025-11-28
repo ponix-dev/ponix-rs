@@ -4,7 +4,7 @@
 //! These tests verify that our Cayenne LPP Polyline decoder matches the behavior
 //! of the ElectronicCats reference implementation.
 
-use analytics_worker::{CayenneLppDecoder, PayloadDecoder};
+use analytics_worker::domain::{CayenneLppDecoder, PayloadDecoder};
 
 /// Test decoding a polyline with two very close points (high precision).
 /// Based on the ElectronicCats reference test "Decode polyline from message".

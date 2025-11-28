@@ -111,7 +111,15 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
     - `ProcessingResult` for per-message Ack/Nak decisions
   - **`clickhouse/`**: ClickHouse client and configuration
   - **`proto/`**: Bidirectional domain ↔ protobuf conversions
-  - **`grpc/`**: Domain error → gRPC Status mapping
+  - **`grpc/`**: gRPC middleware and error mapping
+    - `GrpcLoggingLayer`: Request/response logging with duration
+    - `GrpcTracingLayer`: OpenTelemetry span creation with W3C trace context propagation
+    - Domain error → gRPC Status mapping
+  - **`telemetry/`**: OpenTelemetry integration for traces and logs
+    - `TelemetryConfig`: Configuration for service name, OTLP endpoint, log level
+    - `init_telemetry()`: Initializes tracing with optional OTLP export
+    - `TraceContextLogProcessor`: Automatically injects trace_id/span_id into logs
+    - Supports both OTEL-enabled mode (traces + logs to collector) and local JSON logging
   - Feature flags: `testing` (mockall mocks), `integration-tests`
 
 - **`ponix_api`**: gRPC API layer and domain services
@@ -229,6 +237,61 @@ GatewayOrchestrator (CDC consumer)
 GatewayOrchestrationService
 ```
 
+#### Observability Architecture
+The system uses OpenTelemetry for distributed tracing and log correlation:
+
+```
+                     ┌─────────────────┐
+                     │  OTLP Collector │
+                     │  (Tempo/Loki)   │
+                     └────────▲────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+   Traces (OTLP)         Logs (OTLP)           Metrics
+        │                     │                     │
+┌───────┴───────┐    ┌───────┴───────┐             │
+│ TracerProvider│    │ LoggerProvider│             │
+│ (batch export)│    │ (batch export)│             │
+└───────▲───────┘    └───────▲───────┘             │
+        │                    │                     │
+        │            TraceContextLogProcessor      │
+        │            (injects trace_id/span_id)    │
+        │                    │                     │
+┌───────┴────────────────────┴─────────────────────┘
+│              tracing-subscriber
+│   ┌─────────────────────────────────────────┐
+│   │ otel_trace_layer → otel_log_layer → fmt │
+│   └─────────────────────────────────────────┘
+└──────────────────────▲───────────────────────
+                       │
+              Application Code
+           (tracing::info!, #[instrument])
+```
+
+**Key Components:**
+- `GrpcTracingLayer`: Creates spans for gRPC requests with W3C trace context propagation
+- `TraceContextLogProcessor`: Automatically adds `trace_id` and `span_id` as visible attributes to all logs
+- Layer ordering matters: trace layer must come before log layer for proper context propagation
+
+**Usage:**
+```rust
+use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig};
+
+let providers = init_telemetry(&TelemetryConfig {
+    service_name: "my-service".to_string(),
+    otel_endpoint: "http://localhost:4317".to_string(),
+    otel_enabled: true,
+    log_level: "info".to_string(),
+})?;
+
+// All tracing macros now emit to both stdout and OTLP
+tracing::info!("This log includes trace_id and span_id automatically");
+
+// On shutdown
+shutdown_telemetry(providers);
+```
+
 ### Rust Module Conventions
 
 This project follows specific module organization patterns:
@@ -340,8 +403,11 @@ The `ponix_all_in_one` service initializes in phases:
 Service configuration loaded from environment variables with `PONIX_` prefix:
 
 ```bash
-# Logging
+# Logging & Telemetry
 PONIX_LOG_LEVEL=info
+PONIX_OTEL_ENABLED=true
+PONIX_OTEL_SERVICE_NAME=ponix-all-in-one
+PONIX_OTEL_ENDPOINT=http://localhost:4317
 
 # NATS
 PONIX_NATS_URL=nats://localhost:4222

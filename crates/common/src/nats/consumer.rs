@@ -311,7 +311,7 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.err().unwrap();
-        assert!(err.to_string().contains("Failed to create consumer"));
+        assert!(err.to_string().contains("failed to create consumer"));
     }
 
     #[tokio::test]

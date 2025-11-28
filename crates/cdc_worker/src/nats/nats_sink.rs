@@ -10,8 +10,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tracing::{debug, debug_span, error, warn, Instrument};
 
-/// Configuration for an entity's CDC
-
 /// NATS sink for ETL replication events.
 ///
 /// `NatsSink` implements the ETL `Destination` trait and publishes
@@ -313,76 +311,73 @@ impl Destination for NatsSink {
         for event in events {
             match event {
                 Event::Relation(rel_event) => {
-                        let table_name = &rel_event.table_schema.name.name;
-                        let table_id = rel_event.table_schema.id;
+                    let table_name = &rel_event.table_schema.name.name;
+                    let table_id = rel_event.table_schema.id;
 
+                    debug!(
+                        "Received relation event for table: {} (ID: {:?})",
+                        table_name, table_id
+                    );
+
+                    // Store the table schema
+                    if let Ok(mut schemas) = self.table_schemas.write() {
+                        schemas.insert(table_id, rel_event.table_schema.clone());
+                    } else {
+                        error!("Failed to acquire write lock for table_schemas");
+                    }
+
+                    // Map table ID to config if we have one for this table name
+                    if let Some(config) = self.configs_by_name.get(table_name) {
                         debug!(
-                            "Received relation event for table: {} (ID: {:?})",
-                            table_name, table_id
+                            "Mapping table '{}' (ID: {:?}) to entity '{}'",
+                            table_name, table_id, config.entity_name
                         );
 
-                        // Store the table schema
-                        if let Ok(mut schemas) = self.table_schemas.write() {
-                            schemas.insert(table_id, rel_event.table_schema.clone());
+                        if let Ok(mut configs) = self.configs_by_id.write() {
+                            configs.insert(table_id, Arc::clone(config));
                         } else {
-                            error!("Failed to acquire write lock for table_schemas");
+                            error!("Failed to acquire write lock for configs_by_id");
                         }
-
-                        // Map table ID to config if we have one for this table name
-                        if let Some(config) = self.configs_by_name.get(table_name) {
-                            debug!(
-                                "Mapping table '{}' (ID: {:?}) to entity '{}'",
-                                table_name, table_id, config.entity_name
-                            );
-
-                            if let Ok(mut configs) = self.configs_by_id.write() {
-                                configs.insert(table_id, Arc::clone(config));
-                            } else {
-                                error!("Failed to acquire write lock for configs_by_id");
-                            }
-                        }
-                    }
-                    Event::Insert(insert_event) => {
-                        if let Err(e) = self.handle_insert(insert_event).await {
-                            error!("Failed to handle insert event: {:?}", e);
-                            // Continue processing other events
-                        }
-                    }
-                    Event::Update(update_event) => {
-                        if let Err(e) = self.handle_update(update_event).await {
-                            error!("Failed to handle update event: {:?}", e);
-                            // Continue processing other events
-                        }
-                    }
-                    Event::Delete(delete_event) => {
-                        if let Err(e) = self.handle_delete(delete_event).await {
-                            error!("Failed to handle delete event: {:?}", e);
-                            // Continue processing other events
-                        }
-                    }
-                    Event::Begin(_) => {
-                        // Transaction begin - we don't need to do anything
-                    }
-                    Event::Commit(_) => {
-                        // Transaction commit - we don't need to do anything
-                    }
-                    Event::Truncate(truncate_event) => {
-                        debug!(
-                            "Received truncate event for tables: {:?}",
-                            truncate_event.rel_ids
-                        );
-                        // For NATS, we don't publish truncate events
-                    }
-                    Event::Unsupported => {
-                        warn!("Received unsupported event type");
                     }
                 }
+                Event::Insert(insert_event) => {
+                    if let Err(e) = self.handle_insert(insert_event).await {
+                        error!("Failed to handle insert event: {:?}", e);
+                        // Continue processing other events
+                    }
+                }
+                Event::Update(update_event) => {
+                    if let Err(e) = self.handle_update(update_event).await {
+                        error!("Failed to handle update event: {:?}", e);
+                        // Continue processing other events
+                    }
+                }
+                Event::Delete(delete_event) => {
+                    if let Err(e) = self.handle_delete(delete_event).await {
+                        error!("Failed to handle delete event: {:?}", e);
+                        // Continue processing other events
+                    }
+                }
+                Event::Begin(_) => {
+                    // Transaction begin - we don't need to do anything
+                }
+                Event::Commit(_) => {
+                    // Transaction commit - we don't need to do anything
+                }
+                Event::Truncate(truncate_event) => {
+                    debug!(
+                        "Received truncate event for tables: {:?}",
+                        truncate_event.rel_ids
+                    );
+                    // For NATS, we don't publish truncate events
+                }
+                Event::Unsupported => {
+                    warn!("Received unsupported event type");
+                }
             }
-
-            Ok(())
         }
-        .instrument(span)
-        .await
+
+        Ok(())
     }
 }
 

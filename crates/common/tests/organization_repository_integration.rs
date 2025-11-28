@@ -132,10 +132,7 @@ async fn test_update_nonexistent_organization() {
         name: "New Name".to_string(),
     };
     let result = repo.update_organization(update_input).await;
-    assert!(matches!(
-        result,
-        Err(DomainError::OrganizationNotFound(_))
-    ));
+    assert!(matches!(result, Err(DomainError::OrganizationNotFound(_))));
 }
 
 #[tokio::test]
@@ -173,10 +170,7 @@ async fn test_delete_nonexistent_organization() {
         organization_id: "nonexistent".to_string(),
     };
     let result = repo.delete_organization(delete_input).await;
-    assert!(matches!(
-        result,
-        Err(DomainError::OrganizationNotFound(_))
-    ));
+    assert!(matches!(result, Err(DomainError::OrganizationNotFound(_))));
 }
 
 #[tokio::test]
