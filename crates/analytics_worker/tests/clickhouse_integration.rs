@@ -1,6 +1,6 @@
 #![cfg(feature = "integration-tests")]
 
-use analytics_worker::ClickHouseEnvelopeRepository;
+use analytics_worker::clickhouse::ClickHouseEnvelopeRepository;
 use chrono::Utc;
 use common::clickhouse::ClickHouseClient;
 use common::domain::{ProcessedEnvelope, ProcessedEnvelopeRepository, StoreEnvelopesInput};

@@ -49,8 +49,13 @@ services:
       PONIX_GRPC_HOST: "0.0.0.0"
       PONIX_GRPC_PORT: "50051"
 
-      # Telemetry configuration
+      # gRPC Telemetry configuration
       PONIX_GRPC_IGNORED_PATHS: "/grpc.reflection."
+
+      # OpenTelemetry configuration
+      PONIX_OTEL_ENABLED: "true"
+      PONIX_OTEL_SERVICE_NAME: "ponix-all-in-one"
+      PONIX_OTEL_ENDPOINT: "http://otel-lgtm:4317"
 
       # CDC configuration
       PONIX_CDC_GATEWAY_ENTITY_NAME: "gateways"
@@ -61,8 +66,6 @@ services:
       PONIX_CDC_BATCH_TIMEOUT_MS: "5000"
       PONIX_CDC_RETRY_DELAY_MS: "10000"
       PONIX_CDC_MAX_RETRY_ATTEMPTS: "5"
-
-      PONIX_OTEL_ENDPOINT: "http://otel-lgtm:4317"
     depends_on:
       - nats
       - clickhouse

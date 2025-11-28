@@ -6,9 +6,7 @@ use anyhow::Result;
 use goose::MigrationRunner;
 
 use common::clickhouse::ClickHouseClient;
-use common::domain::{
-    CreateDeviceInput, Device, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait,
-};
+use common::domain::{CreateDeviceInput, Device, RawEnvelope, RawEnvelopeProducer as _};
 use common::nats::{NatsClient, NatsConsumer};
 use common::postgres::{PostgresClient, PostgresDeviceRepository, PostgresOrganizationRepository};
 
@@ -346,7 +344,7 @@ async fn produce_raw_messages(
             payload: cayenne_payload.clone(),
         };
 
-        raw_producer.publish(&raw_envelope).await?;
+        raw_producer.publish_raw_envelope(&raw_envelope).await?;
 
         // Small delay to prevent overwhelming the system
         if i % 10 == 9 {
