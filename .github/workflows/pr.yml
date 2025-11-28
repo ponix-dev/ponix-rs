@@ -1,0 +1,24 @@
+name: PR
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    uses: ./.github/workflows/unit-tests.yml
+    secrets:
+      BSR_TOKEN: ${{ secrets.BSR_TOKEN }}
+
+  integration-tests:
+    name: Integration Tests
+    uses: ./.github/workflows/integration-tests.yml
+    secrets:
+      BSR_TOKEN: ${{ secrets.BSR_TOKEN }}
+
+  docker-build:
+    name: Docker Build
+    uses: ./.github/workflows/docker-build.yml
+    secrets:
+      BSR_TOKEN: ${{ secrets.BSR_TOKEN }}

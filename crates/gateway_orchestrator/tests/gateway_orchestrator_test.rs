@@ -248,12 +248,11 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
 
     // Verify the process has the updated config
     let handle = process_store.get("gw-update").await.unwrap().unwrap();
-    if let GatewayConfig::Emqx(emqx) = &handle.gateway.gateway_config {
-        assert_eq!(
-            emqx.broker_url, "mqtt://updated.example.com:8883",
-            "Process should have the updated broker URL"
-        );
-    }
+    let GatewayConfig::Emqx(emqx) = &handle.gateway.gateway_config;
+    assert_eq!(
+        emqx.broker_url, "mqtt://updated.example.com:8883",
+        "Process should have the updated broker URL"
+    );
 
     // Cleanup
     shutdown_token.cancel();
