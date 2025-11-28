@@ -43,7 +43,7 @@ opentelemetry-appender-tracing.workspace = true
 tracing-subscriber = { workspace = true }
 
 # Tower for middleware
-tower = "0.5"
+tower = { workspace = true }
 http = "1.0"
 
 [dev-dependencies]

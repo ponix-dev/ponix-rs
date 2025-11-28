@@ -2662,6 +2662,7 @@ dependencies = [
  "testcontainers-modules",
  "tokio",
  "tokio-util",
+ "tower 0.5.2",
  "tracing",
  "which",
  "xid",
