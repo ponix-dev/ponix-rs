@@ -6,7 +6,9 @@ use anyhow::Result;
 use goose::MigrationRunner;
 
 use common::clickhouse::ClickHouseClient;
-use common::domain::{CreateDeviceInput, Device, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait};
+use common::domain::{
+    CreateDeviceInput, Device, RawEnvelope, RawEnvelopeProducer as RawEnvelopeProducerTrait,
+};
 use common::nats::{NatsClient, NatsConsumer};
 use common::postgres::{PostgresClient, PostgresDeviceRepository, PostgresOrganizationRepository};
 

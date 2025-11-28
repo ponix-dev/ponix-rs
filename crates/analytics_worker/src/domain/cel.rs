@@ -84,7 +84,6 @@ use std::sync::Arc;
 /// The `CelEnvironment` provides a simple API for executing CEL expressions
 /// against binary payloads. Custom decoder functions are automatically registered
 /// when the environment is created.
-
 pub struct CelEnvironment {
     // Store as owned Context since we can't store references without lifetimes
     _marker: std::marker::PhantomData<()>,

@@ -10,7 +10,6 @@ use std::sync::Arc;
 use tracing::{debug, info};
 
 /// NATS JetStream producer for RawEnvelope messages
-
 pub struct RawEnvelopeProducer {
     jetstream: Arc<dyn JetStreamPublisher>,
     base_subject: String,

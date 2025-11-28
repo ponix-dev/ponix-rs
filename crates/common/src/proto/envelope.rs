@@ -101,7 +101,6 @@ pub fn raw_envelope_proto_to_domain(proto: ProtoRawEnvelope) -> Result<RawEnvelo
 }
 
 /// Convert domain RawEnvelope to protobuf RawEnvelope
-
 pub fn raw_envelope_domain_to_proto(envelope: &RawEnvelope) -> ProtoRawEnvelope {
     ProtoRawEnvelope {
         organization_id: envelope.organization_id.clone(),

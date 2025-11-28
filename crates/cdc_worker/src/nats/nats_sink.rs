@@ -10,8 +10,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tracing::{debug, debug_span, error, warn, Instrument};
 
-/// Configuration for an entity's CDC
-
 /// NATS sink for ETL replication events.
 ///
 /// `NatsSink` implements the ETL `Destination` trait and publishes

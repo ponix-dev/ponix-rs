@@ -1,6 +1,8 @@
 #![cfg(feature = "integration-tests")]
 
-use common::domain::{CreateDeviceInputWithId, DeviceRepository, DomainError, GetDeviceInput, ListDevicesInput};
+use common::domain::{
+    CreateDeviceInputWithId, DeviceRepository, DomainError, GetDeviceInput, ListDevicesInput,
+};
 use common::postgres::{PostgresClient, PostgresDeviceRepository};
 use goose::MigrationRunner;
 use testcontainers::runners::AsyncRunner;

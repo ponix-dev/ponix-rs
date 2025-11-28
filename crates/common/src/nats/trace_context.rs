@@ -96,7 +96,10 @@ mod tests {
     #[test]
     fn test_manual_traceparent_extraction() {
         let mut headers = HeaderMap::new();
-        headers.insert(TRACEPARENT, "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
+        headers.insert(
+            TRACEPARENT,
+            "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+        );
 
         // Verify the extractor can read the header
         let extractor = NatsHeaderExtractor(&headers);
