@@ -108,6 +108,7 @@ async fn main() {
             gateway_stream: config.nats_gateway_stream.clone(),
             gateway_consumer_name: config.gateway_consumer_name.clone(),
             gateway_filter_subject: config.gateway_filter_subject.clone(),
+            raw_envelopes_stream: config.nats_raw_stream.clone(),
         },
     )
     .await

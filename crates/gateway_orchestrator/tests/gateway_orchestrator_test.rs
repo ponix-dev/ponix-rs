@@ -2,7 +2,7 @@
 
 use common::domain::{
     CreateGatewayInputWithId, DomainError, DomainResult, EmqxGatewayConfig, Gateway, GatewayConfig,
-    GatewayRepository, UpdateGatewayInput,
+    GatewayRepository, MockRawEnvelopeProducer, RawEnvelopeProducer, UpdateGatewayInput,
 };
 use gateway_orchestrator::domain::{
     GatewayOrchestrationService, GatewayOrchestrationServiceConfig, GatewayProcessStore,
@@ -11,6 +11,13 @@ use gateway_orchestrator::domain::{
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use tokio_util::sync::CancellationToken;
+
+// Helper to create mock producer for tests
+fn create_mock_producer() -> Arc<dyn RawEnvelopeProducer> {
+    let mut mock = MockRawEnvelopeProducer::new();
+    mock.expect_publish_raw_envelope().returning(|_| Ok(()));
+    Arc::new(mock)
+}
 
 // Mock implementation of GatewayRepository for testing
 mod mocks {
@@ -128,6 +135,7 @@ async fn test_orchestrator_starts_existing_gateways() {
         process_store.clone(),
         config,
         shutdown_token.clone(),
+        create_mock_producer(),
     );
 
     // Act
@@ -169,6 +177,7 @@ async fn test_orchestrator_handles_gateway_created() {
         process_store.clone(),
         config,
         shutdown_token.clone(),
+        create_mock_producer(),
     );
 
     // Start with no gateways
@@ -216,6 +225,7 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
         process_store.clone(),
         config,
         shutdown_token.clone(),
+        create_mock_producer(),
     );
 
     orchestrator
@@ -276,6 +286,7 @@ async fn test_orchestrator_handles_gateway_soft_delete() {
         process_store.clone(),
         config,
         shutdown_token.clone(),
+        create_mock_producer(),
     );
 
     orchestrator
@@ -327,6 +338,7 @@ async fn test_orchestrator_handles_gateway_deleted() {
         process_store.clone(),
         config,
         shutdown_token.clone(),
+        create_mock_producer(),
     );
 
     orchestrator
@@ -387,6 +399,7 @@ async fn test_orchestrator_shutdown_stops_all_processes() {
         process_store.clone(),
         config,
         shutdown_token.clone(),
+        create_mock_producer(),
     );
 
     orchestrator
@@ -438,6 +451,7 @@ async fn test_orchestrator_ignores_duplicate_create() {
         process_store.clone(),
         config,
         shutdown_token.clone(),
+        create_mock_producer(),
     );
 
     orchestrator

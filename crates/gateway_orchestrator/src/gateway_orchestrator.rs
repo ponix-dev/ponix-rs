@@ -1,7 +1,7 @@
 use crate::domain::{
     GatewayOrchestrationService, GatewayOrchestrationServiceConfig, InMemoryGatewayProcessStore,
 };
-use crate::nats::GatewayCdcConsumer;
+use crate::nats::{GatewayCdcConsumer, RawEnvelopeProducer};
 use common::nats::NatsClient;
 use common::postgres::PostgresGatewayRepository;
 use std::sync::Arc;
@@ -12,6 +12,7 @@ pub struct GatewayOrchestratorConfig {
     pub gateway_stream: String,
     pub gateway_consumer_name: String,
     pub gateway_filter_subject: String,
+    pub raw_envelopes_stream: String,
 }
 
 pub struct GatewayOrchestrator {
@@ -27,6 +28,14 @@ impl GatewayOrchestrator {
     ) -> anyhow::Result<Self> {
         debug!("initializing gateway API module");
 
+        // Create raw envelope producer for gateway processes
+        let publisher_client = nats_client.create_publisher_client();
+        let raw_envelope_producer: Arc<dyn common::domain::RawEnvelopeProducer> =
+            Arc::new(RawEnvelopeProducer::new(
+                publisher_client,
+                config.raw_envelopes_stream.clone(),
+            ));
+
         // Initialize orchestrator
         let orchestrator_config = GatewayOrchestrationServiceConfig::default();
         let process_store = Arc::new(InMemoryGatewayProcessStore::new());
@@ -35,6 +44,7 @@ impl GatewayOrchestrator {
             process_store,
             orchestrator_config,
             orchestrator_shutdown_token,
+            raw_envelope_producer,
         ));
 
         // Start orchestrator to load existing gateways
