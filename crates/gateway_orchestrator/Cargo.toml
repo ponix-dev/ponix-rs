@@ -15,7 +15,7 @@ tokio = { workspace = true }
 chrono = "0.4"
 anyhow = { workspace = true }
 futures = "0.3"
-ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf" }
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251129185957-8f22d4974be0.1", registry = "buf" }
 prost = { version = "0.13" }
 async-nats = "0.37"
 bytes = "1.9"

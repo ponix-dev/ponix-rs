@@ -1,7 +1,8 @@
 use crate::domain::GatewayOrchestrationServiceConfig;
 use crate::mqtt::parse_topic;
 use common::domain::{DomainError, DomainResult, Gateway, GatewayConfig, RawEnvelope, RawEnvelopeProducer};
-use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
+use rumqttc::v5::mqttbytes::QoS;
+use rumqttc::v5::{AsyncClient, Event, MqttOptions};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
@@ -26,15 +27,16 @@ pub async fn run_mqtt_subscriber(
     shutdown_token: CancellationToken,
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
 ) {
-    let broker_url = match &gateway.gateway_config {
-        GatewayConfig::Emqx(emqx) => &emqx.broker_url,
+    let (broker_url, subscription_group) = match &gateway.gateway_config {
+        GatewayConfig::Emqx(emqx) => (&emqx.broker_url, &emqx.subscription_group),
     };
 
     info!(
         gateway_id = %gateway.gateway_id,
         organization_id = %gateway.organization_id,
         broker_url = %broker_url,
-        "starting MQTT subscriber"
+        subscription_group = %subscription_group,
+        "starting MQTT 5 subscriber with shared subscription"
     );
 
     let mut retry_count = 0;
@@ -49,6 +51,7 @@ pub async fn run_mqtt_subscriber(
         match run_mqtt_connection(
             &gateway,
             broker_url,
+            subscription_group,
             &process_token,
             &shutdown_token,
             Arc::clone(&raw_envelope_producer),
@@ -97,18 +100,20 @@ pub async fn run_mqtt_subscriber(
     info!(gateway_id = %gateway.gateway_id, "MQTT subscriber stopped");
 }
 
-/// Run a single MQTT connection session
+/// Run a single MQTT 5 connection session with shared subscription support
 #[instrument(
     name = "mqtt_connection",
     skip_all,
     fields(
         gateway_id = %gateway.gateway_id,
         broker_url = %broker_url,
+        subscription_group = %subscription_group,
     )
 )]
 async fn run_mqtt_connection(
     gateway: &Gateway,
     broker_url: &str,
+    subscription_group: &str,
     process_token: &CancellationToken,
     shutdown_token: &CancellationToken,
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
@@ -116,16 +121,19 @@ async fn run_mqtt_connection(
     // Parse broker URL to extract host and port
     let (host, port) = parse_broker_url(broker_url)?;
 
-    // Create MQTT client
+    // Create MQTT 5 client
     let client_id = format!("ponix-{}", gateway.gateway_id);
     let mut mqtt_options = MqttOptions::new(&client_id, host, port);
     mqtt_options.set_keep_alive(Duration::from_secs(30));
-    mqtt_options.set_clean_session(true);
+    mqtt_options.set_clean_start(true);
 
     let (client, mut eventloop) = AsyncClient::new(mqtt_options, 100);
 
-    // Subscribe to org_id/+ pattern (single-level wildcard for device_id)
-    let subscribe_topic = format!("{}/+", gateway.organization_id);
+    // Build shared subscription topic: $share/{group}/{org_id}/+
+    // This enables load balancing across multiple gateway instances
+    let base_topic = format!("{}/+", gateway.organization_id);
+    let subscribe_topic = format!("$share/{}/{}", subscription_group, base_topic);
+
     client
         .subscribe(&subscribe_topic, QoS::AtLeastOnce)
         .await
@@ -136,7 +144,8 @@ async fn run_mqtt_connection(
     info!(
         gateway_id = %gateway.gateway_id,
         topic = %subscribe_topic,
-        "subscribed to MQTT topic"
+        subscription_group = %subscription_group,
+        "subscribed to MQTT 5 shared subscription topic"
     );
 
     // Event loop
@@ -154,26 +163,42 @@ async fn run_mqtt_connection(
             }
             event = eventloop.poll() => {
                 match event {
-                    Ok(Event::Incoming(Packet::Publish(publish))) => {
-                        handle_mqtt_message(
-                            gateway,
-                            &publish.topic,
-                            &publish.payload,
-                            Arc::clone(&raw_envelope_producer),
-                        )
-                        .await;
+                    Ok(Event::Incoming(packet)) => {
+                        use rumqttc::v5::mqttbytes::v5::Packet;
+                        match packet {
+                            Packet::Publish(publish) => {
+                                // Convert topic from Bytes to &str
+                                let topic = match std::str::from_utf8(&publish.topic) {
+                                    Ok(t) => t,
+                                    Err(e) => {
+                                        warn!(error = %e, "invalid UTF-8 in MQTT topic, skipping message");
+                                        continue;
+                                    }
+                                };
+                                handle_mqtt_message(
+                                    gateway,
+                                    topic,
+                                    &publish.payload,
+                                    Arc::clone(&raw_envelope_producer),
+                                )
+                                .await;
+                            }
+                            Packet::SubAck(_) => {
+                                debug!(gateway_id = %gateway.gateway_id, "subscription acknowledged");
+                            }
+                            Packet::ConnAck(_) => {
+                                info!(gateway_id = %gateway.gateway_id, "connected to MQTT 5 broker");
+                            }
+                            Packet::PingResp(_) => {
+                                // Ping response - connection is healthy
+                            }
+                            _ => {
+                                // Other packets
+                            }
+                        }
                     }
-                    Ok(Event::Incoming(Packet::SubAck(_))) => {
-                        debug!(gateway_id = %gateway.gateway_id, "subscription acknowledged");
-                    }
-                    Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                        info!(gateway_id = %gateway.gateway_id, "connected to MQTT broker");
-                    }
-                    Ok(Event::Incoming(Packet::PingResp)) => {
-                        // Ping response - connection is healthy
-                    }
-                    Ok(_) => {
-                        // Other events (outgoing, etc.)
+                    Ok(Event::Outgoing(_)) => {
+                        // Outgoing events - ignore
                     }
                     Err(e) => {
                         return Err(DomainError::RepositoryError(
@@ -284,6 +309,7 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://localhost:1883".to_string(),
+                subscription_group: "ponix".to_string(),
             }),
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),

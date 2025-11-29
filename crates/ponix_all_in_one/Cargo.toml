@@ -29,7 +29,7 @@ cdc_worker = { path = "../cdc_worker" }
 goose = { path = "../goose" }
 
 # Protobuf support
-ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251105022230-76aad410c133.1", registry = "buf" }
+ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251129185957-8f22d4974be0.1", registry = "buf" }
 prost-types = { workspace = true }
 xid.workspace = true
 chrono.workspace = true

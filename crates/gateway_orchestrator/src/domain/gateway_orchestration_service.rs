@@ -152,7 +152,9 @@ impl GatewayOrchestrationService {
 
         // Get the appropriate runner for this gateway type
         let runner = self.runner_factory.create_runner(&gateway.gateway_config)?;
-        let gateway_type = self.runner_factory.gateway_type_name(&gateway.gateway_config);
+        let gateway_type = self
+            .runner_factory
+            .gateway_type_name(&gateway.gateway_config);
 
         let gateway_clone = gateway.clone();
         let config = self.config.clone();
@@ -182,8 +184,7 @@ impl GatewayOrchestrationService {
 
         info!(
             gateway_type = gateway_type,
-            "started gateway process for {}",
-            gateway.gateway_id
+            "started gateway process for {}", gateway.gateway_id
         );
         Ok(())
     }
@@ -280,6 +281,7 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://mqtt.example.com:1883".to_string(),
+                subscription_group: "ponix".to_string(),
             }),
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),
@@ -406,6 +408,7 @@ mod tests {
         let mut new_gateway = old_gateway.clone();
         new_gateway.gateway_config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.newhost.com:8883".to_string(),
+            subscription_group: "ponix".to_string(),
         });
 
         let result = orchestrator.handle_gateway_updated(new_gateway).await;

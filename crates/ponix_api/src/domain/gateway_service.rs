@@ -179,6 +179,7 @@ mod tests {
 
         let test_config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
+            subscription_group: "ponix".to_string(),
         });
 
         mock_org_repo
@@ -247,6 +248,7 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: String::new(),
+                subscription_group: "ponix".to_string(),
             }),
         };
 
@@ -279,6 +281,7 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: String::new(),
+                subscription_group: "ponix".to_string(),
             }),
         };
 

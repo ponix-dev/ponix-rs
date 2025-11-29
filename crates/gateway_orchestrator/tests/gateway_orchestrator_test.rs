@@ -130,6 +130,7 @@ fn create_test_gateway(id: &str, org_id: &str, broker_url: &str) -> Gateway {
         gateway_type: "EMQX".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: broker_url.to_string(),
+            subscription_group: "ponix".to_string(),
         }),
         created_at: Some(chrono::Utc::now()),
         updated_at: None,

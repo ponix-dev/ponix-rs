@@ -69,6 +69,10 @@ pub enum GatewayConfig {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EmqxGatewayConfig {
     pub broker_url: String,
+    /// Shared subscription group name for MQTT 5.
+    /// Subscribes using `$share/{group}/{topic}` format.
+    /// This enables load balancing across multiple gateway instances.
+    pub subscription_group: String,
 }
 
 /// Repository trait for gateway persistence operations
