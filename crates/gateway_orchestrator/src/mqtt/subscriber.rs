@@ -5,12 +5,20 @@ use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, info_span, instrument, warn, Instrument, Span};
 
 /// Run the MQTT subscriber process for a gateway
 ///
 /// Subscribes to `{org_id}/+` on the configured MQTT broker and publishes
 /// received messages as RawEnvelopes to NATS.
+#[instrument(
+    name = "mqtt_subscriber",
+    skip_all,
+    fields(
+        gateway_id = %gateway.gateway_id,
+        organization_id = %gateway.organization_id,
+    )
+)]
 pub async fn run_mqtt_subscriber(
     gateway: Gateway,
     config: GatewayOrchestrationServiceConfig,
@@ -90,6 +98,14 @@ pub async fn run_mqtt_subscriber(
 }
 
 /// Run a single MQTT connection session
+#[instrument(
+    name = "mqtt_connection",
+    skip_all,
+    fields(
+        gateway_id = %gateway.gateway_id,
+        broker_url = %broker_url,
+    )
+)]
 async fn run_mqtt_connection(
     gateway: &Gateway,
     broker_url: &str,
@@ -171,61 +187,68 @@ async fn run_mqtt_connection(
 }
 
 /// Handle an incoming MQTT message
+///
+/// Creates a new independent trace for each message (not nested under the gateway process trace).
 pub(crate) async fn handle_mqtt_message(
     gateway: &Gateway,
     topic: &str,
     payload: &[u8],
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
 ) {
-    // Parse topic to extract org_id and device_id
-    let parsed = match parse_topic(topic) {
-        Ok(p) => p,
-        Err(e) => {
+    // Create a new root span for this message (independent trace)
+    let span = info_span!(
+        parent: Span::none(),
+        "mqtt_message",
+        gateway_id = %gateway.gateway_id,
+        organization_id = %gateway.organization_id,
+        topic = %topic,
+        payload_size = payload.len(),
+        device_id = tracing::field::Empty,
+    );
+
+    async {
+        // Parse topic to extract org_id and device_id
+        let parsed = match parse_topic(topic) {
+            Ok(p) => p,
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "failed to parse MQTT topic, skipping message"
+                );
+                return;
+            }
+        };
+
+        // Record device_id in the current span
+        Span::current().record("device_id", &parsed.end_device_id);
+
+        // Verify organization matches gateway config
+        if parsed.organization_id != gateway.organization_id {
             warn!(
-                gateway_id = %gateway.gateway_id,
-                topic = %topic,
-                error = %e,
-                "failed to parse MQTT topic, skipping message"
+                topic_org = %parsed.organization_id,
+                gateway_org = %gateway.organization_id,
+                "organization ID mismatch, skipping message"
             );
             return;
         }
-    };
 
-    // Verify organization matches gateway config
-    if parsed.organization_id != gateway.organization_id {
-        warn!(
-            gateway_id = %gateway.gateway_id,
-            topic_org = %parsed.organization_id,
-            gateway_org = %gateway.organization_id,
-            "organization ID mismatch, skipping message"
-        );
-        return;
+        // Create RawEnvelope
+        let envelope = RawEnvelope {
+            organization_id: parsed.organization_id,
+            end_device_id: parsed.end_device_id.clone(),
+            occurred_at: chrono::Utc::now(),
+            payload: payload.to_vec(),
+        };
+
+        // Publish to NATS (fire-and-forget with error logging)
+        if let Err(e) = raw_envelope_producer.publish_raw_envelope(&envelope).await {
+            error!(error = %e, "failed to publish RawEnvelope to NATS");
+        } else {
+            debug!("published RawEnvelope to NATS");
+        }
     }
-
-    // Create RawEnvelope
-    let envelope = RawEnvelope {
-        organization_id: parsed.organization_id,
-        end_device_id: parsed.end_device_id.clone(),
-        occurred_at: chrono::Utc::now(),
-        payload: payload.to_vec(),
-    };
-
-    // Publish to NATS (fire-and-forget with error logging)
-    if let Err(e) = raw_envelope_producer.publish_raw_envelope(&envelope).await {
-        error!(
-            gateway_id = %gateway.gateway_id,
-            device_id = %parsed.end_device_id,
-            error = %e,
-            "failed to publish RawEnvelope to NATS"
-        );
-    } else {
-        debug!(
-            gateway_id = %gateway.gateway_id,
-            device_id = %parsed.end_device_id,
-            payload_size = payload.len(),
-            "published RawEnvelope to NATS"
-        );
-    }
+    .instrument(span)
+    .await
 }
 
 /// Parse broker URL in format mqtt://host:port or tcp://host:port or host:port

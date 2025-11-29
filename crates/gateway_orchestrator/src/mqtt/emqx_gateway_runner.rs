@@ -1,7 +1,8 @@
 use async_trait::async_trait;
-use common::domain::{Gateway, RawEnvelopeProducer};
+use common::domain::{Gateway, GatewayConfig, RawEnvelopeProducer};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 
 use crate::domain::{GatewayOrchestrationServiceConfig, GatewayRunner};
 use crate::mqtt::subscriber::run_mqtt_subscriber;
@@ -17,10 +18,26 @@ impl EmqxGatewayRunner {
     pub fn new() -> Self {
         Self
     }
+
+    /// Extract broker URL from gateway config for tracing
+    fn extract_broker_url(config: &GatewayConfig) -> &str {
+        match config {
+            GatewayConfig::Emqx(emqx) => &emqx.broker_url,
+        }
+    }
 }
 
 #[async_trait]
 impl GatewayRunner for EmqxGatewayRunner {
+    #[instrument(
+        name = "emqx_gateway_runner",
+        skip_all,
+        fields(
+            gateway_id = %gateway.gateway_id,
+            organization_id = %gateway.organization_id,
+            broker_url = %Self::extract_broker_url(&gateway.gateway_config),
+        )
+    )]
     async fn run(
         &self,
         gateway: Gateway,
