@@ -40,16 +40,22 @@ impl From<GatewayRow> for Gateway {
 
 /// Convert serde_json::Value to domain GatewayConfig
 fn json_to_gateway_config(json: &serde_json::Value) -> GatewayConfig {
-    if let Some(broker_url) = json.get("broker_url").and_then(|v| v.as_str()) {
-        GatewayConfig::Emqx(EmqxGatewayConfig {
-            broker_url: broker_url.to_string(),
-        })
-    } else {
-        // Default to empty EMQX config if broker_url not found
-        GatewayConfig::Emqx(EmqxGatewayConfig {
-            broker_url: String::new(),
-        })
-    }
+    let broker_url = json
+        .get("broker_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    let subscription_group = json
+        .get("subscription_group")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    GatewayConfig::Emqx(EmqxGatewayConfig {
+        broker_url,
+        subscription_group,
+    })
 }
 
 /// Convert domain GatewayConfig to serde_json::Value
@@ -57,7 +63,8 @@ pub fn gateway_config_to_json(config: &GatewayConfig) -> serde_json::Value {
     match config {
         GatewayConfig::Emqx(emqx) => {
             serde_json::json!({
-                "broker_url": emqx.broker_url
+                "broker_url": emqx.broker_url,
+                "subscription_group": emqx.subscription_group
             })
         }
     }

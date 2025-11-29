@@ -11,6 +11,7 @@ permissions:
   issues: write # to comment on issues
   pull-requests: write # to comment on PRs
   id-token: write # if using OIDC
+  packages: write
 
 jobs:
   semantic-release:

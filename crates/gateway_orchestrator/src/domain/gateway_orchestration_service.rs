@@ -1,11 +1,10 @@
 use crate::domain::{
     GatewayOrchestrationServiceConfig, GatewayProcessHandle, GatewayProcessStore,
-    PRINT_INTERVAL_SECS,
+    GatewayRunnerFactory,
 };
-use common::domain::{DomainResult, Gateway, GatewayConfig, GatewayRepository};
+use common::domain::{DomainResult, Gateway, GatewayRepository, RawEnvelopeProducer};
 
 use std::sync::Arc;
-use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
@@ -14,6 +13,8 @@ pub struct GatewayOrchestrationService {
     process_store: Arc<dyn GatewayProcessStore>,
     config: GatewayOrchestrationServiceConfig,
     shutdown_token: CancellationToken,
+    raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
+    runner_factory: GatewayRunnerFactory,
 }
 
 impl GatewayOrchestrationService {
@@ -22,12 +23,16 @@ impl GatewayOrchestrationService {
         process_store: Arc<dyn GatewayProcessStore>,
         config: GatewayOrchestrationServiceConfig,
         shutdown_token: CancellationToken,
+        raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
+        runner_factory: GatewayRunnerFactory,
     ) -> Self {
         Self {
             gateway_repository,
             process_store,
             config,
             shutdown_token,
+            raw_envelope_producer,
+            runner_factory,
         }
     }
 
@@ -145,15 +150,29 @@ impl GatewayOrchestrationService {
             return Ok(());
         }
 
+        // Get the appropriate runner for this gateway type
+        let runner = self.runner_factory.create_runner(&gateway.gateway_config)?;
+        let gateway_type = self
+            .runner_factory
+            .gateway_type_name(&gateway.gateway_config);
+
         let gateway_clone = gateway.clone();
         let config = self.config.clone();
         let process_token = CancellationToken::new();
         let process_token_clone = process_token.clone();
         let shutdown_token = self.shutdown_token.clone();
+        let producer = Arc::clone(&self.raw_envelope_producer);
 
-        // Spawn print process
+        // Spawn gateway process using the appropriate runner
         let join_handle = tokio::spawn(async move {
-            run_gateway_print_process(gateway_clone, config, process_token_clone, shutdown_token)
+            runner
+                .run(
+                    gateway_clone,
+                    config,
+                    process_token_clone,
+                    shutdown_token,
+                    producer,
+                )
                 .await;
         });
 
@@ -163,7 +182,10 @@ impl GatewayOrchestrationService {
             .upsert(gateway.gateway_id.clone(), handle)
             .await?;
 
-        info!("started process for gateway {}", gateway.gateway_id);
+        info!(
+            gateway_type = gateway_type,
+            "started gateway process for {}", gateway.gateway_id
+        );
         Ok(())
     }
 
@@ -203,97 +225,53 @@ impl GatewayOrchestrationService {
     }
 }
 
-/// Run the gateway print process
-async fn run_gateway_print_process(
-    gateway: Gateway,
-    config: GatewayOrchestrationServiceConfig,
-    process_token: CancellationToken,
-    shutdown_token: CancellationToken,
-) {
-    debug!(
-        "starting print process for gateway: {} ({})",
-        gateway.gateway_id, gateway.organization_id
-    );
-
-    let mut retry_count = 0;
-
-    loop {
-        // Check for cancellation
-        if process_token.is_cancelled() || shutdown_token.is_cancelled() {
-            debug!("print process for gateway {} cancelled", gateway.gateway_id);
-            break;
-        }
-
-        // Print gateway config
-        match print_gateway_config(&gateway) {
-            Ok(()) => {
-                retry_count = 0; // Reset retry count on success
-            }
-            Err(e) => {
-                error!(
-                    "error printing config for gateway {}: {}",
-                    gateway.gateway_id, e
-                );
-
-                retry_count += 1;
-                if retry_count >= config.max_retry_attempts {
-                    error!(
-                        "max retry attempts ({}) reached for gateway {}, stopping process",
-                        config.max_retry_attempts, gateway.gateway_id
-                    );
-                    break;
-                }
-
-                debug!(
-                    "retrying print for gateway {} (attempt {}/{})",
-                    gateway.gateway_id, retry_count, config.max_retry_attempts
-                );
-
-                // Wait before retry
-                tokio::select! {
-                    _ = process_token.cancelled() => break,
-                    _ = shutdown_token.cancelled() => break,
-                    _ = tokio::time::sleep(config.retry_delay()) => {}
-                }
-                continue;
-            }
-        }
-
-        // Wait for next print interval (hard-coded 5 seconds)
-        tokio::select! {
-            _ = process_token.cancelled() => {
-                debug!("print process for gateway {} cancelled", gateway.gateway_id);
-                break;
-            }
-            _ = shutdown_token.cancelled() => {
-                debug!("print process for gateway {} shutdown signal received", gateway.gateway_id);
-                break;
-            }
-            _ = tokio::time::sleep(Duration::from_secs(PRINT_INTERVAL_SECS)) => {}
-        }
-    }
-
-    debug!("print process for gateway {} stopped", gateway.gateway_id);
-}
-
-/// Print gateway configuration to stdout
-fn print_gateway_config(gateway: &Gateway) -> DomainResult<()> {
-    match &gateway.gateway_config {
-        GatewayConfig::Emqx(emqx) => {
-            info!(
-                "[GATEWAY {}] org={} type={} broker_url={}",
-                gateway.gateway_id, gateway.organization_id, gateway.gateway_type, emqx.broker_url,
-            );
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{GatewayProcessStore, InMemoryGatewayProcessStore};
-    use common::domain::{EmqxGatewayConfig, MockGatewayRepository};
+    use crate::domain::{GatewayProcessStore, GatewayRunner, InMemoryGatewayProcessStore};
+    use async_trait::async_trait;
+    use common::domain::{
+        EmqxGatewayConfig, GatewayConfig, MockGatewayRepository, MockRawEnvelopeProducer,
+    };
+
+    // Mock runner for testing - immediately completes
+    struct MockGatewayRunner;
+
+    #[async_trait]
+    impl GatewayRunner for MockGatewayRunner {
+        async fn run(
+            &self,
+            _gateway: Gateway,
+            _config: GatewayOrchestrationServiceConfig,
+            process_token: CancellationToken,
+            shutdown_token: CancellationToken,
+            _raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
+        ) {
+            // Wait for cancellation
+            tokio::select! {
+                _ = process_token.cancelled() => {}
+                _ = shutdown_token.cancelled() => {}
+            }
+        }
+
+        fn gateway_type(&self) -> &'static str {
+            "MOCK_EMQX"
+        }
+    }
+
+    // Helper to create mock producer
+    fn create_mock_producer() -> Arc<dyn RawEnvelopeProducer> {
+        let mut mock = MockRawEnvelopeProducer::new();
+        mock.expect_publish_raw_envelope().returning(|_| Ok(()));
+        Arc::new(mock)
+    }
+
+    // Helper to create a factory with mock runner registered
+    fn create_test_factory() -> GatewayRunnerFactory {
+        let mut factory = GatewayRunnerFactory::new();
+        factory.register_emqx(|| Arc::new(MockGatewayRunner));
+        factory
+    }
 
     // Helper to create test gateway
     fn create_test_gateway(gateway_id: &str, org_id: &str) -> Gateway {
@@ -303,6 +281,7 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://mqtt.example.com:1883".to_string(),
+                subscription_group: "ponix".to_string(),
             }),
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),
@@ -330,6 +309,8 @@ mod tests {
             store.clone(),
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
+            create_mock_producer(),
+            create_test_factory(),
         );
 
         let result = orchestrator.launch_gateways().await;
@@ -349,6 +330,8 @@ mod tests {
             store.clone(),
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
+            create_mock_producer(),
+            create_test_factory(),
         );
 
         let gateway = create_test_gateway("gw1", "org1");
@@ -370,6 +353,8 @@ mod tests {
             store.clone(),
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
+            create_mock_producer(),
+            create_test_factory(),
         );
 
         // Start a process
@@ -409,6 +394,8 @@ mod tests {
             store.clone(),
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
+            create_mock_producer(),
+            create_test_factory(),
         );
 
         // Start a process
@@ -421,6 +408,7 @@ mod tests {
         let mut new_gateway = old_gateway.clone();
         new_gateway.gateway_config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.newhost.com:8883".to_string(),
+            subscription_group: "ponix".to_string(),
         });
 
         let result = orchestrator.handle_gateway_updated(new_gateway).await;
@@ -443,6 +431,8 @@ mod tests {
             store.clone(),
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
+            create_mock_producer(),
+            create_test_factory(),
         );
 
         // Start a process

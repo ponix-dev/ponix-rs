@@ -36,11 +36,13 @@ pub fn proto_to_domain_gateway(proto: &ProtoGateway) -> Result<Gateway> {
     let gateway_config = match &proto.config {
         Some(Config::EmqxConfig(emqx)) => GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: emqx.broker_url.clone(),
+            subscription_group: emqx.subscription_group.clone(),
         }),
         None => {
             // Default to empty EMQX config if not provided
             GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: String::new(),
+                subscription_group: String::new(),
             })
         }
     };
@@ -72,11 +74,13 @@ pub fn to_create_gateway_input(request: CreateGatewayRequest) -> CreateGatewayIn
     let gateway_config = match request.config {
         Some(CreateConfig::EmqxConfig(emqx)) => GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: emqx.broker_url,
+            subscription_group: emqx.subscription_group,
         }),
         None => {
             // Default to empty EMQX config if not provided
             GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: String::new(),
+                subscription_group: String::new(),
             })
         }
     };
@@ -132,6 +136,7 @@ pub fn to_update_gateway_input(request: UpdateGatewayRequest) -> UpdateGatewayIn
     let gateway_config = match request.config {
         Some(UpdateConfig::EmqxConfig(emqx)) => Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: emqx.broker_url,
+            subscription_group: emqx.subscription_group,
         })),
         None => None,
     };
@@ -157,6 +162,7 @@ pub fn to_proto_gateway(gateway: Gateway) -> ProtoGateway {
         GatewayConfig::Emqx(emqx) => (
             Some(ProtoGatewayConfig::EmqxConfig(ProtoEmqxConfig {
                 broker_url: emqx.broker_url.clone(),
+                subscription_group: emqx.subscription_group.clone(),
             })),
             emqx.broker_url.clone(), // For backwards compatibility, use broker_url as name
         ),

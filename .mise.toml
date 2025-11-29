@@ -3,13 +3,14 @@ github-cli = "latest"
 tilt = "latest"
 rust = "latest"
 grpcurl = "latest"
+jq = "latest"
 
 # all envs should be set in a .env file
 [env]
 _.file = '.env'
 
 [tasks.install-tools]
-run = "mise install && brew install goose && brew tap nats-io/nats-tools && brew install nats-io/nats-tools/nats"
+run = "mise install && brew install goose && brew tap nats-io/nats-tools && brew install nats-io/nats-tools/nats && brew install mosquitto"
 
 # Test tasks - run from workspace root
 [tasks.test]
