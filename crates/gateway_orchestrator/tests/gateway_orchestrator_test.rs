@@ -1,22 +1,54 @@
 #![cfg(feature = "integration-tests")]
 
+use async_trait::async_trait;
 use common::domain::{
     CreateGatewayInputWithId, DomainError, DomainResult, EmqxGatewayConfig, Gateway, GatewayConfig,
     GatewayRepository, MockRawEnvelopeProducer, RawEnvelopeProducer, UpdateGatewayInput,
 };
 use gateway_orchestrator::domain::{
     GatewayOrchestrationService, GatewayOrchestrationServiceConfig, GatewayProcessStore,
-    InMemoryGatewayProcessStore,
+    GatewayRunner, GatewayRunnerFactory, InMemoryGatewayProcessStore,
 };
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use tokio_util::sync::CancellationToken;
+
+// Mock runner for testing - waits for cancellation
+struct MockGatewayRunner;
+
+#[async_trait]
+impl GatewayRunner for MockGatewayRunner {
+    async fn run(
+        &self,
+        _gateway: Gateway,
+        _config: GatewayOrchestrationServiceConfig,
+        process_token: CancellationToken,
+        shutdown_token: CancellationToken,
+        _raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
+    ) {
+        tokio::select! {
+            _ = process_token.cancelled() => {}
+            _ = shutdown_token.cancelled() => {}
+        }
+    }
+
+    fn gateway_type(&self) -> &'static str {
+        "MOCK_EMQX"
+    }
+}
 
 // Helper to create mock producer for tests
 fn create_mock_producer() -> Arc<dyn RawEnvelopeProducer> {
     let mut mock = MockRawEnvelopeProducer::new();
     mock.expect_publish_raw_envelope().returning(|_| Ok(()));
     Arc::new(mock)
+}
+
+// Helper to create a factory with mock runner registered
+fn create_test_factory() -> GatewayRunnerFactory {
+    let mut factory = GatewayRunnerFactory::new();
+    factory.register_emqx(|| Arc::new(MockGatewayRunner));
+    factory
 }
 
 // Mock implementation of GatewayRepository for testing
@@ -136,6 +168,7 @@ async fn test_orchestrator_starts_existing_gateways() {
         config,
         shutdown_token.clone(),
         create_mock_producer(),
+        create_test_factory(),
     );
 
     // Act
@@ -178,6 +211,7 @@ async fn test_orchestrator_handles_gateway_created() {
         config,
         shutdown_token.clone(),
         create_mock_producer(),
+        create_test_factory(),
     );
 
     // Start with no gateways
@@ -226,6 +260,7 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
         config,
         shutdown_token.clone(),
         create_mock_producer(),
+        create_test_factory(),
     );
 
     orchestrator
@@ -287,6 +322,7 @@ async fn test_orchestrator_handles_gateway_soft_delete() {
         config,
         shutdown_token.clone(),
         create_mock_producer(),
+        create_test_factory(),
     );
 
     orchestrator
@@ -339,6 +375,7 @@ async fn test_orchestrator_handles_gateway_deleted() {
         config,
         shutdown_token.clone(),
         create_mock_producer(),
+        create_test_factory(),
     );
 
     orchestrator
@@ -400,6 +437,7 @@ async fn test_orchestrator_shutdown_stops_all_processes() {
         config,
         shutdown_token.clone(),
         create_mock_producer(),
+        create_test_factory(),
     );
 
     orchestrator
@@ -452,6 +490,7 @@ async fn test_orchestrator_ignores_duplicate_create() {
         config,
         shutdown_token.clone(),
         create_mock_producer(),
+        create_test_factory(),
     );
 
     orchestrator

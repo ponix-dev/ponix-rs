@@ -1,5 +1,7 @@
-use crate::domain::{GatewayOrchestrationServiceConfig, GatewayProcessHandle, GatewayProcessStore};
-use crate::mqtt::run_mqtt_subscriber;
+use crate::domain::{
+    GatewayOrchestrationServiceConfig, GatewayProcessHandle, GatewayProcessStore,
+    GatewayRunnerFactory,
+};
 use common::domain::{DomainResult, Gateway, GatewayRepository, RawEnvelopeProducer};
 
 use std::sync::Arc;
@@ -12,6 +14,7 @@ pub struct GatewayOrchestrationService {
     config: GatewayOrchestrationServiceConfig,
     shutdown_token: CancellationToken,
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
+    runner_factory: GatewayRunnerFactory,
 }
 
 impl GatewayOrchestrationService {
@@ -21,6 +24,7 @@ impl GatewayOrchestrationService {
         config: GatewayOrchestrationServiceConfig,
         shutdown_token: CancellationToken,
         raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
+        runner_factory: GatewayRunnerFactory,
     ) -> Self {
         Self {
             gateway_repository,
@@ -28,6 +32,7 @@ impl GatewayOrchestrationService {
             config,
             shutdown_token,
             raw_envelope_producer,
+            runner_factory,
         }
     }
 
@@ -145,6 +150,10 @@ impl GatewayOrchestrationService {
             return Ok(());
         }
 
+        // Get the appropriate runner for this gateway type
+        let runner = self.runner_factory.create_runner(&gateway.gateway_config)?;
+        let gateway_type = self.runner_factory.gateway_type_name(&gateway.gateway_config);
+
         let gateway_clone = gateway.clone();
         let config = self.config.clone();
         let process_token = CancellationToken::new();
@@ -152,16 +161,17 @@ impl GatewayOrchestrationService {
         let shutdown_token = self.shutdown_token.clone();
         let producer = Arc::clone(&self.raw_envelope_producer);
 
-        // Spawn MQTT subscriber process
+        // Spawn gateway process using the appropriate runner
         let join_handle = tokio::spawn(async move {
-            run_mqtt_subscriber(
-                gateway_clone,
-                config,
-                process_token_clone,
-                shutdown_token,
-                producer,
-            )
-            .await;
+            runner
+                .run(
+                    gateway_clone,
+                    config,
+                    process_token_clone,
+                    shutdown_token,
+                    producer,
+                )
+                .await;
         });
 
         // Store handle
@@ -170,7 +180,11 @@ impl GatewayOrchestrationService {
             .upsert(gateway.gateway_id.clone(), handle)
             .await?;
 
-        info!("started MQTT subscriber for gateway {}", gateway.gateway_id);
+        info!(
+            gateway_type = gateway_type,
+            "started gateway process for {}",
+            gateway.gateway_id
+        );
         Ok(())
     }
 
@@ -213,16 +227,49 @@ impl GatewayOrchestrationService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{GatewayProcessStore, InMemoryGatewayProcessStore};
+    use crate::domain::{GatewayProcessStore, GatewayRunner, InMemoryGatewayProcessStore};
+    use async_trait::async_trait;
     use common::domain::{
         EmqxGatewayConfig, GatewayConfig, MockGatewayRepository, MockRawEnvelopeProducer,
     };
+
+    // Mock runner for testing - immediately completes
+    struct MockGatewayRunner;
+
+    #[async_trait]
+    impl GatewayRunner for MockGatewayRunner {
+        async fn run(
+            &self,
+            _gateway: Gateway,
+            _config: GatewayOrchestrationServiceConfig,
+            process_token: CancellationToken,
+            shutdown_token: CancellationToken,
+            _raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
+        ) {
+            // Wait for cancellation
+            tokio::select! {
+                _ = process_token.cancelled() => {}
+                _ = shutdown_token.cancelled() => {}
+            }
+        }
+
+        fn gateway_type(&self) -> &'static str {
+            "MOCK_EMQX"
+        }
+    }
 
     // Helper to create mock producer
     fn create_mock_producer() -> Arc<dyn RawEnvelopeProducer> {
         let mut mock = MockRawEnvelopeProducer::new();
         mock.expect_publish_raw_envelope().returning(|_| Ok(()));
         Arc::new(mock)
+    }
+
+    // Helper to create a factory with mock runner registered
+    fn create_test_factory() -> GatewayRunnerFactory {
+        let mut factory = GatewayRunnerFactory::new();
+        factory.register_emqx(|| Arc::new(MockGatewayRunner));
+        factory
     }
 
     // Helper to create test gateway
@@ -261,6 +308,7 @@ mod tests {
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
             create_mock_producer(),
+            create_test_factory(),
         );
 
         let result = orchestrator.launch_gateways().await;
@@ -281,6 +329,7 @@ mod tests {
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
             create_mock_producer(),
+            create_test_factory(),
         );
 
         let gateway = create_test_gateway("gw1", "org1");
@@ -303,6 +352,7 @@ mod tests {
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
             create_mock_producer(),
+            create_test_factory(),
         );
 
         // Start a process
@@ -343,6 +393,7 @@ mod tests {
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
             create_mock_producer(),
+            create_test_factory(),
         );
 
         // Start a process
@@ -378,6 +429,7 @@ mod tests {
             GatewayOrchestrationServiceConfig::default(),
             CancellationToken::new(),
             create_mock_producer(),
+            create_test_factory(),
         );
 
         // Start a process

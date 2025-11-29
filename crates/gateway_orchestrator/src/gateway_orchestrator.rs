@@ -1,6 +1,8 @@
 use crate::domain::{
-    GatewayOrchestrationService, GatewayOrchestrationServiceConfig, InMemoryGatewayProcessStore,
+    GatewayOrchestrationService, GatewayOrchestrationServiceConfig, GatewayRunnerFactory,
+    InMemoryGatewayProcessStore,
 };
+use crate::mqtt::EmqxGatewayRunner;
 use crate::nats::{GatewayCdcConsumer, RawEnvelopeProducer};
 use common::nats::NatsClient;
 use common::postgres::PostgresGatewayRepository;
@@ -36,6 +38,10 @@ impl GatewayOrchestrator {
                 config.raw_envelopes_stream.clone(),
             ));
 
+        // Configure gateway runner factory with supported gateway types
+        let mut runner_factory = GatewayRunnerFactory::new();
+        runner_factory.register_emqx(|| Arc::new(EmqxGatewayRunner::new()));
+
         // Initialize orchestrator
         let orchestrator_config = GatewayOrchestrationServiceConfig::default();
         let process_store = Arc::new(InMemoryGatewayProcessStore::new());
@@ -45,6 +51,7 @@ impl GatewayOrchestrator {
             orchestrator_config,
             orchestrator_shutdown_token,
             raw_envelope_producer,
+            runner_factory,
         ));
 
         // Start orchestrator to load existing gateways
