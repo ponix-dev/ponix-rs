@@ -1,7 +1,7 @@
 use common::domain::{
     CreateGatewayInput, CreateGatewayInputWithId, DeleteGatewayInput, DomainError, DomainResult,
-    Gateway, GatewayRepository, GetGatewayInput, GetOrganizationInput, ListGatewaysInput,
-    OrganizationRepository, UpdateGatewayInput,
+    Gateway, GatewayConfig, GatewayRepository, GetGatewayInput, GetOrganizationInput,
+    ListGatewaysInput, OrganizationRepository, UpdateGatewayInput,
 };
 use std::sync::Arc;
 use tracing::{debug, instrument};
@@ -61,6 +61,9 @@ impl GatewayService {
             ));
         }
 
+        // Validate gateway config fields
+        Self::validate_gateway_config(&input.gateway_config)?;
+
         // Generate gateway ID
         let gateway_id = xid::new().to_string();
 
@@ -117,6 +120,11 @@ impl GatewayService {
             }
         }
 
+        // Validate gateway config fields if provided
+        if let Some(ref config) = input.gateway_config {
+            Self::validate_gateway_config(config)?;
+        }
+
         let gateway = self.gateway_repository.update_gateway(input).await?;
 
         debug!(gateway_id = %gateway.gateway_id, "Gateway updated successfully");
@@ -160,6 +168,25 @@ impl GatewayService {
 
         debug!(count = gateways.len(), "Listed gateways");
         Ok(gateways)
+    }
+
+    /// Validate gateway configuration fields
+    fn validate_gateway_config(config: &GatewayConfig) -> DomainResult<()> {
+        match config {
+            GatewayConfig::Emqx(emqx) => {
+                if emqx.broker_url.trim().is_empty() {
+                    return Err(DomainError::InvalidGatewayConfig(
+                        "EMQX broker_url cannot be empty".to_string(),
+                    ));
+                }
+                if emqx.subscription_group.trim().is_empty() {
+                    return Err(DomainError::InvalidGatewayConfig(
+                        "EMQX subscription_group cannot be empty".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+        }
     }
 }
 
@@ -287,5 +314,110 @@ mod tests {
 
         let result = service.create_gateway(input).await;
         assert!(matches!(result, Err(DomainError::OrganizationDeleted(_))));
+    }
+
+    #[tokio::test]
+    async fn test_create_gateway_empty_broker_url() {
+        let mock_gateway_repo = MockGatewayRepository::new();
+        let mut mock_org_repo = MockOrganizationRepository::new();
+
+        mock_org_repo
+            .expect_get_organization()
+            .times(1)
+            .return_once(|_| {
+                Ok(Some(Organization {
+                    id: "org-001".to_string(),
+                    name: "Test Org".to_string(),
+                    deleted_at: None,
+                    created_at: Some(Utc::now()),
+                    updated_at: Some(Utc::now()),
+                }))
+            });
+
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+
+        let input = CreateGatewayInput {
+            organization_id: "org-001".to_string(),
+            gateway_type: "emqx".to_string(),
+            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+                broker_url: "".to_string(),
+                subscription_group: "ponix".to_string(),
+            }),
+        };
+
+        let result = service.create_gateway(input).await;
+        assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
+        if let Err(DomainError::InvalidGatewayConfig(msg)) = result {
+            assert!(msg.contains("broker_url"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_gateway_empty_subscription_group() {
+        let mock_gateway_repo = MockGatewayRepository::new();
+        let mut mock_org_repo = MockOrganizationRepository::new();
+
+        mock_org_repo
+            .expect_get_organization()
+            .times(1)
+            .return_once(|_| {
+                Ok(Some(Organization {
+                    id: "org-001".to_string(),
+                    name: "Test Org".to_string(),
+                    deleted_at: None,
+                    created_at: Some(Utc::now()),
+                    updated_at: Some(Utc::now()),
+                }))
+            });
+
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+
+        let input = CreateGatewayInput {
+            organization_id: "org-001".to_string(),
+            gateway_type: "emqx".to_string(),
+            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+                broker_url: "mqtt://localhost:1883".to_string(),
+                subscription_group: "".to_string(),
+            }),
+        };
+
+        let result = service.create_gateway(input).await;
+        assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
+        if let Err(DomainError::InvalidGatewayConfig(msg)) = result {
+            assert!(msg.contains("subscription_group"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_gateway_whitespace_only_broker_url() {
+        let mock_gateway_repo = MockGatewayRepository::new();
+        let mut mock_org_repo = MockOrganizationRepository::new();
+
+        mock_org_repo
+            .expect_get_organization()
+            .times(1)
+            .return_once(|_| {
+                Ok(Some(Organization {
+                    id: "org-001".to_string(),
+                    name: "Test Org".to_string(),
+                    deleted_at: None,
+                    created_at: Some(Utc::now()),
+                    updated_at: Some(Utc::now()),
+                }))
+            });
+
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+
+        let input = CreateGatewayInput {
+            organization_id: "org-001".to_string(),
+            gateway_type: "emqx".to_string(),
+            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+                broker_url: "   ".to_string(),
+                subscription_group: "ponix".to_string(),
+            }),
+        };
+
+        let result = service.create_gateway(input).await;
+        assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
     }
 }
