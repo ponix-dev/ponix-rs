@@ -52,6 +52,7 @@ use crate::domain::{PayloadDecoder, PayloadError, Result};
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use tracing::{debug, instrument};
 
 // Sensor type IDs from Cayenne LPP specification
 pub const TYPE_DIGITAL_INPUT: u8 = 0;
@@ -439,6 +440,14 @@ impl Default for CayenneLppDecoder {
 }
 
 impl PayloadDecoder for CayenneLppDecoder {
+    #[instrument(
+        name = "cayenne_lpp_decode",
+        skip(self, bytes),
+        fields(
+            payload_size = bytes.len(),
+            sensor_count = tracing::field::Empty,
+        )
+    )]
     fn decode(&self, bytes: &[u8]) -> Result<Value> {
         // Result structure: {type_name_channel: value}
         let mut result = Map::new();
@@ -496,6 +505,10 @@ impl PayloadDecoder for CayenneLppDecoder {
             let field_name = format!("{}_{}", type_name, channel);
             result.insert(field_name, value);
         }
+
+        // Record the number of sensors decoded
+        tracing::Span::current().record("sensor_count", result.len());
+        debug!(sensor_count = result.len(), "Cayenne LPP payload decoded");
 
         Ok(Value::Object(result))
     }

@@ -78,6 +78,7 @@ use cel_interpreter::{Context, ExecutionError, Program, Value as CelValue};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::{debug, instrument};
 
 /// CEL execution environment with registered custom functions
 ///
@@ -106,6 +107,14 @@ impl CelEnvironment {
     /// # Returns
     /// * `Ok(JsonValue)` - Valid JSON output from expression
     /// * `Err(PayloadError)` - Compilation, execution, or validation error
+    #[instrument(
+        name = "cel_execute",
+        skip(self, input),
+        fields(
+            expression = %expression,
+            input_size = input.len(),
+        )
+    )]
     pub fn execute(&self, expression: &str, input: &[u8]) -> Result<JsonValue> {
         // Compile the CEL expression
         let program = Program::compile(expression)
@@ -144,7 +153,9 @@ impl CelEnvironment {
             .map_err(|e| PayloadError::CelExecutionError(e.to_string()))?;
 
         // Convert CEL value to JSON and validate
-        cel_value_to_json(result)
+        let json_result = cel_value_to_json(result)?;
+        debug!("CEL expression executed successfully");
+        Ok(json_result)
     }
 }
 

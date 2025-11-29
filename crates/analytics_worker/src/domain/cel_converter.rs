@@ -1,6 +1,6 @@
 use crate::domain::{CelEnvironment, PayloadConverter};
 use common::domain::{DomainError, DomainResult};
-use tracing::{debug, error};
+use tracing::{debug, error, instrument};
 
 /// Implementation of PayloadConverter using CelEnvironment
 ///
@@ -27,19 +27,19 @@ impl Default for CelPayloadConverter {
 }
 
 impl PayloadConverter for CelPayloadConverter {
-    fn convert(&self, expression: &str, payload: &[u8]) -> DomainResult<serde_json::Value> {
-        debug!(
+    #[instrument(
+        name = "payload_convert",
+        skip(self, payload),
+        fields(
             expression = %expression,
             payload_size = payload.len(),
-            "converting payload with CEL expression"
-        );
+        )
+    )]
+    fn convert(&self, expression: &str, payload: &[u8]) -> DomainResult<serde_json::Value> {
+        debug!("converting payload with CEL expression");
 
         self.cel_env.execute(expression, payload).map_err(|e| {
-            error!(
-                expression = %expression,
-                error = %e,
-                "CEL execution failed"
-            );
+            error!(error = %e, "CEL execution failed");
             DomainError::PayloadConversionError(e.to_string())
         })
     }
