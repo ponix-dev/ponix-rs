@@ -17,7 +17,14 @@ COPY crates ./crates
 COPY .cargo/config.toml ./.cargo/config.toml
 
 # Create recipe (dependency manifest)
-RUN cargo chef prepare --recipe-path recipe.json
+# Needs BSR token to resolve registry dependencies
+RUN --mount=type=secret,id=bsr_token \
+    if [ -f /run/secrets/bsr_token ]; then \
+        export CARGO_REGISTRIES_BUF_TOKEN="Bearer $(cat /run/secrets/bsr_token)" && \
+        cargo chef prepare --recipe-path recipe.json; \
+    else \
+        echo "Error: BSR token secret not found" && exit 1; \
+    fi
 
 # ============================================================================
 # Builder stage - compile dependencies then source

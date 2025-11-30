@@ -6,13 +6,14 @@ use crate::domain::OrganizationService;
 use ponix_proto_prost::organization::v1::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
     DeleteOrganizationResponse, GetOrganizationRequest, GetOrganizationResponse,
+    ListOrganizationsRequest, ListOrganizationsResponse,
 };
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationService as OrganizationServiceTrait;
 
 use common::grpc::domain_error_to_status;
 use common::proto::{
     datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
-    to_get_organization_input, to_proto_organization,
+    to_get_organization_input, to_list_organizations_input, to_proto_organization,
 };
 
 /// gRPC handler for OrganizationService
@@ -120,6 +121,36 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         // Return empty response with organization field (required by proto)
         Ok(Response::new(DeleteOrganizationResponse {
             organization: None, // Organization is soft-deleted, not returned
+        }))
+    }
+
+    #[instrument(name = "ListOrganizations", skip(self, request))]
+    async fn list_organizations(
+        &self,
+        request: Request<ListOrganizationsRequest>,
+    ) -> Result<Response<ListOrganizationsResponse>, Status> {
+        let req = request.into_inner();
+
+        // Convert proto → domain
+        let input = to_list_organizations_input(req);
+
+        // Call domain service
+        let organizations = self
+            .domain_service
+            .list_organizations(input)
+            .await
+            .map_err(domain_error_to_status)?;
+
+        // Convert domain → proto
+        let proto_organizations: Vec<_> = organizations
+            .into_iter()
+            .map(to_proto_organization)
+            .collect();
+
+        debug!(count = proto_organizations.len(), "Organizations listed successfully");
+
+        Ok(Response::new(ListOrganizationsResponse {
+            organizations: proto_organizations,
         }))
     }
 }
