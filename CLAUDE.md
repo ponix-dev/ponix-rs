@@ -111,9 +111,11 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
     - `ProcessingResult` for per-message Ack/Nak decisions
   - **`clickhouse/`**: ClickHouse client and configuration
   - **`proto/`**: Bidirectional domain ↔ protobuf conversions
-  - **`grpc/`**: gRPC middleware and error mapping
+  - **`grpc/`**: gRPC middleware, server utilities, and error mapping
     - `GrpcLoggingLayer`: Request/response logging with duration
     - `GrpcTracingLayer`: OpenTelemetry span creation with W3C trace context propagation
+    - `GrpcServerConfig`, `CorsConfig`: Reusable gRPC server configuration
+    - `run_grpc_server()`: Reusable server with optional gRPC-Web and CORS support
     - Domain error → gRPC Status mapping
   - **`telemetry/`**: OpenTelemetry integration for traces and logs
     - `TelemetryConfig`: Configuration for service name, OTLP endpoint, log level
@@ -438,6 +440,8 @@ PONIX_POSTGRES_GOOSE_BINARY_PATH=/usr/local/bin/goose
 # gRPC
 PONIX_GRPC_HOST=0.0.0.0
 PONIX_GRPC_PORT=50051
+PONIX_GRPC_WEB_ENABLED=true                    # Enable gRPC-Web for browser clients
+PONIX_GRPC_CORS_ALLOWED_ORIGINS=*              # CORS allowed origins (comma-separated, "*" for all)
 
 # CDC
 PONIX_CDC_PUBLICATION_NAME=ponix_cdc_publication
@@ -458,6 +462,36 @@ See `crates/ponix_all_in_one/src/config.rs` for full config schema.
   ```
 - Domain service generates device IDs using `xid` crate (not at gRPC layer)
 - Error mapping: `DomainError::DeviceAlreadyExists` → `Status::already_exists`
+
+#### gRPC-Web Support
+The gRPC server supports both standard gRPC (HTTP/2) and gRPC-Web (HTTP/1.1) on the same port:
+- **gRPC-Web** is enabled by default (`PONIX_GRPC_WEB_ENABLED=true`)
+- Browser clients can connect using grpc-web libraries
+- CORS is configurable via `PONIX_GRPC_CORS_ALLOWED_ORIGINS`
+- Supports `"*"` for all origins or comma-separated list: `"http://localhost:3000,https://app.example.com"`
+
+The reusable server configuration in `common::grpc`:
+```rust
+use common::grpc::{run_grpc_server, GrpcServerConfig, CorsConfig};
+use tonic::service::Routes;
+
+// Build routes with services
+let routes = Routes::builder()
+    .add_service(MyServiceServer::new(handler))
+    .routes();
+
+// Configure server with gRPC-Web support
+let config = GrpcServerConfig {
+    host: "0.0.0.0".to_string(),
+    port: 50051,
+    enable_grpc_web: true,
+    cors_config: Some(CorsConfig::allow_all()),
+    ..Default::default()
+};
+
+// Run server
+run_grpc_server(config, routes, &[FILE_DESCRIPTOR_SET], token).await?;
+```
 
 ## Tilt Development
 

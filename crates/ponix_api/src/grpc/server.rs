@@ -1,120 +1,65 @@
-use std::net::SocketAddr;
+//! gRPC server setup for Ponix API.
+//!
+//! This module builds the Routes for all Ponix API services and delegates
+//! to the reusable `common::grpc::run_grpc_server` for actual server execution.
+
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tonic::transport::Server;
-use tracing::{debug, error};
+use tonic::service::Routes;
 
 use crate::domain::{DeviceService, GatewayService, OrganizationService};
-use common::grpc::{GrpcLoggingConfig, GrpcLoggingLayer, GrpcTracingConfig, GrpcTracingLayer};
+use crate::grpc::device_handler::DeviceServiceHandler;
+use crate::grpc::gateway_handler::GatewayServiceHandler;
+use crate::grpc::organization_handler::OrganizationServiceHandler;
+use common::grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_proto_prost;
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceServiceServer;
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServiceServer;
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationServiceServer;
 
-use crate::grpc::device_handler::DeviceServiceHandler;
-use crate::grpc::gateway_handler::GatewayServiceHandler;
-use crate::grpc::organization_handler::OrganizationServiceHandler;
+/// File descriptor sets for gRPC reflection service.
+pub const REFLECTION_DESCRIPTORS: &[&[u8]] = &[
+    ponix_proto_prost::end_device::v1::FILE_DESCRIPTOR_SET,
+    ponix_proto_prost::organization::v1::FILE_DESCRIPTOR_SET,
+    ponix_proto_prost::gateway::v1::FILE_DESCRIPTOR_SET,
+];
 
-/// Build reflection service descriptor for all services
-fn build_reflection_service(
-) -> tonic_reflection::server::ServerReflectionServer<impl tonic_reflection::server::ServerReflection>
-{
-    tonic_reflection::server::Builder::configure()
-        // Register Google well-known types
-        .register_encoded_file_descriptor_set(protoc_wkt::google::protobuf::FILE_DESCRIPTOR_SET)
-        // Register our service descriptors
-        .register_encoded_file_descriptor_set(
-            ponix_proto_prost::end_device::v1::FILE_DESCRIPTOR_SET,
-        )
-        .register_encoded_file_descriptor_set(
-            ponix_proto_prost::organization::v1::FILE_DESCRIPTOR_SET,
-        )
-        .register_encoded_file_descriptor_set(ponix_proto_prost::gateway::v1::FILE_DESCRIPTOR_SET)
-        .build_v1()
-        .expect("Failed to build reflection service")
+/// Build Routes containing all Ponix API services.
+pub fn build_ponix_api_routes(
+    device_service: Arc<DeviceService>,
+    organization_service: Arc<OrganizationService>,
+    gateway_service: Arc<GatewayService>,
+) -> Routes {
+    // Create handlers
+    let device_handler = DeviceServiceHandler::new(device_service);
+    let organization_handler = OrganizationServiceHandler::new(organization_service);
+    let gateway_handler = GatewayServiceHandler::new(gateway_service);
+
+    // Build routes with all services
+    let mut builder = Routes::builder();
+    builder
+        .add_service(EndDeviceServiceServer::new(device_handler))
+        .add_service(OrganizationServiceServer::new(organization_handler))
+        .add_service(GatewayServiceServer::new(gateway_handler));
+    builder.routes()
 }
 
-/// gRPC server configuration
-pub struct GrpcServerConfig {
-    pub host: String,
-    pub port: u16,
-    pub logging_config: GrpcLoggingConfig,
-    pub tracing_config: GrpcTracingConfig,
-}
-
-impl Default for GrpcServerConfig {
-    fn default() -> Self {
-        Self {
-            host: "0.0.0.0".to_string(),
-            port: 50051,
-            logging_config: GrpcLoggingConfig::default(),
-            tracing_config: GrpcTracingConfig::default(),
-        }
-    }
-}
-
-/// Run the gRPC server with graceful shutdown
-pub async fn run_grpc_server(
+/// Run the Ponix API gRPC server with graceful shutdown.
+///
+/// This function builds the service routes and delegates to the reusable
+/// `run_grpc_server` from common, which handles:
+/// - gRPC-Web support (if enabled in config)
+/// - CORS configuration
+/// - Logging and tracing middleware
+/// - Reflection service
+pub async fn run_ponix_grpc_server(
     config: GrpcServerConfig,
     device_service: Arc<DeviceService>,
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     cancellation_token: CancellationToken,
 ) -> Result<(), anyhow::Error> {
-    let addr: SocketAddr = format!("{}:{}", config.host, config.port)
-        .parse()
-        .expect("Invalid server address");
+    let routes = build_ponix_api_routes(device_service, organization_service, gateway_service);
 
-    debug!(address = %addr, "Starting gRPC server");
-
-    // Log registered routes
-    debug!("Registered gRPC routes:");
-    debug!("  POST /ponix.end_device.v1.EndDeviceService/CreateEndDevice");
-    debug!("  POST /ponix.end_device.v1.EndDeviceService/GetEndDevice");
-    debug!("  POST /ponix.end_device.v1.EndDeviceService/ListEndDevices");
-    debug!("  POST /ponix.organization.v1.OrganizationService/CreateOrganization");
-    debug!("  POST /ponix.organization.v1.OrganizationService/GetOrganization");
-    debug!("  POST /ponix.organization.v1.OrganizationService/DeleteOrganization");
-    debug!("  POST /ponix.gateway.v1.GatewayService/CreateGateway");
-    debug!("  POST /ponix.gateway.v1.GatewayService/GetGateway");
-    debug!("  POST /ponix.gateway.v1.GatewayService/ListGateways");
-    debug!("  POST /ponix.gateway.v1.GatewayService/UpdateGateway");
-    debug!("  POST /ponix.gateway.v1.GatewayService/DeleteGateway");
-
-    // Create handlers
-    let device_handler = DeviceServiceHandler::new(device_service);
-    let organization_handler = OrganizationServiceHandler::new(organization_service);
-    let gateway_handler = GatewayServiceHandler::new(gateway_service);
-
-    // Build reflection service
-    let reflection_service = build_reflection_service();
-
-    // Create layers
-    let logging_layer = GrpcLoggingLayer::new(config.logging_config);
-    let tracing_layer = GrpcTracingLayer::new(config.tracing_config);
-
-    // Build server with graceful shutdown
-    // Tracing layer wraps logging layer (outermost first)
-    let server = Server::builder()
-        .layer(tracing_layer)
-        .layer(logging_layer)
-        .add_service(reflection_service)
-        .add_service(EndDeviceServiceServer::new(device_handler))
-        .add_service(OrganizationServiceServer::new(organization_handler))
-        .add_service(GatewayServiceServer::new(gateway_handler))
-        .serve_with_shutdown(addr, async move {
-            cancellation_token.cancelled().await;
-            debug!("gRPC server shutdown signal received");
-        });
-
-    match server.await {
-        Ok(_) => {
-            debug!("gRPC server stopped gracefully");
-            Ok(())
-        }
-        Err(e) => {
-            error!("gRPC server error: {}", e);
-            Err(e.into())
-        }
-    }
+    run_grpc_server(config, routes, REFLECTION_DESCRIPTORS, cancellation_token).await
 }

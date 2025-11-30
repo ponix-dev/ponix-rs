@@ -43,3 +43,5 @@ opentelemetry-appender-tracing = "0.27"
 
 # Tower middleware
 tower = "0.5"
+tonic-web = "0.12"
+tower-http = { version = "0.6", features = ["cors"] }

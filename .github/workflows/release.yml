@@ -84,6 +84,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           secrets: |
             bsr_token=${{ secrets.BSR_TOKEN }}
+          # GitHub Actions cache for BuildKit layers
+          # mode=max caches all layers including intermediate ones (important for cargo-chef)
+          # scope separates cache per platform to avoid conflicts
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
