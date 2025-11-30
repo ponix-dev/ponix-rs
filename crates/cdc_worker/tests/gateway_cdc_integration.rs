@@ -276,6 +276,7 @@ async fn test_gateway_create_cdc_event() {
         gateway_type: "EMQX".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://test.example.com:1883".to_string(),
+            subscription_group: "test-group".to_string(),
         }),
     };
 
@@ -330,6 +331,7 @@ async fn test_gateway_update_cdc_event() {
         gateway_type: "EMQX".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://original.example.com:1883".to_string(),
+            subscription_group: "test-group".to_string(),
         }),
     };
 
@@ -352,6 +354,7 @@ async fn test_gateway_update_cdc_event() {
         gateway_type: None,
         gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://updated.example.com:8883".to_string(),
+            subscription_group: "test-group".to_string(),
         })),
     };
 
@@ -404,6 +407,7 @@ async fn test_gateway_delete_cdc_event() {
         gateway_type: "EMQX".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://delete-test.example.com:1883".to_string(),
+            subscription_group: "test-group".to_string(),
         }),
     };
 
