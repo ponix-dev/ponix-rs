@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/ponix-dev/ponix-rs/compare/v1.2.0...v1.3.0) (2025-11-30)
+
+### Features
+
+* adds list organization endpoint ([26bab27](https://github.com/ponix-dev/ponix-rs/commit/26bab2756de7fe5893881046f7ffd1db25e1d57e))
+
 ## [1.2.0](https://github.com/ponix-dev/ponix-rs/compare/v1.1.0...v1.2.0) (2025-11-30)
 
 ### Features
