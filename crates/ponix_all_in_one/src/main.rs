@@ -4,7 +4,7 @@ use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig}
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
 use common::clickhouse::ClickHouseClient;
-use common::grpc::{GrpcLoggingConfig, GrpcTracingConfig};
+use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
@@ -15,7 +15,7 @@ use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
 use ponix_api::domain::{DeviceService, GatewayService, OrganizationService};
-use ponix_api::ponix_api::{PonixApi, PonixApiConfig};
+use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
 use std::sync::Arc;
 use std::time::Duration;
@@ -84,17 +84,30 @@ async fn main() {
         .filter(|s| !s.is_empty())
         .collect();
 
+    // Build gRPC server config with optional gRPC-Web support
+    let grpc_config = {
+        let mut cfg = GrpcServerConfig {
+            host: config.grpc_host.clone(),
+            port: config.grpc_port,
+            logging_config: GrpcLoggingConfig::new(ignored_paths.clone()),
+            tracing_config: GrpcTracingConfig::new(ignored_paths),
+            enable_grpc_web: config.grpc_web_enabled,
+            cors_config: None,
+        };
+        if config.grpc_web_enabled {
+            cfg.cors_config = Some(CorsConfig::from_comma_separated(
+                &config.grpc_cors_allowed_origins,
+            ));
+        }
+        cfg
+    };
+
     // Initialize application modules
     let ponix_api = PonixApi::new(
         device_service.clone(),
         organization_service,
         gateway_service,
-        PonixApiConfig {
-            grpc_host: config.grpc_host.clone(),
-            grpc_port: config.grpc_port,
-            grpc_logging_config: GrpcLoggingConfig::new(ignored_paths.clone()),
-            grpc_tracing_config: GrpcTracingConfig::new(ignored_paths),
-        },
+        grpc_config,
     );
 
     // Create orchestrator shutdown token - owned by main for lifecycle coordination

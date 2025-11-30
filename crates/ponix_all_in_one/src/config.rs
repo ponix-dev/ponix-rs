@@ -115,6 +115,14 @@ pub struct ServiceConfig {
     #[serde(default = "default_grpc_port")]
     pub grpc_port: u16,
 
+    /// Enable gRPC-Web support (default: true for browser access)
+    #[serde(default = "default_grpc_web_enabled")]
+    pub grpc_web_enabled: bool,
+
+    /// CORS allowed origins (comma-separated list, "*" for all origins)
+    #[serde(default = "default_grpc_cors_allowed_origins")]
+    pub grpc_cors_allowed_origins: String,
+
     // CDC configuration
     /// CDC entity name for gateway events
     #[serde(default = "default_cdc_gateway_entity_name")]
@@ -286,6 +294,14 @@ fn default_grpc_host() -> String {
 
 fn default_grpc_port() -> u16 {
     50051
+}
+
+fn default_grpc_web_enabled() -> bool {
+    true
+}
+
+fn default_grpc_cors_allowed_origins() -> String {
+    "*".to_string()
 }
 
 // CDC defaults
