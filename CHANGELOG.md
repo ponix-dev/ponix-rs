@@ -1,3 +1,22 @@
+## [1.1.0](https://github.com/ponix-dev/ponix-rs/compare/v1.0.1...v1.1.0) (2025-11-30)
+
+### Features
+
+* adds emqx to docker compose ([c8215d1](https://github.com/ponix-dev/ponix-rs/commit/c8215d1e11cecd85c2c3c12d62d5ede1ec04bfc8))
+* adds otel tracing ([36eb1f7](https://github.com/ponix-dev/ponix-rs/commit/36eb1f77d328900ac827807e35bfe13bb491eba9))
+* adds shared subscription support ([18a24ba](https://github.com/ponix-dev/ponix-rs/commit/18a24ba726e0a758cd7f2ff431cdd945281e8af8))
+* initial mqtt support ([34ce731](https://github.com/ponix-dev/ponix-rs/commit/34ce731a8ec9baf14c944c828d83564ef4ab72b2))
+
+### Bug Fixes
+
+* integration tests ([d9bb62c](https://github.com/ponix-dev/ponix-rs/commit/d9bb62cf68d9f4ddc51abfa8cfdc38257badcc39))
+
+### Code Refactoring
+
+* config validaiton for gateway creation ([bcabbae](https://github.com/ponix-dev/ponix-rs/commit/bcabbae6a1c7aeaef9eac3f81de87880531cfab7))
+* instument payload logic ([879ee19](https://github.com/ponix-dev/ponix-rs/commit/879ee19f359a07376d46ff84f0ed1d52a0f0f0db))
+* removes cyclical dependency in gateway orchestrator ([9d3cc25](https://github.com/ponix-dev/ponix-rs/commit/9d3cc251486a8b3cdd918b67caf893f5dcf9d724))
+
 ## [1.0.1](https://github.com/ponix-dev/ponix-rs/compare/v1.0.0...v1.0.1) (2025-11-28)
 
 ### Code Refactoring
