@@ -1,10 +1,11 @@
 use crate::domain::{
-    CreateOrganizationInput, DeleteOrganizationInput, GetOrganizationInput, Organization,
+    CreateOrganizationInput, DeleteOrganizationInput, GetOrganizationInput,
+    ListOrganizationsInput, Organization,
 };
 use chrono::{DateTime, Utc};
 use ponix_proto_prost::organization::v1::{
     CreateOrganizationRequest, DeleteOrganizationRequest, GetOrganizationRequest,
-    Organization as ProtoOrganization,
+    ListOrganizationsRequest, Organization as ProtoOrganization,
 };
 use prost_types::Timestamp;
 
@@ -47,6 +48,11 @@ pub fn to_delete_organization_input(req: DeleteOrganizationRequest) -> DeleteOrg
     DeleteOrganizationInput {
         organization_id: req.organization_id,
     }
+}
+
+/// Convert protobuf ListOrganizationsRequest to domain ListOrganizationsInput
+pub fn to_list_organizations_input(_req: ListOrganizationsRequest) -> ListOrganizationsInput {
+    ListOrganizationsInput {}
 }
 
 #[cfg(test)]

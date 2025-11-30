@@ -1,5 +1,12 @@
 allow_k8s_contexts('admin@talos')
 
+# Ensure the ponix network exists before docker-compose runs
+local_resource(
+    'ponix-network',
+    cmd='docker network inspect ponix >/dev/null 2>&1 || docker network create ponix',
+    labels=['infrastructure'],
+)
+
 # Read BSR token from environment (managed by mise)
 bsr_token = os.getenv('BSR_TOKEN', '')
 
@@ -23,5 +30,13 @@ docker_build(
     ]
 )
 
-# Run via Docker Compose
+# Run via Docker Compose (depends on network being created first)
 docker_compose('./docker/docker-compose.service.yaml')
+
+# Configure docker-compose resources with labels and dependencies
+dc_resource('nats', labels=['infrastructure'], resource_deps=['ponix-network'])
+dc_resource('clickhouse', labels=['infrastructure'], resource_deps=['ponix-network'])
+dc_resource('postgres', labels=['infrastructure'], resource_deps=['ponix-network'])
+dc_resource('otel-lgtm', labels=['observability'], resource_deps=['ponix-network'])
+dc_resource('emqx', labels=['infrastructure'], resource_deps=['ponix-network'])
+dc_resource('ponix-all-in-one', labels=['services'], resource_deps=['ponix-network'])

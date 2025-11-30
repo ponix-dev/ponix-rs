@@ -2750,9 +2750,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-prost"
-version = "0.4.0-20251129185957-8f22d4974be0.1"
+version = "0.4.0-20251130212524-fb4fe527b8d9.1"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "44fc54472072c072c3f9c29f4aa8ea62ea8be7ae973c2dcf1c604251e3d9e8a7"
+checksum = "086b4753a46e309472816a80e2f684c60456afd90dd2c6c43c0f4a8a244c309c"
 dependencies = [
  "prost",
  "prost-types",
@@ -2760,9 +2760,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-tonic"
-version = "0.4.1-20251129185957-8f22d4974be0.1"
+version = "0.4.1-20251130212524-fb4fe527b8d9.1"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "16350bf73e4320d4f1391d60890e46522351a3c73453231ba4ce62f9847f1590"
+checksum = "6aedb5184c330e0ac0c26e4dcd87b37574bfef9d414fd146d5bd6713cbef89d6"
 dependencies = [
  "ponix_ponix_community_neoeinstein-prost",
  "tonic",
@@ -4976,7 +4976,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
