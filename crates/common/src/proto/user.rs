@@ -1,6 +1,8 @@
-use crate::domain::{GetUserInput, RegisterUserInput, User};
+use crate::domain::{GetUserInput, LoginUserInput, RegisterUserInput, User};
 use crate::proto::organization::datetime_to_timestamp;
-use ponix_proto_prost::user::v1::{GetUserRequest, RegisterUserRequest, User as ProtoUser};
+use ponix_proto_prost::user::v1::{
+    GetUserRequest, LoginRequest, RegisterUserRequest, User as ProtoUser,
+};
 
 /// Convert protobuf RegisterUserRequest to domain RegisterUserInput
 pub fn to_register_user_input(req: RegisterUserRequest) -> RegisterUserInput {
@@ -27,6 +29,14 @@ pub fn to_proto_user(user: User) -> ProtoUser {
 pub fn to_get_user_input(req: GetUserRequest) -> GetUserInput {
     GetUserInput {
         user_id: req.user_id,
+    }
+}
+
+/// Convert protobuf LoginRequest to domain LoginUserInput
+pub fn to_login_user_input(req: LoginRequest) -> LoginUserInput {
+    LoginUserInput {
+        email: req.email,
+        password: req.password,
     }
 }
 
@@ -80,5 +90,18 @@ mod tests {
 
         let input = to_get_user_input(req);
         assert_eq!(input.user_id, "user-456");
+    }
+
+    #[test]
+    fn test_login_request_to_domain() {
+        let req = LoginRequest {
+            email: "test@example.com".to_string(),
+            password: "securepassword123".to_string(),
+        };
+
+        let input = to_login_user_input(req);
+
+        assert_eq!(input.email, "test@example.com");
+        assert_eq!(input.password, "securepassword123");
     }
 }
