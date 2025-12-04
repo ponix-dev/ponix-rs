@@ -23,8 +23,7 @@ tower.workspace = true
 clickhouse.workspace = true
 cel-interpreter.workspace = true
 
-# Protobuf (BSR registry - excluded from workspace)
-ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251129185957-8f22d4974be0.1", registry = "buf" }
+ponix-proto-prost.workspace = true
 
 [dev-dependencies]
 common = { path = "../common", features = ["testing"] }

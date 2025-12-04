@@ -25,8 +25,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 anyhow = "1.0"
 thiserror = "1.0"
-prost = "0.13"
-prost-types = "0.13"
+prost = "0.14"
+prost-types = "0.14"
 xid = "1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -41,10 +41,14 @@ futures = "0.3"
 futures-util = "0.3"
 
 # gRPC / Tonic
-tonic = "0.12"
-tonic-reflection = "0.12"
+tonic = "0.14"
+tonic-reflection = "0.14"
 http = "1.0"
 protoc-wkt = "1.0"
+
+# Protobuf (BSR registry)
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.5.0-20251203033831-5701e04c46e1.2", registry = "buf" }
+ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.5.0-20251203033831-5701e04c46e1.3", registry = "buf" }
 
 # Database clients
 clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
@@ -73,7 +77,7 @@ opentelemetry-appender-tracing = "0.27"
 
 # Tower middleware
 tower = "0.5"
-tonic-web = "0.12"
+tonic-web = "0.14"
 tower-http = { version = "0.6", features = ["cors"] }
 
 # Testing

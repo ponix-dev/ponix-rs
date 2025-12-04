@@ -43,8 +43,7 @@ tracing-subscriber.workspace = true
 # Optional
 mockall = { workspace = true, optional = true }
 
-# Protobuf (BSR registry - excluded from workspace)
-ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251129185957-8f22d4974be0.1", registry = "buf" }
+ponix-proto-prost.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
