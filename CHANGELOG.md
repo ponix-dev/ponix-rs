@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/ponix-dev/ponix-rs/compare/v1.3.0...v1.4.0) (2025-12-04)
+
+### Features
+
+* adds get and register user rpcs ([6f9d8f1](https://github.com/ponix-dev/ponix-rs/commit/6f9d8f1f8ff20175d2ff140d65dee8c9845d3297))
+
 ## [1.3.0](https://github.com/ponix-dev/ponix-rs/compare/v1.2.0...v1.3.0) (2025-11-30)
 
 ### Features
