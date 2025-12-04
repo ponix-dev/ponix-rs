@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/ponix-dev/ponix-rs/compare/v1.4.0...v1.5.0) (2025-12-04)
+
+### Features
+
+* adds user login ([9b9b901](https://github.com/ponix-dev/ponix-rs/commit/9b9b90110e2107cae9d701afc596628ebca7f6fc))
+
 ## [1.4.0](https://github.com/ponix-dev/ponix-rs/compare/v1.3.0...v1.4.0) (2025-12-04)
 
 ### Features
