@@ -165,8 +165,8 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 /// Build the reflection service from file descriptor sets.
 fn build_reflection_service(
     descriptors: &[&'static [u8]],
-) -> tonic_reflection::server::ServerReflectionServer<
-    impl tonic_reflection::server::ServerReflection,
+) -> tonic_reflection::server::v1::ServerReflectionServer<
+    impl tonic_reflection::server::v1::ServerReflection,
 > {
     let mut builder = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(protoc_wkt::google::protobuf::FILE_DESCRIPTOR_SET);

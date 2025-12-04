@@ -7,31 +7,30 @@ license.workspace = true
 
 [dependencies]
 common = { path = "../common" }
-anyhow = { workspace = true }
-futures = "0.3"
-tokio = { workspace = true }
-tokio-util = { workspace = true }
-tracing = { workspace = true }
-async-nats = "0.37"
-ponix-proto = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251129185957-8f22d4974be0.1", registry = "buf" }
-prost = { version = "0.13" }
-async-trait = "0.1"
-serde_json = { workspace = true }
-chrono = "0.4"
-serde = { workspace = true }
-thiserror = { workspace = true }
-cel-interpreter = { workspace = true }
-clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
-tower = "0.5"
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+prost.workspace = true
+futures.workspace = true
+async-nats.workspace = true
+tower.workspace = true
+clickhouse.workspace = true
+cel-interpreter.workspace = true
 
+ponix-proto-prost.workspace = true
 
 [dev-dependencies]
 common = { path = "../common", features = ["testing"] }
-mockall = "0.13"
 goose = { path = "../goose" }
-testcontainers = "0.23"
-testcontainers-modules = { version = "0.11", features = ["clickhouse"] }
-
+mockall.workspace = true
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
 
 [features]
 integration-tests = []

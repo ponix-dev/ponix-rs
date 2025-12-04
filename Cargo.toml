@@ -25,13 +25,48 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 anyhow = "1.0"
 thiserror = "1.0"
-prost = "0.13"
-prost-types = "0.13"
+prost = "0.14"
+prost-types = "0.14"
 xid = "1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = "0.4"
 cel-interpreter = "0.10"
+
+# Async utilities
+async-trait = "0.1"
+async-nats = "0.37"
+bytes = "1.9"
+futures = "0.3"
+futures-util = "0.3"
+
+# gRPC / Tonic
+tonic = "0.14"
+tonic-reflection = "0.14"
+http = "1.0"
+protoc-wkt = "1.0"
+
+# Protobuf (BSR registry)
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.5.0-20251203033831-5701e04c46e1.2", registry = "buf" }
+ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.5.0-20251203033831-5701e04c46e1.3", registry = "buf" }
+
+# Database clients
+clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
+deadpool-postgres = "0.14"
+
+# Configuration
+config = { version = "0.14", features = ["toml"] }
+
+# Misc
+base64 = "0.22"
+rumqttc = "0.24"
+mockall = "0.13"
+argon2 = "0.5"
+
+# CDC (Supabase ETL)
+etl = { git = "https://github.com/supabase/etl", branch = "main" }
+etl-postgres = { git = "https://github.com/supabase/etl", branch = "main" }
 
 # OpenTelemetry
 opentelemetry = { version = "0.27", features = ["trace", "logs"] }
@@ -43,5 +78,11 @@ opentelemetry-appender-tracing = "0.27"
 
 # Tower middleware
 tower = "0.5"
-tonic-web = "0.12"
+tonic-web = "0.14"
 tower-http = { version = "0.6", features = ["cors"] }
+
+# Testing
+tokio-test = "0.4"
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["postgres", "clickhouse", "nats"] }
+which = "7.0"

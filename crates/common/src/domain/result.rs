@@ -52,6 +52,27 @@ pub enum DomainError {
     #[error("Invalid gateway configuration: {0}")]
     InvalidGatewayConfig(String),
 
+    #[error("User not found: {0}")]
+    UserNotFound(String),
+
+    #[error("User already exists: {0}")]
+    UserAlreadyExists(String),
+
+    #[error("Invalid user ID: {0}")]
+    InvalidUserId(String),
+
+    #[error("Invalid email: {0}")]
+    InvalidEmail(String),
+
+    #[error("Invalid password: {0}")]
+    InvalidPassword(String),
+
+    #[error("Invalid user name: {0}")]
+    InvalidUserName(String),
+
+    #[error("Password hashing error: {0}")]
+    PasswordHashingError(String),
+
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
 }

@@ -1,4 +1,4 @@
-use crate::domain::{DeviceService, GatewayService, OrganizationService};
+use crate::domain::{DeviceService, GatewayService, OrganizationService, UserService};
 use crate::grpc::run_ponix_grpc_server;
 use common::grpc::GrpcServerConfig;
 use std::sync::Arc;
@@ -9,6 +9,7 @@ pub struct PonixApi {
     device_service: Arc<DeviceService>,
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
+    user_service: Arc<UserService>,
     config: GrpcServerConfig,
 }
 
@@ -17,6 +18,7 @@ impl PonixApi {
         device_service: Arc<DeviceService>,
         organization_service: Arc<OrganizationService>,
         gateway_service: Arc<GatewayService>,
+        user_service: Arc<UserService>,
         config: GrpcServerConfig,
     ) -> Self {
         debug!("Initializing Ponix API module");
@@ -24,6 +26,7 @@ impl PonixApi {
             device_service,
             organization_service,
             gateway_service,
+            user_service,
             config,
         }
     }
@@ -42,6 +45,7 @@ impl PonixApi {
                     self.device_service,
                     self.organization_service,
                     self.gateway_service,
+                    self.user_service,
                     ctx,
                 )
                 .await

@@ -7,15 +7,20 @@ license.workspace = true
 
 [dependencies]
 common = { path = "../common" }
-tracing = { workspace = true }
-xid = { workspace = true }
-tokio = { workspace = true }
-tokio-util = { workspace = true }
-chrono = "0.4"
-tonic = "0.12"
-anyhow = { workspace = true }
-ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.4.1-20251129185957-8f22d4974be0.1", registry = "buf" }
-ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251129185957-8f22d4974be0.1", registry = "buf" }
+tracing.workspace = true
+xid.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+chrono.workspace = true
+tonic.workspace = true
+anyhow.workspace = true
+argon2.workspace = true
+
+ponix-proto-prost.workspace = true
+ponix-proto-tonic.workspace = true
+
+[dev-dependencies]
+common = { path = "../common", features = ["testing"] }
 
 [features]
 integration-tests = []

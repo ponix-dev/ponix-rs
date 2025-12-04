@@ -3,7 +3,7 @@ use common::domain::RawEnvelope;
 use common::nats::{ConsumeRequest, ConsumeResponse};
 use common::proto::raw_envelope_proto_to_domain;
 use futures::future::BoxFuture;
-use ponix_proto::envelope::v1::RawEnvelope as ProtoRawEnvelope;
+use ponix_proto_prost::envelope::v1::RawEnvelope as ProtoRawEnvelope;
 use prost::Message as ProstMessage;
 use std::sync::Arc;
 use std::task::{Context, Poll};

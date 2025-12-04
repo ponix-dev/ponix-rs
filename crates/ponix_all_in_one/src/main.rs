@@ -8,13 +8,13 @@ use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingC
 use common::nats::NatsClient;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
-    PostgresOrganizationRepository,
+    PostgresOrganizationRepository, PostgresUserRepository,
 };
 use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
-use ponix_api::domain::{DeviceService, GatewayService, OrganizationService};
+use ponix_api::domain::{DeviceService, GatewayService, OrganizationService, UserService};
 use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
 use std::sync::Arc;
@@ -75,6 +75,7 @@ async fn main() {
         postgres_repos.gateway.clone(),
         postgres_repos.organization.clone(),
     ));
+    let user_service = Arc::new(UserService::new(postgres_repos.user.clone()));
 
     // Parse ignored paths from config (comma-separated)
     let ignored_paths: Vec<String> = config
@@ -107,6 +108,7 @@ async fn main() {
         device_service.clone(),
         organization_service,
         gateway_service,
+        user_service,
         grpc_config,
     );
 
@@ -225,6 +227,7 @@ struct PostgresRepositories {
     device: Arc<PostgresDeviceRepository>,
     organization: Arc<PostgresOrganizationRepository>,
     gateway: Arc<PostgresGatewayRepository>,
+    user: Arc<PostgresUserRepository>,
 }
 
 async fn initialize_shared_dependencies(
@@ -237,7 +240,8 @@ async fn initialize_shared_dependencies(
     let postgres_repos = PostgresRepositories {
         device: Arc::new(PostgresDeviceRepository::new(postgres_client.clone())),
         organization: Arc::new(PostgresOrganizationRepository::new(postgres_client.clone())),
-        gateway: Arc::new(PostgresGatewayRepository::new(postgres_client)),
+        gateway: Arc::new(PostgresGatewayRepository::new(postgres_client.clone())),
+        user: Arc::new(PostgresUserRepository::new(postgres_client)),
     };
 
     // ClickHouse initialization
