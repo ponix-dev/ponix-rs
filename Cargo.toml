@@ -62,6 +62,7 @@ config = { version = "0.14", features = ["toml"] }
 base64 = "0.22"
 rumqttc = "0.24"
 mockall = "0.13"
+argon2 = "0.5"
 
 # CDC (Supabase ETL)
 etl = { git = "https://github.com/supabase/etl", branch = "main" }

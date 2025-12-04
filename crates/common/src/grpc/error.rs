@@ -31,6 +31,19 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
         | DomainError::InvalidGatewayType(msg)
         | DomainError::InvalidGatewayConfig(msg) => Status::invalid_argument(msg),
 
+        DomainError::UserNotFound(msg) => Status::not_found(msg),
+
+        DomainError::UserAlreadyExists(msg) => Status::already_exists(msg),
+
+        DomainError::InvalidUserId(msg)
+        | DomainError::InvalidEmail(msg)
+        | DomainError::InvalidPassword(msg)
+        | DomainError::InvalidUserName(msg) => Status::invalid_argument(msg),
+
+        DomainError::PasswordHashingError(msg) => {
+            Status::internal(format!("Password hashing error: {}", msg))
+        }
+
         DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
     }
 }
