@@ -33,6 +33,36 @@ serde_json = "1.0"
 chrono = "0.4"
 cel-interpreter = "0.10"
 
+# Async utilities
+async-trait = "0.1"
+async-nats = "0.37"
+bytes = "1.9"
+futures = "0.3"
+futures-util = "0.3"
+
+# gRPC / Tonic
+tonic = "0.12"
+tonic-reflection = "0.12"
+http = "1.0"
+protoc-wkt = "1.0"
+
+# Database clients
+clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
+deadpool-postgres = "0.14"
+
+# Configuration
+config = { version = "0.14", features = ["toml"] }
+
+# Misc
+base64 = "0.22"
+rumqttc = "0.24"
+mockall = "0.13"
+
+# CDC (Supabase ETL)
+etl = { git = "https://github.com/supabase/etl", branch = "main" }
+etl-postgres = { git = "https://github.com/supabase/etl", branch = "main" }
+
 # OpenTelemetry
 opentelemetry = { version = "0.27", features = ["trace", "logs"] }
 opentelemetry_sdk = { version = "0.27", features = ["trace", "logs", "rt-tokio"] }
@@ -45,3 +75,9 @@ opentelemetry-appender-tracing = "0.27"
 tower = "0.5"
 tonic-web = "0.12"
 tower-http = { version = "0.6", features = ["cors"] }
+
+# Testing
+tokio-test = "0.4"
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["postgres", "clickhouse", "nats"] }
+which = "7.0"

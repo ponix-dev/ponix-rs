@@ -6,32 +6,30 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-prost-types = { version = "0.13" }
-
-chrono = "0.4"
-anyhow = { workspace = true }
-thiserror = { workspace = true }
-async-trait = "0.1"
-serde_json = { workspace = true }
-mockall = { version = "0.13", optional = true }
-async-nats = "0.37"
-bytes = "1.0"
-futures = "0.3"
-tokio = { version = "1", features = ["full"] }
-tokio-util = "0.7"
-tracing = "0.1"
-ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251129185957-8f22d4974be0.1", registry = "buf" }
-prost = "0.13"
-clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
-serde = { workspace = true }
-tonic = "0.12"
-# PostgreSQL client
-tokio-postgres = { version = "0.7", features = [
-    "with-chrono-0_4",
-    "with-serde_json-1",
-] }
-# Connection pooling
-deadpool-postgres = "0.14"
+prost-types.workspace = true
+prost.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+async-nats.workspace = true
+bytes.workspace = true
+futures.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tonic.workspace = true
+tonic-reflection.workspace = true
+tonic-web.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+http.workspace = true
+protoc-wkt.workspace = true
+clickhouse.workspace = true
+tokio-postgres.workspace = true
+deadpool-postgres.workspace = true
 
 # OpenTelemetry for trace context propagation and telemetry
 opentelemetry.workspace = true
@@ -40,22 +38,20 @@ opentelemetry-otlp.workspace = true
 opentelemetry-semantic-conventions.workspace = true
 tracing-opentelemetry.workspace = true
 opentelemetry-appender-tracing.workspace = true
-tracing-subscriber = { workspace = true }
+tracing-subscriber.workspace = true
 
-# Tower for middleware
-tower = { workspace = true }
-http = "1.0"
-tonic-web = { workspace = true }
-tonic-reflection = "0.12"
-tower-http = { workspace = true }
-protoc-wkt = "1.0"
+# Optional
+mockall = { workspace = true, optional = true }
+
+# Protobuf (BSR registry - excluded from workspace)
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.4.0-20251129185957-8f22d4974be0.1", registry = "buf" }
 
 [dev-dependencies]
-mockall = "0.13"
-testcontainers = "0.23"
-testcontainers-modules = { version = "0.11", features = ["postgres"] }
+mockall.workspace = true
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
+which.workspace = true
 goose = { path = "../goose" }
-which = "7.0"
 
 [features]
 testing = ["mockall"]
