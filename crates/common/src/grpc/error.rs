@@ -44,6 +44,8 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
             Status::internal(format!("Password hashing error: {}", msg))
         }
 
+        DomainError::InvalidCredentials => Status::unauthenticated("Invalid email or password"),
+
         DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
     }
 }

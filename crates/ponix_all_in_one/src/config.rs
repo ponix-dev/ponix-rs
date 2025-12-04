@@ -123,6 +123,15 @@ pub struct ServiceConfig {
     #[serde(default = "default_grpc_cors_allowed_origins")]
     pub grpc_cors_allowed_origins: String,
 
+    // JWT configuration
+    /// JWT signing secret (required for production)
+    #[serde(default = "default_jwt_secret")]
+    pub jwt_secret: String,
+
+    /// JWT token expiration in hours (default: 24)
+    #[serde(default = "default_jwt_expiration_hours")]
+    pub jwt_expiration_hours: u64,
+
     // CDC configuration
     /// CDC entity name for gateway events
     #[serde(default = "default_cdc_gateway_entity_name")]
@@ -302,6 +311,15 @@ fn default_grpc_web_enabled() -> bool {
 
 fn default_grpc_cors_allowed_origins() -> String {
     "*".to_string()
+}
+
+// JWT defaults
+fn default_jwt_secret() -> String {
+    "change-me-in-production".to_string()
+}
+
+fn default_jwt_expiration_hours() -> u64 {
+    24
 }
 
 // CDC defaults

@@ -15,6 +15,8 @@ chrono.workspace = true
 tonic.workspace = true
 anyhow.workspace = true
 argon2.workspace = true
+jsonwebtoken.workspace = true
+serde.workspace = true
 
 ponix-proto-prost.workspace = true
 ponix-proto-tonic.workspace = true

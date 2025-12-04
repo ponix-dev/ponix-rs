@@ -73,6 +73,9 @@ pub enum DomainError {
     #[error("Password hashing error: {0}")]
     PasswordHashingError(String),
 
+    #[error("Invalid credentials")]
+    InvalidCredentials,
+
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
 }

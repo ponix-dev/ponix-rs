@@ -14,7 +14,7 @@ use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, Tel
 use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
-use ponix_api::domain::{DeviceService, GatewayService, OrganizationService, UserService};
+use ponix_api::domain::{DeviceService, GatewayService, JwtConfig, OrganizationService, UserService};
 use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
 use std::sync::Arc;
@@ -75,7 +75,11 @@ async fn main() {
         postgres_repos.gateway.clone(),
         postgres_repos.organization.clone(),
     ));
-    let user_service = Arc::new(UserService::new(postgres_repos.user.clone()));
+    let jwt_config = JwtConfig {
+        secret: config.jwt_secret.clone(),
+        expiration_hours: config.jwt_expiration_hours,
+    };
+    let user_service = Arc::new(UserService::new(postgres_repos.user.clone(), jwt_config));
 
     // Parse ignored paths from config (comma-separated)
     let ignored_paths: Vec<String> = config

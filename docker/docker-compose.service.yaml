@@ -49,6 +49,10 @@ services:
       PONIX_GRPC_HOST: "0.0.0.0"
       PONIX_GRPC_PORT: "50051"
 
+      # JWT configuration
+      PONIX_JWT_SECRET: "change-me-in-production-use-a-secure-random-string"
+      PONIX_JWT_EXPIRATION_HOURS: "24"
+
       # gRPC Telemetry configuration
       PONIX_GRPC_IGNORED_PATHS: "/grpc.reflection."
 
