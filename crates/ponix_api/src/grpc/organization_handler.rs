@@ -3,6 +3,12 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::OrganizationService;
+use common::auth::AuthTokenProvider;
+use common::grpc::domain_error_to_status;
+use common::proto::{
+    datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
+    to_get_organization_input, to_list_organizations_input, to_proto_organization,
+};
 use ponix_proto_prost::organization::v1::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
     DeleteOrganizationResponse, GetOrganizationRequest, GetOrganizationResponse,
@@ -10,21 +16,45 @@ use ponix_proto_prost::organization::v1::{
 };
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationService as OrganizationServiceTrait;
 
-use common::grpc::domain_error_to_status;
-use common::proto::{
-    datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
-    to_get_organization_input, to_list_organizations_input, to_proto_organization,
-};
-
 /// gRPC handler for OrganizationService
 /// Handles Proto → Domain mapping and error conversion
 pub struct OrganizationServiceHandler {
     domain_service: Arc<OrganizationService>,
+    auth_token_provider: Arc<dyn AuthTokenProvider>,
 }
 
 impl OrganizationServiceHandler {
-    pub fn new(domain_service: Arc<OrganizationService>) -> Self {
-        Self { domain_service }
+    pub fn new(
+        domain_service: Arc<OrganizationService>,
+        auth_token_provider: Arc<dyn AuthTokenProvider>,
+    ) -> Self {
+        Self {
+            domain_service,
+            auth_token_provider,
+        }
+    }
+
+    /// Extract user_id from authorization header (mandatory for authenticated endpoints)
+    fn extract_user_id_from_request<T>(&self, request: &Request<T>) -> Result<String, Status> {
+        let auth_header = request
+            .metadata()
+            .get("authorization")
+            .ok_or_else(|| Status::unauthenticated("Missing authorization header"))?
+            .to_str()
+            .map_err(|_| Status::unauthenticated("Invalid authorization header"))?;
+
+        // Extract Bearer token
+        let token = auth_header
+            .strip_prefix("Bearer ")
+            .or_else(|| auth_header.strip_prefix("bearer "))
+            .ok_or_else(|| {
+                Status::unauthenticated("Invalid authorization format, expected 'Bearer <token>'")
+            })?;
+
+        // Validate token and extract user_id
+        self.auth_token_provider
+            .validate_token(token)
+            .map_err(domain_error_to_status)
     }
 }
 
@@ -39,10 +69,13 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         &self,
         request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<CreateOrganizationResponse>, Status> {
+        // Extract user_id from authorization header (mandatory)
+        let user_id = self.extract_user_id_from_request(&request)?;
+
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_create_organization_input(req);
+        // Convert proto → domain with mandatory user_id
+        let input = to_create_organization_input(req, user_id);
 
         // Call domain service
         let organization = self

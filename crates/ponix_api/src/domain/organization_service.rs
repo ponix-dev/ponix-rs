@@ -17,17 +17,24 @@ impl OrganizationService {
     }
 
     /// Create a new organization with generated ID
-    #[instrument(skip(self, input), fields(name = %input.name))]
+    #[instrument(skip(self, input), fields(name = %input.name, user_id = %input.user_id))]
     pub async fn create_organization(
         &self,
         input: CreateOrganizationInput,
     ) -> DomainResult<Organization> {
-        debug!(name = %input.name, "creating organization");
+        debug!(name = %input.name, user_id = %input.user_id, "creating organization");
 
         // Validate name is not empty
         if input.name.trim().is_empty() {
             return Err(DomainError::InvalidOrganizationName(
                 "Organization name cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate user_id is not empty (mandatory field)
+        if input.user_id.trim().is_empty() {
+            return Err(DomainError::InvalidUserId(
+                "User ID cannot be empty".to_string(),
             ));
         }
 
@@ -37,6 +44,7 @@ impl OrganizationService {
         let repo_input = CreateOrganizationInputWithId {
             id: organization_id.clone(),
             name: input.name,
+            user_id: input.user_id,
         };
 
         let organization = self.repository.create_organization(repo_input).await?;
@@ -146,7 +154,9 @@ mod tests {
         mock_repo
             .expect_create_organization()
             .withf(|input: &CreateOrganizationInputWithId| {
-                !input.id.is_empty() && input.name == "Test Org"
+                !input.id.is_empty()
+                    && input.name == "Test Org"
+                    && input.user_id == "user-123"
             })
             .times(1)
             .return_once(move |_| Ok(expected_org.clone()));
@@ -154,6 +164,7 @@ mod tests {
         let service = OrganizationService::new(Arc::new(mock_repo));
         let input = CreateOrganizationInput {
             name: "Test Org".to_string(),
+            user_id: "user-123".to_string(),
         };
 
         let result = service.create_organization(input).await;
@@ -168,6 +179,7 @@ mod tests {
 
         let input = CreateOrganizationInput {
             name: "".to_string(),
+            user_id: "user-123".to_string(),
         };
 
         let result = service.create_organization(input).await;
@@ -175,6 +187,20 @@ mod tests {
             result,
             Err(DomainError::InvalidOrganizationName(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn test_create_organization_empty_user_id() {
+        let mock_repo = MockOrganizationRepository::new();
+        let service = OrganizationService::new(Arc::new(mock_repo));
+
+        let input = CreateOrganizationInput {
+            name: "Test Org".to_string(),
+            user_id: "".to_string(),
+        };
+
+        let result = service.create_organization(input).await;
+        assert!(matches!(result, Err(DomainError::InvalidUserId(_))));
     }
 
     #[tokio::test]

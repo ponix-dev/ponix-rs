@@ -2,13 +2,16 @@
 
 use common::domain::{
     CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError, GetOrganizationInput,
-    ListOrganizationsInput, OrganizationRepository, UpdateOrganizationInput,
+    ListOrganizationsInput, OrganizationRepository, RegisterUserInputWithId, UpdateOrganizationInput,
+    UserRepository,
 };
-use common::postgres::{PostgresClient, PostgresOrganizationRepository};
+use common::postgres::{PostgresClient, PostgresOrganizationRepository, PostgresUserRepository};
 use goose::MigrationRunner;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use testcontainers_modules::postgres::Postgres;
+
+const TEST_USER_ID: &str = "test-user-001";
 
 async fn setup_test_db() -> (
     ContainerAsync<Postgres>,
@@ -53,6 +56,16 @@ async fn setup_test_db() -> (
     )
     .expect("Failed to create client");
 
+    // Create a test user first (needed for user_organizations foreign key)
+    let user_repo = PostgresUserRepository::new(client.clone());
+    let user_input = RegisterUserInputWithId {
+        id: TEST_USER_ID.to_string(),
+        email: "test@example.com".to_string(),
+        name: "Test User".to_string(),
+        password_hash: "hashed_password".to_string(),
+    };
+    user_repo.register_user(user_input).await.unwrap();
+
     let repository = PostgresOrganizationRepository::new(client.clone());
 
     (postgres, repository, client)
@@ -66,6 +79,7 @@ async fn test_create_and_get_organization() {
     let input = CreateOrganizationInputWithId {
         id: "test-org-123".to_string(),
         name: "Test Organization".to_string(),
+        user_id: TEST_USER_ID.to_string(),
     };
 
     // Create organization
@@ -109,6 +123,7 @@ async fn test_update_organization() {
     let input = CreateOrganizationInputWithId {
         id: "test-org-456".to_string(),
         name: "Original Name".to_string(),
+        user_id: TEST_USER_ID.to_string(),
     };
     repo.create_organization(input).await.unwrap();
 
@@ -144,6 +159,7 @@ async fn test_delete_organization() {
     let input = CreateOrganizationInputWithId {
         id: "test-org-789".to_string(),
         name: "To Be Deleted".to_string(),
+        user_id: TEST_USER_ID.to_string(),
     };
     repo.create_organization(input).await.unwrap();
 
@@ -183,6 +199,7 @@ async fn test_list_organizations() {
         let input = CreateOrganizationInputWithId {
             id: format!("org-{}", i),
             name: format!("Organization {}", i),
+            user_id: TEST_USER_ID.to_string(),
         };
         repo.create_organization(input).await.unwrap();
     }
@@ -205,6 +222,7 @@ async fn test_list_excludes_soft_deleted() {
         let input = CreateOrganizationInputWithId {
             id: format!("org-{}", i),
             name: format!("Organization {}", i),
+            user_id: TEST_USER_ID.to_string(),
         };
         repo.create_organization(input).await.unwrap();
     }
@@ -231,6 +249,7 @@ async fn test_create_duplicate_organization() {
     let input = CreateOrganizationInputWithId {
         id: "duplicate-org".to_string(),
         name: "Original Organization".to_string(),
+        user_id: TEST_USER_ID.to_string(),
     };
 
     // First creation should succeed
@@ -243,4 +262,21 @@ async fn test_create_duplicate_organization() {
         result.unwrap_err(),
         DomainError::OrganizationAlreadyExists(_)
     ));
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_create_organization_with_nonexistent_user() {
+    let (_container, repo, _client) = setup_test_db().await;
+
+    let input = CreateOrganizationInputWithId {
+        id: "org-with-bad-user".to_string(),
+        name: "Test Org".to_string(),
+        user_id: "nonexistent-user".to_string(),
+    };
+
+    // Should fail with UserNotFound due to foreign key constraint
+    let result = repo.create_organization(input).await;
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), DomainError::UserNotFound(_)));
 }

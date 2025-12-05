@@ -4,10 +4,14 @@ use async_nats::jetstream;
 use cdc_worker::domain::{CdcConfig, CdcProcess, EntityConfig, GatewayConverter};
 use common::domain::{
     CreateGatewayInputWithId, CreateOrganizationInputWithId, EmqxGatewayConfig, GatewayConfig,
-    GatewayRepository, OrganizationRepository, UpdateGatewayInput,
+    GatewayRepository, OrganizationRepository, RegisterUserInputWithId, UpdateGatewayInput,
+    UserRepository,
 };
 use common::nats::NatsClient;
-use common::postgres::{PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository};
+use common::postgres::{
+    PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository,
+    PostgresUserRepository,
+};
 use futures_util::stream::StreamExt;
 use goose::MigrationRunner;
 use ponix_proto_prost::gateway::v1::{Gateway, GatewayType};
@@ -26,6 +30,7 @@ use tokio_postgres::NoTls;
 
 const STREAM_NAME: &str = "test_gateways";
 const SUBJECT_PREFIX: &str = "test_gateways";
+const TEST_USER_ID: &str = "test-user-001";
 
 struct TestEnvironment {
     _postgres_container: ContainerAsync<Postgres>,
@@ -135,6 +140,20 @@ async fn setup_test_env() -> TestEnvironment {
     let gateway_repo = PostgresGatewayRepository::new(postgres_client.clone());
     let organization_repo = PostgresOrganizationRepository::new(postgres_client.clone());
 
+    // Create a test user (needed for user_organizations foreign key)
+    let user_repo = PostgresUserRepository::new(postgres_client.clone());
+    let user_input = RegisterUserInputWithId {
+        id: TEST_USER_ID.to_string(),
+        email: "test@example.com".to_string(),
+        name: "Test User".to_string(),
+        password_hash: "hashed_password".to_string(),
+    };
+    user_repo
+        .register_user(user_input)
+        .await
+        .expect("Failed to create test user");
+    info!("Test user created");
+
     // Create NATS client and ensure stream exists
     let nats_client = Arc::new(
         NatsClient::connect(&nats_url, Duration::from_secs(10))
@@ -209,6 +228,7 @@ async fn create_test_organization(env: &TestEnvironment, org_id: &str) {
         .create_organization(CreateOrganizationInputWithId {
             id: org_id.to_string(),
             name: format!("Test Organization {}", org_id),
+            user_id: TEST_USER_ID.to_string(),
         })
         .await
         .expect("Failed to create test organization");

@@ -12,6 +12,7 @@ use crate::grpc::device_handler::DeviceServiceHandler;
 use crate::grpc::gateway_handler::GatewayServiceHandler;
 use crate::grpc::organization_handler::OrganizationServiceHandler;
 use crate::grpc::user_handler::UserServiceHandler;
+use common::auth::AuthTokenProvider;
 use common::grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_proto_prost;
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceServiceServer;
@@ -33,10 +34,12 @@ pub fn build_ponix_api_routes(
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
+    auth_token_provider: Arc<dyn AuthTokenProvider>,
 ) -> Routes {
     // Create handlers
     let device_handler = DeviceServiceHandler::new(device_service);
-    let organization_handler = OrganizationServiceHandler::new(organization_service);
+    let organization_handler =
+        OrganizationServiceHandler::new(organization_service, auth_token_provider);
     let gateway_handler = GatewayServiceHandler::new(gateway_service);
     let user_handler = UserServiceHandler::new(user_service);
 
@@ -64,6 +67,7 @@ pub async fn run_ponix_grpc_server(
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
+    auth_token_provider: Arc<dyn AuthTokenProvider>,
     cancellation_token: CancellationToken,
 ) -> Result<(), anyhow::Error> {
     let routes = build_ponix_api_routes(
@@ -71,6 +75,7 @@ pub async fn run_ponix_grpc_server(
         organization_service,
         gateway_service,
         user_service,
+        auth_token_provider,
     );
 
     run_grpc_server(config, routes, REFLECTION_DESCRIPTORS, cancellation_token).await

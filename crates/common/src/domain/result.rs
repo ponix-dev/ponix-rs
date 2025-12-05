@@ -79,6 +79,9 @@ pub enum DomainError {
     #[error("Invalid or expired token: {0}")]
     InvalidToken(String),
 
+    #[error("User organization link already exists: user {0} in org {1}")]
+    UserOrganizationAlreadyExists(String, String),
+
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
 }

@@ -2,13 +2,19 @@
 
 use common::domain::{
     CreateGatewayInputWithId, CreateOrganizationInputWithId, DomainError, EmqxGatewayConfig,
-    GatewayConfig, GatewayRepository, OrganizationRepository, UpdateGatewayInput,
+    GatewayConfig, GatewayRepository, OrganizationRepository, RegisterUserInputWithId,
+    UpdateGatewayInput, UserRepository,
 };
-use common::postgres::{PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository};
+use common::postgres::{
+    PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository,
+    PostgresUserRepository,
+};
 use goose::MigrationRunner;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use testcontainers_modules::postgres::Postgres;
+
+const TEST_USER_ID: &str = "test-user-001";
 
 async fn setup_test_db() -> (
     ContainerAsync<Postgres>,
@@ -54,6 +60,16 @@ async fn setup_test_db() -> (
     )
     .expect("Failed to create client");
 
+    // Create a test user first (needed for user_organizations foreign key)
+    let user_repo = PostgresUserRepository::new(client.clone());
+    let user_input = RegisterUserInputWithId {
+        id: TEST_USER_ID.to_string(),
+        email: "test@example.com".to_string(),
+        name: "Test User".to_string(),
+        password_hash: "hashed_password".to_string(),
+    };
+    user_repo.register_user(user_input).await.unwrap();
+
     let gateway_repo = PostgresGatewayRepository::new(client.clone());
     let org_repo = PostgresOrganizationRepository::new(client.clone());
 
@@ -69,6 +85,7 @@ async fn test_gateway_crud_operations() {
     let org_input = CreateOrganizationInputWithId {
         id: "org-test-001".to_string(),
         name: "Test Organization".to_string(),
+        user_id: TEST_USER_ID.to_string(),
     };
     org_repo.create_organization(org_input).await.unwrap();
 
@@ -139,6 +156,7 @@ async fn test_gateway_unique_constraint() {
     let org_input = CreateOrganizationInputWithId {
         id: "org-test-002".to_string(),
         name: "Test Organization 2".to_string(),
+        user_id: TEST_USER_ID.to_string(),
     };
     org_repo.create_organization(org_input).await.unwrap();
 
@@ -175,6 +193,7 @@ async fn test_list_excludes_soft_deleted() {
     let org_input = CreateOrganizationInputWithId {
         id: "org-test-003".to_string(),
         name: "Test Organization 3".to_string(),
+        user_id: TEST_USER_ID.to_string(),
     };
     org_repo.create_organization(org_input).await.unwrap();
 

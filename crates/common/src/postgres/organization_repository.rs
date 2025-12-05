@@ -45,12 +45,12 @@ impl PostgresOrganizationRepository {
 
 #[async_trait]
 impl OrganizationRepository for PostgresOrganizationRepository {
-    #[instrument(skip(self, input), fields(organization_id = %input.id))]
+    #[instrument(skip(self, input), fields(organization_id = %input.id, user_id = %input.user_id))]
     async fn create_organization(
         &self,
         input: CreateOrganizationInputWithId,
     ) -> DomainResult<Organization> {
-        let conn = self
+        let mut conn = self
             .client
             .get_connection()
             .await
@@ -58,8 +58,14 @@ impl OrganizationRepository for PostgresOrganizationRepository {
 
         let now = Utc::now();
 
-        // Execute insert
-        let result = conn
+        // Start transaction
+        let transaction = conn
+            .transaction()
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        // Insert organization
+        let org_result = transaction
             .execute(
                 "INSERT INTO organizations (id, name, created_at, updated_at)
                  VALUES ($1, $2, $3, $4)",
@@ -67,11 +73,8 @@ impl OrganizationRepository for PostgresOrganizationRepository {
             )
             .await;
 
-        // Handle unique constraint violation
-        if let Err(e) = result {
-            // Check if it's a database error with a unique constraint violation
+        if let Err(e) = org_result {
             if let Some(db_err) = e.as_db_error() {
-                // PostgreSQL error code 23505 is unique_violation
                 if db_err.code().code() == "23505" {
                     return Err(DomainError::OrganizationAlreadyExists(input.id.clone()));
                 }
@@ -79,9 +82,43 @@ impl OrganizationRepository for PostgresOrganizationRepository {
             return Err(DomainError::RepositoryError(e.into()));
         }
 
-        debug!(organization_id = %input.id, "organization created in database");
+        // Insert user-organization link
+        let user_org_result = transaction
+            .execute(
+                "INSERT INTO user_organizations (user_id, organization_id, created_at)
+                 VALUES ($1, $2, $3)",
+                &[&input.user_id, &input.id, &now],
+            )
+            .await;
 
-        // Return created organization
+        if let Err(e) = user_org_result {
+            if let Some(db_err) = e.as_db_error() {
+                if db_err.code().code() == "23505" {
+                    return Err(DomainError::UserOrganizationAlreadyExists(
+                        input.user_id.clone(),
+                        input.id.clone(),
+                    ));
+                }
+                // Foreign key violation (user doesn't exist)
+                if db_err.code().code() == "23503" {
+                    return Err(DomainError::UserNotFound(input.user_id.clone()));
+                }
+            }
+            return Err(DomainError::RepositoryError(e.into()));
+        }
+
+        // Commit transaction
+        transaction
+            .commit()
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        debug!(
+            organization_id = %input.id,
+            user_id = %input.user_id,
+            "organization created with user link in database"
+        );
+
         Ok(Organization {
             id: input.id,
             name: input.name,

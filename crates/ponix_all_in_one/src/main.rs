@@ -80,12 +80,13 @@ async fn main() {
         config.jwt_secret.clone(),
         config.jwt_expiration_hours,
     );
-    let auth_token_provider = Arc::new(JwtAuthTokenProvider::new(jwt_config));
+    let auth_token_provider: Arc<dyn common::auth::AuthTokenProvider> =
+        Arc::new(JwtAuthTokenProvider::new(jwt_config));
     let password_service = Arc::new(Argon2PasswordService::new());
 
     let user_service = Arc::new(UserService::new(
         postgres_repos.user.clone(),
-        auth_token_provider,
+        auth_token_provider.clone(),
         password_service,
     ));
 
@@ -121,6 +122,7 @@ async fn main() {
         organization_service,
         gateway_service,
         user_service,
+        auth_token_provider,
         grpc_config,
     );
 
