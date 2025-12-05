@@ -14,7 +14,8 @@ use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, Tel
 use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
-use ponix_api::domain::{DeviceService, GatewayService, JwtConfig, OrganizationService, UserService};
+use common::auth::{Argon2PasswordService, JwtAuthTokenProvider, JwtConfig};
+use ponix_api::domain::{DeviceService, GatewayService, OrganizationService, UserService};
 use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
 use std::sync::Arc;
@@ -75,11 +76,18 @@ async fn main() {
         postgres_repos.gateway.clone(),
         postgres_repos.organization.clone(),
     ));
-    let jwt_config = JwtConfig {
-        secret: config.jwt_secret.clone(),
-        expiration_hours: config.jwt_expiration_hours,
-    };
-    let user_service = Arc::new(UserService::new(postgres_repos.user.clone(), jwt_config));
+    let jwt_config = JwtConfig::new(
+        config.jwt_secret.clone(),
+        config.jwt_expiration_hours,
+    );
+    let auth_token_provider = Arc::new(JwtAuthTokenProvider::new(jwt_config));
+    let password_service = Arc::new(Argon2PasswordService::new());
+
+    let user_service = Arc::new(UserService::new(
+        postgres_repos.user.clone(),
+        auth_token_provider,
+        password_service,
+    ));
 
     // Parse ignored paths from config (comma-separated)
     let ignored_paths: Vec<String> = config

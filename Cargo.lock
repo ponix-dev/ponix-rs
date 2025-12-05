@@ -636,6 +636,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "argon2",
  "async-nats",
  "async-trait",
  "bytes",
@@ -645,6 +646,7 @@ dependencies = [
  "futures",
  "goose",
  "http",
+ "jsonwebtoken",
  "mockall",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -2853,10 +2855,8 @@ name = "ponix_api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "argon2",
  "chrono",
  "common",
- "jsonwebtoken",
  "ponix_ponix_community_neoeinstein-prost",
  "ponix_ponix_community_neoeinstein-tonic",
  "serde",

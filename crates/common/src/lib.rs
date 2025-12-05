@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod clickhouse;
 pub mod domain;
 pub mod grpc;
