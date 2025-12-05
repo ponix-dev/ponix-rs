@@ -48,6 +48,10 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::InvalidToken(msg) => Status::unauthenticated(format!("Invalid token: {}", msg)),
 
+        DomainError::UserOrganizationAlreadyExists(user_id, org_id) => {
+            Status::already_exists(format!("User {} already in organization {}", user_id, org_id))
+        }
+
         DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
     }
 }

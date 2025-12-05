@@ -13,9 +13,11 @@ pub struct Organization {
 }
 
 /// External input for creating an organization (no ID)
+/// user_id is mandatory - organizations must always be created by a user
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateOrganizationInput {
     pub name: String,
+    pub user_id: String, // The user creating this organization (mandatory)
 }
 
 /// Internal input with generated ID
@@ -23,6 +25,7 @@ pub struct CreateOrganizationInput {
 pub struct CreateOrganizationInputWithId {
     pub id: String,
     pub name: String,
+    pub user_id: String, // The user creating this organization (mandatory)
 }
 
 /// Input for getting an organization by ID
