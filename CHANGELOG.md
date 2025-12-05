@@ -1,3 +1,9 @@
+## [1.6.0](https://github.com/ponix-dev/ponix-rs/compare/v1.5.1...v1.6.0) (2025-12-05)
+
+### Features
+
+* Connect users to organizations on creation ([#79](https://github.com/ponix-dev/ponix-rs/issues/79)) ([77d6338](https://github.com/ponix-dev/ponix-rs/commit/77d63381965a87cc4697a6212895da42080a3386))
+
 ## [1.5.1](https://github.com/ponix-dev/ponix-rs/compare/v1.5.0...v1.5.1) (2025-12-05)
 
 ### Code Refactoring
