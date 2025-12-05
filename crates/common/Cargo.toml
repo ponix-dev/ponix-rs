@@ -31,6 +31,10 @@ clickhouse.workspace = true
 tokio-postgres.workspace = true
 deadpool-postgres.workspace = true
 
+# Authentication
+argon2.workspace = true
+jsonwebtoken.workspace = true
+
 # OpenTelemetry for trace context propagation and telemetry
 opentelemetry.workspace = true
 opentelemetry_sdk.workspace = true

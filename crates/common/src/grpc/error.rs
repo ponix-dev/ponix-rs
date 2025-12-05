@@ -46,6 +46,8 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::InvalidCredentials => Status::unauthenticated("Invalid email or password"),
 
+        DomainError::InvalidToken(msg) => Status::unauthenticated(format!("Invalid token: {}", msg)),
+
         DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
     }
 }
