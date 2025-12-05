@@ -1,3 +1,9 @@
+## [1.5.1](https://github.com/ponix-dev/ponix-rs/compare/v1.5.0...v1.5.1) (2025-12-05)
+
+### Code Refactoring
+
+* moves auth to common crate ([#78](https://github.com/ponix-dev/ponix-rs/issues/78)) ([7843b13](https://github.com/ponix-dev/ponix-rs/commit/7843b13ab196180744fa480f7e347b58a4da2252))
+
 ## [1.5.0](https://github.com/ponix-dev/ponix-rs/compare/v1.4.0...v1.5.0) (2025-12-04)
 
 ### Features
