@@ -108,8 +108,9 @@ impl UserServiceTrait for UserServiceHandler {
 
         debug!("User logged in successfully");
 
+        // TODO: Phase 4 will add refresh token as HTTP-only cookie
         Ok(Response::new(LoginResponse {
-            token: output.token,
+            token: output.access_token,
         }))
     }
 }

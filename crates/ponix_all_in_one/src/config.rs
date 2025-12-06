@@ -132,6 +132,10 @@ pub struct ServiceConfig {
     #[serde(default = "default_jwt_expiration_hours")]
     pub jwt_expiration_hours: u64,
 
+    /// Refresh token expiration in days (default: 7)
+    #[serde(default = "default_refresh_token_expiration_days")]
+    pub refresh_token_expiration_days: u64,
+
     // CDC configuration
     /// CDC entity name for gateway events
     #[serde(default = "default_cdc_gateway_entity_name")]
@@ -320,6 +324,10 @@ fn default_jwt_secret() -> String {
 
 fn default_jwt_expiration_hours() -> u64 {
     24
+}
+
+fn default_refresh_token_expiration_days() -> u64 {
+    7
 }
 
 // CDC defaults

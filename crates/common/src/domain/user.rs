@@ -52,7 +52,27 @@ pub struct LoginUserInput {
 /// Output from successful login
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoginUserOutput {
-    pub token: String,
+    pub access_token: String,
+    pub refresh_token: String,
+}
+
+/// Input for refreshing a token
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefreshTokenInput {
+    pub refresh_token: String,
+}
+
+/// Output from successful token refresh
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefreshTokenOutput {
+    pub access_token: String,
+    pub refresh_token: String,
+}
+
+/// Input for logout
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogoutInput {
+    pub refresh_token: String,
 }
 
 /// Repository trait for user storage operations
