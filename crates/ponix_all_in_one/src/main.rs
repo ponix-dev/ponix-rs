@@ -130,6 +130,8 @@ async fn main() {
         user_service,
         auth_token_provider,
         grpc_config,
+        config.refresh_token_expiration_days,
+        config.secure_cookies,
     );
 
     // Create orchestrator shutdown token - owned by main for lifecycle coordination

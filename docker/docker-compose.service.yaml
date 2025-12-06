@@ -53,6 +53,10 @@ services:
       PONIX_JWT_SECRET: "change-me-in-production-use-a-secure-random-string"
       PONIX_JWT_EXPIRATION_HOURS: "24"
 
+      # Refresh token configuration
+      PONIX_REFRESH_TOKEN_EXPIRATION_DAYS: "7"
+      PONIX_SECURE_COOKIES: "false"  # Set to true in production with HTTPS
+
       # gRPC Telemetry configuration
       PONIX_GRPC_IGNORED_PATHS: "/grpc.reflection."
 

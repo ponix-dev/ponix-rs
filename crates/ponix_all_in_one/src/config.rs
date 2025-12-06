@@ -136,6 +136,10 @@ pub struct ServiceConfig {
     #[serde(default = "default_refresh_token_expiration_days")]
     pub refresh_token_expiration_days: u64,
 
+    /// Use secure cookies (HTTPS only) - should be true in production
+    #[serde(default = "default_secure_cookies")]
+    pub secure_cookies: bool,
+
     // CDC configuration
     /// CDC entity name for gateway events
     #[serde(default = "default_cdc_gateway_entity_name")]
@@ -330,6 +334,10 @@ fn default_refresh_token_expiration_days() -> u64 {
     7
 }
 
+fn default_secure_cookies() -> bool {
+    false
+}
+
 // CDC defaults
 fn default_cdc_gateway_entity_name() -> String {
     "gateways".to_string()
@@ -412,7 +420,10 @@ mod tests {
         let _lock = TEST_LOCK.lock().unwrap();
 
         // Clear any existing PONIX_ environment variables
-        std::env::remove_var("PONIX_LOG_LEVEL");
+        // SAFETY: Test runs with mutex lock to prevent concurrent env access
+        unsafe {
+            std::env::remove_var("PONIX_LOG_LEVEL");
+        }
 
         let config = ServiceConfig::from_env().unwrap();
         assert_eq!(config.log_level, "info");
@@ -422,12 +433,18 @@ mod tests {
     fn test_custom_config() {
         let _lock = TEST_LOCK.lock().unwrap();
 
-        std::env::set_var("PONIX_LOG_LEVEL", "debug");
+        // SAFETY: Test runs with mutex lock to prevent concurrent env access
+        unsafe {
+            std::env::set_var("PONIX_LOG_LEVEL", "debug");
+        }
 
         let config = ServiceConfig::from_env().unwrap();
         assert_eq!(config.log_level, "debug");
 
         // Clean up
-        std::env::remove_var("PONIX_LOG_LEVEL");
+        // SAFETY: Test runs with mutex lock to prevent concurrent env access
+        unsafe {
+            std::env::remove_var("PONIX_LOG_LEVEL");
+        }
     }
 }

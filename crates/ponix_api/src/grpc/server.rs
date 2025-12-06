@@ -35,13 +35,16 @@ pub fn build_ponix_api_routes(
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
     auth_token_provider: Arc<dyn AuthTokenProvider>,
+    refresh_token_expiration_days: u64,
+    secure_cookies: bool,
 ) -> Routes {
     // Create handlers
     let device_handler = DeviceServiceHandler::new(device_service);
     let organization_handler =
         OrganizationServiceHandler::new(organization_service, auth_token_provider);
     let gateway_handler = GatewayServiceHandler::new(gateway_service);
-    let user_handler = UserServiceHandler::new(user_service);
+    let user_handler =
+        UserServiceHandler::new(user_service, refresh_token_expiration_days, secure_cookies);
 
     // Build routes with all services
     let mut builder = Routes::builder();
@@ -68,6 +71,8 @@ pub async fn run_ponix_grpc_server(
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
     auth_token_provider: Arc<dyn AuthTokenProvider>,
+    refresh_token_expiration_days: u64,
+    secure_cookies: bool,
     cancellation_token: CancellationToken,
 ) -> Result<(), anyhow::Error> {
     let routes = build_ponix_api_routes(
@@ -76,6 +81,8 @@ pub async fn run_ponix_grpc_server(
         gateway_service,
         user_service,
         auth_token_provider,
+        refresh_token_expiration_days,
+        secure_cookies,
     );
 
     run_grpc_server(config, routes, REFLECTION_DESCRIPTORS, cancellation_token).await
