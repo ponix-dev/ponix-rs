@@ -1,6 +1,7 @@
 use common::auth::{
     AuthTokenProvider, CreateRefreshTokenInput, DeleteRefreshTokenInput,
     GetRefreshTokenByHashInput, PasswordService, RefreshTokenProvider, RefreshTokenRepository,
+    RotateRefreshTokenInput,
 };
 use common::domain::{
     DomainError, DomainResult, GetUserByEmailInput, GetUserInput, LoginUserInput, LoginUserOutput,
@@ -212,13 +213,6 @@ impl UserService {
             .await?
             .ok_or(DomainError::UserNotFound(stored_token.user_id.clone()))?;
 
-        // Delete the old refresh token (rotation)
-        self.refresh_token_repository
-            .delete_refresh_token(DeleteRefreshTokenInput {
-                id: stored_token.id,
-            })
-            .await?;
-
         // Generate new access token
         let access_token = self
             .auth_token_provider
@@ -231,14 +225,18 @@ impl UserService {
         let expires_at =
             chrono::Utc::now() + chrono::Duration::days(self.refresh_token_expiration_days as i64);
 
-        // Store the new hashed refresh token
+        // Atomically rotate the refresh token (delete old + create new in a transaction)
+        // This ensures that if the new token creation fails, the old token is not deleted
         let token_id = xid::new().to_string();
         self.refresh_token_repository
-            .create_refresh_token(CreateRefreshTokenInput {
-                id: token_id,
-                user_id: user.id.clone(),
-                token_hash: refresh_output.token_hash,
-                expires_at,
+            .rotate_refresh_token(RotateRefreshTokenInput {
+                old_token_id: stored_token.id,
+                new_token: CreateRefreshTokenInput {
+                    id: token_id,
+                    user_id: user.id.clone(),
+                    token_hash: refresh_output.token_hash,
+                    expires_at,
+                },
             })
             .await?;
 
@@ -284,6 +282,7 @@ mod tests {
     use common::auth::{
         GenerateRefreshTokenOutput, MockAuthTokenProvider, MockPasswordService,
         MockRefreshTokenProvider, MockRefreshTokenRepository, RefreshToken,
+        RotateRefreshTokenInput,
     };
     use common::domain::MockUserRepository;
 
@@ -680,11 +679,6 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(Some(stored_user)));
 
-        mock_refresh_repo
-            .expect_delete_refresh_token()
-            .times(1)
-            .return_once(|_| Ok(()));
-
         mock_auth
             .expect_generate_token()
             .times(1)
@@ -699,14 +693,15 @@ mod tests {
             });
 
         mock_refresh_repo
-            .expect_create_refresh_token()
+            .expect_rotate_refresh_token()
+            .withf(|input| input.old_token_id == "token-id")
             .times(1)
             .return_once(|input| {
                 Ok(RefreshToken {
-                    id: input.id,
-                    user_id: input.user_id,
-                    token_hash: input.token_hash,
-                    expires_at: input.expires_at,
+                    id: input.new_token.id,
+                    user_id: input.new_token.user_id,
+                    token_hash: input.new_token.token_hash,
+                    expires_at: input.new_token.expires_at,
                     created_at: Some(chrono::Utc::now()),
                 })
             });

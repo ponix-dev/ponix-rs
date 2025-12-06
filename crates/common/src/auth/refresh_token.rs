@@ -46,6 +46,15 @@ pub struct DeleteRefreshTokensByUserInput {
     pub user_id: String,
 }
 
+/// Input for atomically rotating a refresh token (delete old + create new)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RotateRefreshTokenInput {
+    /// ID of the old token to delete
+    pub old_token_id: String,
+    /// New token to create
+    pub new_token: CreateRefreshTokenInput,
+}
+
 /// Output from generating a refresh token
 #[derive(Debug, Clone)]
 pub struct GenerateRefreshTokenOutput {
@@ -83,6 +92,13 @@ pub trait RefreshTokenRepository: Send + Sync {
         &self,
         input: DeleteRefreshTokensByUserInput,
     ) -> DomainResult<()>;
+
+    /// Atomically rotate a refresh token (delete old + create new in a transaction)
+    /// This ensures that if the new token creation fails, the old token is not deleted.
+    async fn rotate_refresh_token(
+        &self,
+        input: RotateRefreshTokenInput,
+    ) -> DomainResult<RefreshToken>;
 }
 
 /// Trait for refresh token generation and hashing

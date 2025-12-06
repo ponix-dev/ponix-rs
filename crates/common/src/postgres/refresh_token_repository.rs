@@ -1,6 +1,6 @@
 use crate::auth::{
     CreateRefreshTokenInput, DeleteRefreshTokenInput, DeleteRefreshTokensByUserInput,
-    GetRefreshTokenByHashInput, RefreshToken, RefreshTokenRepository,
+    GetRefreshTokenByHashInput, RefreshToken, RefreshTokenRepository, RotateRefreshTokenInput,
 };
 use crate::domain::{DomainError, DomainResult};
 use crate::postgres::PostgresClient;
@@ -157,5 +157,71 @@ impl RefreshTokenRepository for PostgresRefreshTokenRepository {
         debug!(user_id = %input.user_id, deleted_count = %result, "refresh tokens deleted for user");
 
         Ok(())
+    }
+
+    #[instrument(skip(self, input), fields(old_token_id = %input.old_token_id, new_token_id = %input.new_token.id))]
+    async fn rotate_refresh_token(
+        &self,
+        input: RotateRefreshTokenInput,
+    ) -> DomainResult<RefreshToken> {
+        let mut conn = self
+            .client
+            .get_connection()
+            .await
+            .map_err(DomainError::RepositoryError)?;
+
+        // Start a transaction to ensure atomicity
+        let transaction = conn
+            .transaction()
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        // Delete the old token
+        transaction
+            .execute(
+                "DELETE FROM refresh_tokens WHERE id = $1",
+                &[&input.old_token_id],
+            )
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        let now = Utc::now();
+
+        // Create the new token
+        transaction
+            .execute(
+                "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, created_at)
+                 VALUES ($1, $2, $3, $4, $5)",
+                &[
+                    &input.new_token.id,
+                    &input.new_token.user_id,
+                    &input.new_token.token_hash,
+                    &input.new_token.expires_at,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        // Commit the transaction - if this fails, both operations are rolled back
+        transaction
+            .commit()
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        debug!(
+            old_token_id = %input.old_token_id,
+            new_token_id = %input.new_token.id,
+            user_id = %input.new_token.user_id,
+            "refresh token rotated atomically"
+        );
+
+        Ok(RefreshToken {
+            id: input.new_token.id,
+            user_id: input.new_token.user_id,
+            token_hash: input.new_token.token_hash,
+            expires_at: input.new_token.expires_at,
+            created_at: Some(now),
+        })
     }
 }
