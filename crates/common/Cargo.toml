@@ -34,6 +34,10 @@ deadpool-postgres.workspace = true
 # Authentication
 argon2.workspace = true
 jsonwebtoken.workspace = true
+rand.workspace = true
+base64.workspace = true
+sha2.workspace = true
+hex.workspace = true
 
 # OpenTelemetry for trace context propagation and telemetry
 opentelemetry.workspace = true

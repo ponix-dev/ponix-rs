@@ -1,12 +1,12 @@
 use crate::domain::DomainResult;
 
-/// Trait for authentication token operations (JWT, cookies, etc.)
+/// Trait for authentication token operations (JWT access tokens)
 #[cfg_attr(any(test, feature = "testing"), mockall::automock)]
 pub trait AuthTokenProvider: Send + Sync {
-    /// Generate an authentication token for a user
+    /// Generate an access token (JWT) for a user
     fn generate_token(&self, user_id: &str, email: &str) -> DomainResult<String>;
 
-    /// Validate a token and extract the user ID
+    /// Validate an access token and extract the user ID
     fn validate_token(&self, token: &str) -> DomainResult<String>;
 
     /// Extract user ID from token without full validation (for logging, etc.)
