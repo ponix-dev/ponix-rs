@@ -1,4 +1,5 @@
-use crate::domain::{GetUserInput, LoginUserInput, RegisterUserInput, User};
+use crate::auth::LoginUserInput;
+use crate::domain::{GetUserInput, RegisterUserInput, User};
 use crate::proto::organization::datetime_to_timestamp;
 use ponix_proto_prost::user::v1::{
     GetUserRequest, LoginRequest, RegisterUserRequest, User as ProtoUser,

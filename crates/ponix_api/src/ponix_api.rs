@@ -13,6 +13,8 @@ pub struct PonixApi {
     user_service: Arc<UserService>,
     auth_token_provider: Arc<dyn AuthTokenProvider>,
     config: GrpcServerConfig,
+    refresh_token_expiration_days: u64,
+    secure_cookies: bool,
 }
 
 impl PonixApi {
@@ -23,6 +25,8 @@ impl PonixApi {
         user_service: Arc<UserService>,
         auth_token_provider: Arc<dyn AuthTokenProvider>,
         config: GrpcServerConfig,
+        refresh_token_expiration_days: u64,
+        secure_cookies: bool,
     ) -> Self {
         debug!("Initializing Ponix API module");
         Self {
@@ -32,6 +36,8 @@ impl PonixApi {
             user_service,
             auth_token_provider,
             config,
+            refresh_token_expiration_days,
+            secure_cookies,
         }
     }
 
@@ -51,6 +57,8 @@ impl PonixApi {
                     self.gateway_service,
                     self.user_service,
                     self.auth_token_provider,
+                    self.refresh_token_expiration_days,
+                    self.secure_cookies,
                     ctx,
                 )
                 .await

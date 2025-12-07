@@ -42,19 +42,6 @@ pub struct GetUserByEmailInput {
     pub email: String,
 }
 
-/// Input for user login
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LoginUserInput {
-    pub email: String,
-    pub password: String,
-}
-
-/// Output from successful login
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LoginUserOutput {
-    pub token: String,
-}
-
 /// Repository trait for user storage operations
 #[cfg_attr(any(test, feature = "testing"), mockall::automock)]
 #[async_trait]

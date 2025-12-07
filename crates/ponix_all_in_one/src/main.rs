@@ -8,13 +8,13 @@ use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingC
 use common::nats::NatsClient;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
-    PostgresOrganizationRepository, PostgresUserRepository,
+    PostgresOrganizationRepository, PostgresRefreshTokenRepository, PostgresUserRepository,
 };
 use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
-use common::auth::{Argon2PasswordService, JwtAuthTokenProvider, JwtConfig};
+use common::auth::{Argon2PasswordService, CryptoRefreshTokenProvider, JwtAuthTokenProvider, JwtConfig};
 use ponix_api::domain::{DeviceService, GatewayService, OrganizationService, UserService};
 use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
@@ -82,12 +82,18 @@ async fn main() {
     );
     let auth_token_provider: Arc<dyn common::auth::AuthTokenProvider> =
         Arc::new(JwtAuthTokenProvider::new(jwt_config));
-    let password_service = Arc::new(Argon2PasswordService::new());
+    let password_service: Arc<dyn common::auth::PasswordService> =
+        Arc::new(Argon2PasswordService::new());
+    let refresh_token_provider: Arc<dyn common::auth::RefreshTokenProvider> =
+        Arc::new(CryptoRefreshTokenProvider::new());
 
     let user_service = Arc::new(UserService::new(
         postgres_repos.user.clone(),
+        postgres_repos.refresh_token.clone(),
         auth_token_provider.clone(),
+        refresh_token_provider,
         password_service,
+        config.refresh_token_expiration_days,
     ));
 
     // Parse ignored paths from config (comma-separated)
@@ -124,6 +130,8 @@ async fn main() {
         user_service,
         auth_token_provider,
         grpc_config,
+        config.refresh_token_expiration_days,
+        config.secure_cookies,
     );
 
     // Create orchestrator shutdown token - owned by main for lifecycle coordination
@@ -242,6 +250,7 @@ struct PostgresRepositories {
     organization: Arc<PostgresOrganizationRepository>,
     gateway: Arc<PostgresGatewayRepository>,
     user: Arc<PostgresUserRepository>,
+    refresh_token: Arc<PostgresRefreshTokenRepository>,
 }
 
 async fn initialize_shared_dependencies(
@@ -255,7 +264,8 @@ async fn initialize_shared_dependencies(
         device: Arc::new(PostgresDeviceRepository::new(postgres_client.clone())),
         organization: Arc::new(PostgresOrganizationRepository::new(postgres_client.clone())),
         gateway: Arc::new(PostgresGatewayRepository::new(postgres_client.clone())),
-        user: Arc::new(PostgresUserRepository::new(postgres_client)),
+        user: Arc::new(PostgresUserRepository::new(postgres_client.clone())),
+        refresh_token: Arc::new(PostgresRefreshTokenRepository::new(postgres_client)),
     };
 
     // ClickHouse initialization

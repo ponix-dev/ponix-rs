@@ -44,14 +44,113 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish-container:
-    name: Publish Container
+  # Build images for each architecture in parallel on native runners
+  build-amd64:
+    name: Build amd64
     needs: semantic-release
     if: needs.semantic-release.outputs.new_release_published == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./crates/ponix_all_in_one/Dockerfile
+          platforms: linux/amd64
+          push: true
+          secrets: |
+            bsr_token=${{ secrets.BSR_TOKEN }}
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/ponix-all-in-one,push-by-digest=true,name-canonical=true
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-amd64
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  build-arm64:
+    name: Build arm64
+    needs: semantic-release
+    if: needs.semantic-release.outputs.new_release_published == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./crates/ponix_all_in_one/Dockerfile
+          platforms: linux/arm64
+          push: true
+          secrets: |
+            bsr_token=${{ secrets.BSR_TOKEN }}
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/ponix-all-in-one,push-by-digest=true,name-canonical=true
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-arm64
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Merge the platform-specific images into a single multi-arch manifest
+  publish-manifest:
+    name: Publish Multi-Arch Manifest
+    needs: [semantic-release, build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -74,19 +173,12 @@ jobs:
             type=semver,pattern={{major}},value=${{ needs.semantic-release.outputs.new_release_version }}
             type=raw,value=latest
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./crates/ponix_all_in_one/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          secrets: |
-            bsr_token=${{ secrets.BSR_TOKEN }}
-          # GitHub Actions cache for BuildKit layers
-          # mode=max caches all layers including intermediate ones (important for cargo-chef)
-          # scope separates cache per platform to avoid conflicts
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'ghcr.io/${{ github.repository_owner }}/ponix-all-in-one@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/ponix-all-in-one:${{ needs.semantic-release.outputs.new_release_version }}
