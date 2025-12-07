@@ -48,6 +48,9 @@ pub struct CorsConfig {
     pub allowed_origins: Vec<String>,
     /// Max age for CORS preflight cache in seconds.
     pub max_age_secs: u64,
+    /// Allow credentials (cookies, authorization headers).
+    /// When true with wildcard origins, the server will mirror the request origin.
+    pub allow_credentials: bool,
 }
 
 impl Default for CorsConfig {
@@ -55,6 +58,7 @@ impl Default for CorsConfig {
         Self {
             allowed_origins: vec!["*".to_string()],
             max_age_secs: 3600,
+            allow_credentials: true,
         }
     }
 }
@@ -70,6 +74,7 @@ impl CorsConfig {
         Self {
             allowed_origins: origins,
             max_age_secs: 3600,
+            allow_credentials: true,
         }
     }
 
@@ -88,6 +93,7 @@ impl CorsConfig {
                 allowed_origins
             },
             max_age_secs: 3600,
+            allow_credentials: true,
         }
     }
 }
@@ -133,8 +139,15 @@ impl GrpcServerConfig {
 
 /// Build a CORS layer from configuration.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
+    // When credentials are enabled with wildcard origins, we must mirror the request origin
+    // because browsers reject `Access-Control-Allow-Origin: *` with credentials.
     let allow_origin = if config.allowed_origins.len() == 1 && config.allowed_origins[0] == "*" {
-        AllowOrigin::any()
+        if config.allow_credentials {
+            // Mirror the request's Origin header back in the response
+            AllowOrigin::mirror_request()
+        } else {
+            AllowOrigin::any()
+        }
     } else {
         AllowOrigin::list(
             config
@@ -144,7 +157,7 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
         )
     };
 
-    CorsLayer::new()
+    let mut cors = CorsLayer::new()
         .allow_origin(allow_origin)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([
@@ -159,7 +172,13 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
             HeaderName::from_static("grpc-message"),
             HeaderName::from_static("grpc-status-details-bin"),
         ])
-        .max_age(Duration::from_secs(config.max_age_secs))
+        .max_age(Duration::from_secs(config.max_age_secs));
+
+    if config.allow_credentials {
+        cors = cors.allow_credentials(true);
+    }
+
+    cors
 }
 
 /// Build the reflection service from file descriptor sets.
