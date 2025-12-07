@@ -1,3 +1,9 @@
+## [1.7.1](https://github.com/ponix-dev/ponix-rs/compare/v1.7.0...v1.7.1) (2025-12-07)
+
+### Bug Fixes
+
+* CORS configuration for credentials and cookie handling ([#83](https://github.com/ponix-dev/ponix-rs/issues/83)) ([5a0af5b](https://github.com/ponix-dev/ponix-rs/commit/5a0af5bc025a60d4393b68335cf7914d35753d4a))
+
 ## [1.7.0](https://github.com/ponix-dev/ponix-rs/compare/v1.6.0...v1.7.0) (2025-12-07)
 
 ### Features
