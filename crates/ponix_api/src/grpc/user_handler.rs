@@ -3,7 +3,7 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::UserService;
-use common::domain::{LogoutInput, RefreshTokenInput};
+use common::auth::{LogoutInput, RefreshTokenInput};
 use common::grpc::{domain_error_to_status, extract_refresh_token_from_cookies, RefreshTokenCookie};
 use common::proto::{to_get_user_input, to_login_user_input, to_proto_user, to_register_user_input};
 use ponix_proto_prost::user::v1::{

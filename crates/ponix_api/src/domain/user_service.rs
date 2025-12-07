@@ -1,12 +1,12 @@
 use common::auth::{
     AuthTokenProvider, CreateRefreshTokenInput, DeleteRefreshTokenInput,
-    GetRefreshTokenByHashInput, PasswordService, RefreshTokenProvider, RefreshTokenRepository,
+    GetRefreshTokenByHashInput, LoginUserInput, LoginUserOutput, LogoutInput, PasswordService,
+    RefreshTokenInput, RefreshTokenOutput, RefreshTokenProvider, RefreshTokenRepository,
     RotateRefreshTokenInput,
 };
 use common::domain::{
-    DomainError, DomainResult, GetUserByEmailInput, GetUserInput, LoginUserInput, LoginUserOutput,
-    LogoutInput, RefreshTokenInput, RefreshTokenOutput, RegisterUserInput, RegisterUserInputWithId,
-    User, UserRepository,
+    DomainError, DomainResult, GetUserByEmailInput, GetUserInput, RegisterUserInput,
+    RegisterUserInputWithId, User, UserRepository,
 };
 use std::sync::Arc;
 use tracing::{debug, instrument};
@@ -282,7 +282,6 @@ mod tests {
     use common::auth::{
         GenerateRefreshTokenOutput, MockAuthTokenProvider, MockPasswordService,
         MockRefreshTokenProvider, MockRefreshTokenRepository, RefreshToken,
-        RotateRefreshTokenInput,
     };
     use common::domain::MockUserRepository;
 
