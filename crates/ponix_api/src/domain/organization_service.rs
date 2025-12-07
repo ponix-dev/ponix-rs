@@ -1,7 +1,7 @@
 use common::domain::{
     CreateOrganizationInput, CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError,
-    DomainResult, GetOrganizationInput, ListOrganizationsInput, Organization,
-    OrganizationRepository, UpdateOrganizationInput,
+    DomainResult, GetOrganizationInput, GetUserOrganizationsInput, ListOrganizationsInput,
+    Organization, OrganizationRepository, UpdateOrganizationInput,
 };
 use std::sync::Arc;
 use tracing::{debug, instrument};
@@ -130,6 +130,26 @@ impl OrganizationService {
         let organizations = self.repository.list_organizations(input).await?;
 
         debug!(count = organizations.len(), "Listed organizations");
+        Ok(organizations)
+    }
+
+    /// Get organizations that a user belongs to (excludes soft deleted)
+    #[instrument(skip(self, input), fields(user_id = %input.user_id))]
+    pub async fn get_user_organizations(
+        &self,
+        input: GetUserOrganizationsInput,
+    ) -> DomainResult<Vec<Organization>> {
+        debug!(user_id = %input.user_id, "getting organizations for user");
+
+        if input.user_id.trim().is_empty() {
+            return Err(DomainError::InvalidUserId(
+                "User ID cannot be empty".to_string(),
+            ));
+        }
+
+        let organizations = self.repository.get_organizations_by_user_id(input).await?;
+
+        debug!(count = organizations.len(), "found organizations for user");
         Ok(organizations)
     }
 }
@@ -262,5 +282,56 @@ mod tests {
 
         let result = service.delete_organization(input).await;
         assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_user_organizations_empty_user_id() {
+        let mock_repo = MockOrganizationRepository::new();
+        let service = OrganizationService::new(Arc::new(mock_repo));
+
+        let input = GetUserOrganizationsInput {
+            user_id: "".to_string(),
+        };
+
+        let result = service.get_user_organizations(input).await;
+        assert!(matches!(result, Err(DomainError::InvalidUserId(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_user_organizations_success() {
+        let mut mock_repo = MockOrganizationRepository::new();
+
+        let expected_orgs = vec![
+            Organization {
+                id: "org-1".to_string(),
+                name: "Org One".to_string(),
+                deleted_at: None,
+                created_at: Some(chrono::Utc::now()),
+                updated_at: Some(chrono::Utc::now()),
+            },
+            Organization {
+                id: "org-2".to_string(),
+                name: "Org Two".to_string(),
+                deleted_at: None,
+                created_at: Some(chrono::Utc::now()),
+                updated_at: Some(chrono::Utc::now()),
+            },
+        ];
+
+        let cloned_orgs = expected_orgs.clone();
+        mock_repo
+            .expect_get_organizations_by_user_id()
+            .withf(|input: &GetUserOrganizationsInput| input.user_id == "user-123")
+            .times(1)
+            .return_once(move |_| Ok(cloned_orgs));
+
+        let service = OrganizationService::new(Arc::new(mock_repo));
+        let input = GetUserOrganizationsInput {
+            user_id: "user-123".to_string(),
+        };
+
+        let result = service.get_user_organizations(input).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 2);
     }
 }

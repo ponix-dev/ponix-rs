@@ -56,6 +56,8 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
             Status::already_exists(format!("User {} already in organization {}", user_id, org_id))
         }
 
+        DomainError::PermissionDenied(msg) => Status::permission_denied(msg),
+
         DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
     }
 }

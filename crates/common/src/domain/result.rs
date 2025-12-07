@@ -88,6 +88,9 @@ pub enum DomainError {
     #[error("User organization link already exists: user {0} in org {1}")]
     UserOrganizationAlreadyExists(String, String),
 
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
+
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
 }

@@ -1,11 +1,11 @@
 use crate::domain::{
     CreateOrganizationInput, DeleteOrganizationInput, GetOrganizationInput,
-    ListOrganizationsInput, Organization,
+    GetUserOrganizationsInput, ListOrganizationsInput, Organization,
 };
 use chrono::{DateTime, Utc};
 use ponix_proto_prost::organization::v1::{
     CreateOrganizationRequest, DeleteOrganizationRequest, GetOrganizationRequest,
-    ListOrganizationsRequest, Organization as ProtoOrganization,
+    ListOrganizationsRequest, Organization as ProtoOrganization, UserOrganizationsRequest,
 };
 use prost_types::Timestamp;
 
@@ -59,6 +59,15 @@ pub fn to_delete_organization_input(req: DeleteOrganizationRequest) -> DeleteOrg
 /// Convert protobuf ListOrganizationsRequest to domain ListOrganizationsInput
 pub fn to_list_organizations_input(_req: ListOrganizationsRequest) -> ListOrganizationsInput {
     ListOrganizationsInput {}
+}
+
+/// Convert protobuf UserOrganizationsRequest to domain GetUserOrganizationsInput
+pub fn to_get_user_organizations_input(
+    req: UserOrganizationsRequest,
+) -> GetUserOrganizationsInput {
+    GetUserOrganizationsInput {
+        user_id: req.user_id,
+    }
 }
 
 #[cfg(test)]
@@ -118,5 +127,15 @@ mod tests {
 
         let input = to_delete_organization_input(req);
         assert_eq!(input.organization_id, "org-999");
+    }
+
+    #[test]
+    fn test_user_organizations_request_to_domain() {
+        let req = UserOrganizationsRequest {
+            user_id: "user-123".to_string(),
+        };
+
+        let input = to_get_user_organizations_input(req);
+        assert_eq!(input.user_id, "user-123");
     }
 }

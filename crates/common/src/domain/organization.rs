@@ -51,6 +51,12 @@ pub struct DeleteOrganizationInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListOrganizationsInput {}
 
+/// Input for getting organizations by user ID
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetUserOrganizationsInput {
+    pub user_id: String,
+}
+
 /// Repository trait for organization storage operations
 /// Infrastructure layer (e.g., ponix-postgres) implements this trait
 #[cfg_attr(any(test, feature = "testing"), mockall::automock)]
@@ -81,5 +87,11 @@ pub trait OrganizationRepository: Send + Sync {
     async fn list_organizations(
         &self,
         input: ListOrganizationsInput,
+    ) -> DomainResult<Vec<Organization>>;
+
+    /// Get organizations that a user belongs to (excludes soft deleted)
+    async fn get_organizations_by_user_id(
+        &self,
+        input: GetUserOrganizationsInput,
     ) -> DomainResult<Vec<Organization>>;
 }

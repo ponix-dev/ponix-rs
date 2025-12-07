@@ -10,9 +10,10 @@ mod mocks {
     use async_trait::async_trait;
     use common::domain::{
         CreateDeviceInputWithId, CreateOrganizationInputWithId, DeleteOrganizationInput, Device,
-        DeviceRepository, DomainResult, GetDeviceInput, GetOrganizationInput, ListDevicesInput,
-        ListOrganizationsInput, Organization, OrganizationRepository, ProcessedEnvelope,
-        ProcessedEnvelopeProducer, UpdateOrganizationInput,
+        DeviceRepository, DomainResult, GetDeviceInput, GetOrganizationInput,
+        GetUserOrganizationsInput, ListDevicesInput, ListOrganizationsInput, Organization,
+        OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer,
+        UpdateOrganizationInput,
     };
     use std::sync::{Arc, Mutex};
 
@@ -97,6 +98,13 @@ mod mocks {
         async fn list_organizations(
             &self,
             _input: ListOrganizationsInput,
+        ) -> DomainResult<Vec<Organization>> {
+            unimplemented!("Not needed for envelope tests")
+        }
+
+        async fn get_organizations_by_user_id(
+            &self,
+            _input: GetUserOrganizationsInput,
         ) -> DomainResult<Vec<Organization>> {
             unimplemented!("Not needed for envelope tests")
         }

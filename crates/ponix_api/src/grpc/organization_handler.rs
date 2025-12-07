@@ -7,12 +7,15 @@ use common::auth::AuthTokenProvider;
 use common::grpc::domain_error_to_status;
 use common::proto::{
     datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
-    to_get_organization_input, to_list_organizations_input, to_proto_organization,
+    to_get_organization_input, to_get_user_organizations_input, to_list_organizations_input,
+    to_proto_organization,
 };
+use common::domain::DomainError;
 use ponix_proto_prost::organization::v1::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
     DeleteOrganizationResponse, GetOrganizationRequest, GetOrganizationResponse,
-    ListOrganizationsRequest, ListOrganizationsResponse,
+    ListOrganizationsRequest, ListOrganizationsResponse, UserOrganizationsRequest,
+    UserOrganizationsResponse,
 };
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationService as OrganizationServiceTrait;
 
@@ -183,6 +186,50 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         debug!(count = proto_organizations.len(), "Organizations listed successfully");
 
         Ok(Response::new(ListOrganizationsResponse {
+            organizations: proto_organizations,
+        }))
+    }
+
+    #[instrument(
+        name = "UserOrganizations",
+        skip(self, request),
+        fields(user_id = %request.get_ref().user_id)
+    )]
+    async fn user_organizations(
+        &self,
+        request: Request<UserOrganizationsRequest>,
+    ) -> Result<Response<UserOrganizationsResponse>, Status> {
+        // Extract user_id from authorization header (mandatory for authenticated endpoints)
+        let authenticated_user_id = self.extract_user_id_from_request(&request)?;
+
+        let req = request.into_inner();
+
+        // Authorization check: user can only retrieve their own organizations
+        if authenticated_user_id != req.user_id {
+            return Err(domain_error_to_status(DomainError::PermissionDenied(
+                "Cannot access organizations for another user".to_string(),
+            )));
+        }
+
+        // Convert proto → domain
+        let input = to_get_user_organizations_input(req);
+
+        // Call domain service
+        let organizations = self
+            .domain_service
+            .get_user_organizations(input)
+            .await
+            .map_err(domain_error_to_status)?;
+
+        // Convert domain → proto
+        let proto_organizations: Vec<_> = organizations
+            .into_iter()
+            .map(to_proto_organization)
+            .collect();
+
+        debug!(count = proto_organizations.len(), "User organizations retrieved successfully");
+
+        Ok(Response::new(UserOrganizationsResponse {
             organizations: proto_organizations,
         }))
     }
