@@ -166,11 +166,13 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
             HeaderName::from_static("x-user-agent"),
             HeaderName::from_static("grpc-timeout"),
             HeaderName::from_static("authorization"),
+            HeaderName::from_static("cookie"),
         ])
         .expose_headers([
             HeaderName::from_static("grpc-status"),
             HeaderName::from_static("grpc-message"),
             HeaderName::from_static("grpc-status-details-bin"),
+            HeaderName::from_static("set-cookie"),
         ])
         .max_age(Duration::from_secs(config.max_age_secs));
 

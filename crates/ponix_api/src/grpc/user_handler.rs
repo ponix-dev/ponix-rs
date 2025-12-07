@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 
 use crate::domain::UserService;
 use common::auth::{LogoutInput, RefreshTokenInput};
@@ -139,8 +139,20 @@ impl UserServiceTrait for UserServiceHandler {
         &self,
         request: Request<RefreshRequest>,
     ) -> Result<Response<RefreshResponse>, Status> {
-        let refresh_token = extract_refresh_token_from_cookies(request.metadata())
-            .ok_or_else(|| Status::unauthenticated("Missing refresh token cookie"))?;
+        // Log what the server sees for debugging
+        let cookie_header = request
+            .metadata()
+            .get("cookie")
+            .and_then(|v| v.to_str().ok());
+        let extracted_token = extract_refresh_token_from_cookies(request.metadata());
+        info!(
+            cookie_header = ?cookie_header,
+            extracted_token = ?extracted_token,
+            "Refresh endpoint - received cookie header"
+        );
+
+        let refresh_token = extracted_token
+            .ok_or_else(|| Status::unauthenticated("Refresh token not found"))?;
 
         let output = self
             .domain_service

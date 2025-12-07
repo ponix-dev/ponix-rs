@@ -36,11 +36,14 @@ impl RefreshTokenCookie {
             format!("Max-Age={}", self.max_age_seconds),
             format!("Path={}", self.path),
             "HttpOnly".to_string(),
-            "SameSite=None".to_string(),
         ];
 
+        // SameSite=None requires Secure; use Lax for local development (HTTP)
         if self.secure {
+            parts.push("SameSite=None".to_string());
             parts.push("Secure".to_string());
+        } else {
+            parts.push("SameSite=Lax".to_string());
         }
 
         parts.join("; ")
@@ -105,6 +108,8 @@ mod tests {
         assert!(header.contains("refresh_token=token123"));
         assert!(header.contains("HttpOnly"));
         assert!(!header.contains("Secure"));
+        assert!(header.contains("SameSite=Lax"));
+        assert!(!header.contains("SameSite=None"));
     }
 
     #[test]
