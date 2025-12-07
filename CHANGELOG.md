@@ -1,3 +1,9 @@
+## [1.7.0](https://github.com/ponix-dev/ponix-rs/compare/v1.6.0...v1.7.0) (2025-12-07)
+
+### Features
+
+* Add refresh token support for authentication ([#81](https://github.com/ponix-dev/ponix-rs/issues/81)) ([70d56af](https://github.com/ponix-dev/ponix-rs/commit/70d56afd06566521272b7b62c4b1bb41c9385adf))
+
 ## [1.6.0](https://github.com/ponix-dev/ponix-rs/compare/v1.5.1...v1.6.0) (2025-12-05)
 
 ### Features
