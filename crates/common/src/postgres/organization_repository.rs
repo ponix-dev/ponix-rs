@@ -1,7 +1,7 @@
 use crate::domain::{
     CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError, DomainResult,
-    GetOrganizationInput, ListOrganizationsInput, Organization, OrganizationRepository,
-    UpdateOrganizationInput,
+    GetOrganizationInput, GetUserOrganizationsInput, ListOrganizationsInput, Organization,
+    OrganizationRepository, UpdateOrganizationInput,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -260,6 +260,48 @@ impl OrganizationRepository for PostgresOrganizationRepository {
                  WHERE deleted_at IS NULL
                  ORDER BY created_at DESC",
                 &[],
+            )
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        let organizations = rows
+            .into_iter()
+            .map(|row| {
+                let org_row = OrganizationRow {
+                    id: row.get("id"),
+                    name: row.get("name"),
+                    deleted_at: row.get("deleted_at"),
+                    created_at: row.get("created_at"),
+                    updated_at: row.get("updated_at"),
+                };
+                org_row.into()
+            })
+            .collect();
+
+        Ok(organizations)
+    }
+
+    #[instrument(skip(self, input), fields(user_id = %input.user_id))]
+    async fn get_organizations_by_user_id(
+        &self,
+        input: GetUserOrganizationsInput,
+    ) -> DomainResult<Vec<Organization>> {
+        let conn = self
+            .client
+            .get_connection()
+            .await
+            .map_err(DomainError::RepositoryError)?;
+
+        debug!(user_id = %input.user_id, "fetching organizations for user from database");
+
+        let rows = conn
+            .query(
+                "SELECT o.id, o.name, o.deleted_at, o.created_at, o.updated_at
+                 FROM organizations o
+                 INNER JOIN user_organizations uo ON o.id = uo.organization_id
+                 WHERE uo.user_id = $1 AND o.deleted_at IS NULL
+                 ORDER BY o.created_at DESC",
+                &[&input.user_id],
             )
             .await
             .map_err(|e| DomainError::RepositoryError(e.into()))?;

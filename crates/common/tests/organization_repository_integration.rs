@@ -2,8 +2,8 @@
 
 use common::domain::{
     CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError, GetOrganizationInput,
-    ListOrganizationsInput, OrganizationRepository, RegisterUserInputWithId, UpdateOrganizationInput,
-    UserRepository,
+    GetUserOrganizationsInput, ListOrganizationsInput, OrganizationRepository,
+    RegisterUserInputWithId, UpdateOrganizationInput, UserRepository,
 };
 use common::postgres::{PostgresClient, PostgresOrganizationRepository, PostgresUserRepository};
 use goose::MigrationRunner;
@@ -279,4 +279,138 @@ async fn test_create_organization_with_nonexistent_user() {
     let result = repo.create_organization(input).await;
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), DomainError::UserNotFound(_)));
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_get_organizations_by_user_id() {
+    let (_container, repo, _client) = setup_test_db().await;
+
+    // Create multiple organizations for the test user
+    for i in 1..=3 {
+        let input = CreateOrganizationInputWithId {
+            id: format!("user-org-{}", i),
+            name: format!("User Organization {}", i),
+            user_id: TEST_USER_ID.to_string(),
+        };
+        repo.create_organization(input).await.unwrap();
+    }
+
+    // Get organizations for the user
+    let input = GetUserOrganizationsInput {
+        user_id: TEST_USER_ID.to_string(),
+    };
+    let organizations = repo.get_organizations_by_user_id(input).await.unwrap();
+
+    assert_eq!(organizations.len(), 3);
+    assert!(organizations.iter().all(|o| o.deleted_at.is_none()));
+    // Verify all org IDs start with "user-org-"
+    assert!(organizations.iter().all(|o| o.id.starts_with("user-org-")));
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_get_organizations_by_user_id_empty() {
+    let (_container, repo, client) = setup_test_db().await;
+
+    // Create a second user with no organizations
+    let user_repo = PostgresUserRepository::new(client);
+    let user_input = RegisterUserInputWithId {
+        id: "user-no-orgs".to_string(),
+        email: "noorganizations@example.com".to_string(),
+        name: "No Orgs User".to_string(),
+        password_hash: "hashed_password".to_string(),
+    };
+    user_repo.register_user(user_input).await.unwrap();
+
+    // Get organizations for user with no orgs
+    let input = GetUserOrganizationsInput {
+        user_id: "user-no-orgs".to_string(),
+    };
+    let organizations = repo.get_organizations_by_user_id(input).await.unwrap();
+
+    assert!(organizations.is_empty());
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_get_organizations_by_user_id_excludes_soft_deleted() {
+    let (_container, repo, _client) = setup_test_db().await;
+
+    // Create organizations for the test user
+    for i in 1..=3 {
+        let input = CreateOrganizationInputWithId {
+            id: format!("soft-del-org-{}", i),
+            name: format!("Organization {}", i),
+            user_id: TEST_USER_ID.to_string(),
+        };
+        repo.create_organization(input).await.unwrap();
+    }
+
+    // Soft delete one organization
+    let delete_input = DeleteOrganizationInput {
+        organization_id: "soft-del-org-2".to_string(),
+    };
+    repo.delete_organization(delete_input).await.unwrap();
+
+    // Get organizations for the user - should only return 2
+    let input = GetUserOrganizationsInput {
+        user_id: TEST_USER_ID.to_string(),
+    };
+    let organizations = repo.get_organizations_by_user_id(input).await.unwrap();
+
+    assert_eq!(organizations.len(), 2);
+    assert!(organizations.iter().all(|o| o.id != "soft-del-org-2"));
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_get_organizations_by_user_id_multiple_users() {
+    let (_container, repo, client) = setup_test_db().await;
+
+    // Create a second user
+    let user_repo = PostgresUserRepository::new(client);
+    let user_input = RegisterUserInputWithId {
+        id: "second-user".to_string(),
+        email: "second@example.com".to_string(),
+        name: "Second User".to_string(),
+        password_hash: "hashed_password".to_string(),
+    };
+    user_repo.register_user(user_input).await.unwrap();
+
+    // Create organizations for the first user
+    for i in 1..=2 {
+        let input = CreateOrganizationInputWithId {
+            id: format!("first-user-org-{}", i),
+            name: format!("First User Org {}", i),
+            user_id: TEST_USER_ID.to_string(),
+        };
+        repo.create_organization(input).await.unwrap();
+    }
+
+    // Create organizations for the second user
+    for i in 1..=3 {
+        let input = CreateOrganizationInputWithId {
+            id: format!("second-user-org-{}", i),
+            name: format!("Second User Org {}", i),
+            user_id: "second-user".to_string(),
+        };
+        repo.create_organization(input).await.unwrap();
+    }
+
+    // Get organizations for first user - should only see their 2 orgs
+    let input1 = GetUserOrganizationsInput {
+        user_id: TEST_USER_ID.to_string(),
+    };
+    let orgs1 = repo.get_organizations_by_user_id(input1).await.unwrap();
+    assert_eq!(orgs1.len(), 2);
+    assert!(orgs1.iter().all(|o| o.id.starts_with("first-user-org-")));
+
+    // Get organizations for second user - should only see their 3 orgs
+    let input2 = GetUserOrganizationsInput {
+        user_id: "second-user".to_string(),
+    };
+    let orgs2 = repo.get_organizations_by_user_id(input2).await.unwrap();
+    assert_eq!(orgs2.len(), 3);
+    assert!(orgs2.iter().all(|o| o.id.starts_with("second-user-org-")));
 }
