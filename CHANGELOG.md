@@ -1,3 +1,9 @@
+## [1.8.0](https://github.com/ponix-dev/ponix-rs/compare/v1.7.1...v1.8.0) (2025-12-08)
+
+### Features
+
+* adds user org listing ([#85](https://github.com/ponix-dev/ponix-rs/issues/85)) ([57c7710](https://github.com/ponix-dev/ponix-rs/commit/57c7710a4eff66c74de31e00aaede82248518ea3))
+
 ## [1.7.1](https://github.com/ponix-dev/ponix-rs/compare/v1.7.0...v1.7.1) (2025-12-07)
 
 ### Bug Fixes
