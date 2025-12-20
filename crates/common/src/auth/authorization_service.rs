@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use super::rbac_policy::{Action, OrgRole, Resource};
+use crate::auth::{Action, OrgRole, Resource};
 use crate::domain::DomainResult;
 
 /// Trait for authorization operations

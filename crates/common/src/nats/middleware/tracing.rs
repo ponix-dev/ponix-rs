@@ -2,8 +2,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use super::types::{PublishRequest, PublishResponse};
-use crate::nats::trace_context::inject_trace_context;
+use crate::nats::{inject_trace_context, PublishRequest, PublishResponse};
 use tower::{Layer, Service};
 use tracing::{field, info_span, Instrument, Span};
 

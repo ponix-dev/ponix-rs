@@ -10,7 +10,7 @@ use crate::auth::{
     base_policies, Action, AuthorizationProvider, OrgRole, Resource, RBAC_MODEL,
 };
 use crate::domain::{DomainError, DomainResult};
-use super::PostgresClient;
+use crate::postgres::PostgresClient;
 
 /// Thread-safe authorization service wrapping Casbin Enforcer with PostgreSQL storage
 #[derive(Clone)]

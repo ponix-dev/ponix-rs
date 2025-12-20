@@ -2,8 +2,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use super::consumer_types::{ConsumeRequest, ConsumeResponse};
-use crate::nats::trace_context::{extract_trace_context, set_parent_from_headers};
+use crate::nats::{
+    extract_trace_context, set_parent_from_headers, ConsumeRequest, ConsumeResponse,
+};
 use async_nats::jetstream::Message;
 use async_nats::HeaderMap;
 use tower::{Layer, Service};

@@ -8,10 +8,9 @@ use tokio_util::sync::CancellationToken;
 use tonic::service::Routes;
 
 use crate::domain::{DeviceService, GatewayService, OrganizationService, UserService};
-use crate::grpc::device_handler::DeviceServiceHandler;
-use crate::grpc::gateway_handler::GatewayServiceHandler;
-use crate::grpc::organization_handler::OrganizationServiceHandler;
-use crate::grpc::user_handler::UserServiceHandler;
+use crate::grpc::{
+    DeviceServiceHandler, GatewayServiceHandler, OrganizationServiceHandler, UserServiceHandler,
+};
 use common::auth::AuthTokenProvider;
 use common::grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_proto_prost;

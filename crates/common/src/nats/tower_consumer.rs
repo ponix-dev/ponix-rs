@@ -1,5 +1,4 @@
-use crate::nats::middleware::{ConsumeRequest, ConsumeResponse};
-use crate::nats::traits::{JetStreamConsumer, PullConsumer};
+use crate::nats::{ConsumeRequest, ConsumeResponse, JetStreamConsumer, PullConsumer};
 use anyhow::{Context, Result};
 use async_nats::jetstream::{self};
 use bytes::Bytes;
