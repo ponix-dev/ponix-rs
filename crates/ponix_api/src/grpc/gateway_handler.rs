@@ -3,8 +3,8 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::GatewayService;
-use common::auth::{extract_user_context, AuthTokenProvider};
-use common::grpc::domain_error_to_status;
+use common::auth::AuthTokenProvider;
+use common::grpc::{domain_error_to_status, extract_user_context};
 use common::proto::{
     to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input, to_list_gateways_input,
     to_proto_gateway, to_update_gateway_input,

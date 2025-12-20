@@ -1,6 +1,5 @@
 mod authorization_service;
 mod config;
-mod context;
 mod jwt;
 mod login;
 mod password;
@@ -9,14 +8,13 @@ mod rbac_policy;
 mod refresh_token;
 mod traits;
 
-pub use authorization_service::AuthorizationProvider;
+pub use authorization_service::*;
 pub use config::*;
-pub use context::*;
 pub use jwt::*;
 pub use login::*;
 pub use password::*;
-pub use rbac_model::RBAC_MODEL;
-pub use rbac_policy::{base_policies, Action, OrgRole, Resource};
+pub use rbac_model::*;
+pub use rbac_policy::*;
 pub use refresh_token::*;
 pub use traits::*;
 

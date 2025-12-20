@@ -1,6 +1,6 @@
 use tonic::{Request, Status};
 
-use super::traits::AuthTokenProvider;
+use crate::auth::AuthTokenProvider;
 use crate::grpc::domain_error_to_status;
 
 /// User context extracted from authenticated requests

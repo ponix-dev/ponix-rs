@@ -3,9 +3,9 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::OrganizationService;
-use common::auth::{extract_user_context, AuthTokenProvider};
+use common::auth::AuthTokenProvider;
 use common::domain::DomainError;
-use common::grpc::domain_error_to_status;
+use common::grpc::{domain_error_to_status, extract_user_context};
 use common::proto::{
     datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
     to_get_organization_input, to_get_user_organizations_input, to_list_organizations_input,
