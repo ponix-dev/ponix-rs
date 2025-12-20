@@ -1,4 +1,5 @@
 mod authorization_service;
+mod casbin_authorization_service;
 mod config;
 mod jwt;
 mod login;
@@ -9,6 +10,7 @@ mod refresh_token;
 mod traits;
 
 pub use authorization_service::*;
+pub use casbin_authorization_service::*;
 pub use config::*;
 pub use jwt::*;
 pub use login::*;

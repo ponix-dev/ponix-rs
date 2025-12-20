@@ -1,8 +1,12 @@
 #![cfg(feature = "integration-tests")]
 
-use common::auth::{Action, AuthorizationProvider, OrgRole, Resource};
+use common::auth::{
+    Action, AuthorizationProvider, CasbinAuthorizationService, OrgRole, Resource,
+};
 use common::domain::{RegisterUserInputWithId, UserRepository};
-use common::postgres::{PostgresAuthorizationService, PostgresClient, PostgresUserRepository};
+use common::postgres::{
+    create_postgres_authorization_adapter, PostgresClient, PostgresUserRepository,
+};
 use goose::MigrationRunner;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
@@ -11,7 +15,7 @@ use testcontainers_modules::postgres::Postgres;
 const TEST_USER_ID: &str = "test-user-001";
 const TEST_ORG_ID: &str = "test-org-001";
 
-async fn setup_test_db() -> (ContainerAsync<Postgres>, PostgresAuthorizationService, PostgresClient) {
+async fn setup_test_db() -> (ContainerAsync<Postgres>, CasbinAuthorizationService, PostgresClient) {
     let postgres = Postgres::default().start().await.unwrap();
     let host = postgres.get_host().await.unwrap();
     let port = postgres.get_host_port_ipv4(5432).await.unwrap();
@@ -61,7 +65,10 @@ async fn setup_test_db() -> (ContainerAsync<Postgres>, PostgresAuthorizationServ
     user_repo.register_user(user_input).await.unwrap();
 
     // Create authorization service
-    let auth_service = PostgresAuthorizationService::new(&client)
+    let adapter = create_postgres_authorization_adapter(&client)
+        .await
+        .expect("Failed to create authorization adapter");
+    let auth_service = CasbinAuthorizationService::new(adapter)
         .await
         .expect("Failed to create authorization service");
 
@@ -632,7 +639,10 @@ async fn test_role_persisted_in_database() {
 
     // Create first authorization service and assign role
     {
-        let auth_service = PostgresAuthorizationService::new(&client)
+        let adapter = create_postgres_authorization_adapter(&client)
+            .await
+            .expect("Failed to create authorization adapter");
+        let auth_service = CasbinAuthorizationService::new(adapter)
             .await
             .expect("Failed to create authorization service");
 
@@ -644,7 +654,10 @@ async fn test_role_persisted_in_database() {
 
     // Create second authorization service (simulating service restart)
     {
-        let auth_service2 = PostgresAuthorizationService::new(&client)
+        let adapter = create_postgres_authorization_adapter(&client)
+            .await
+            .expect("Failed to create authorization adapter");
+        let auth_service2 = CasbinAuthorizationService::new(adapter)
             .await
             .expect("Failed to create second authorization service");
 

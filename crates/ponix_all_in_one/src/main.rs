@@ -4,9 +4,10 @@ use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig}
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
 use common::auth::{
-    Argon2PasswordService, CryptoRefreshTokenProvider, JwtAuthTokenProvider, JwtConfig,
+    Argon2PasswordService, CasbinAuthorizationService, CryptoRefreshTokenProvider,
+    JwtAuthTokenProvider, JwtConfig,
 };
-use common::postgres::PostgresAuthorizationService;
+use common::postgres::create_postgres_authorization_adapter;
 use common::clickhouse::ClickHouseClient;
 use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
@@ -68,7 +69,16 @@ async fn main() {
         };
 
     // Initialize authorization service
-    let authorization_service = match PostgresAuthorizationService::new(&postgres_client).await {
+    let authorization_adapter = match create_postgres_authorization_adapter(&postgres_client).await
+    {
+        Ok(adapter) => adapter,
+        Err(e) => {
+            error!("Failed to create authorization adapter: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let authorization_service = match CasbinAuthorizationService::new(authorization_adapter).await
+    {
         Ok(service) => Arc::new(service),
         Err(e) => {
             error!("Failed to initialize authorization service: {}", e);

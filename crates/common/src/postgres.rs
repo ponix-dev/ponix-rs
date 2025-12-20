@@ -1,4 +1,4 @@
-mod authorization_service;
+mod authorization_adapter;
 mod client;
 mod config;
 mod device_repository;
@@ -7,7 +7,7 @@ mod organization_repository;
 mod refresh_token_repository;
 mod user_repository;
 
-pub use authorization_service::*;
+pub use authorization_adapter::*;
 pub use client::*;
 pub use config::*;
 pub use device_repository::*;

@@ -1,44 +1,42 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi, RbacApi};
+use casbin::{Adapter, CoreApi, DefaultModel, Enforcer, MgmtApi, RbacApi};
 use tokio::sync::RwLock;
-use tokio_postgres_adapter::TokioPostgresAdapter;
 use tracing::instrument;
 
-use crate::auth::{
-    base_policies, Action, AuthorizationProvider, OrgRole, Resource, RBAC_MODEL,
-};
+use crate::auth::{base_policies, Action, AuthorizationProvider, OrgRole, Resource, RBAC_MODEL};
 use crate::domain::{DomainError, DomainResult};
-use crate::postgres::PostgresClient;
 
-/// Thread-safe authorization service wrapping Casbin Enforcer with PostgreSQL storage
+/// Thread-safe authorization service wrapping Casbin Enforcer.
+///
+/// This service is storage-agnostic - it accepts any Casbin adapter
+/// (PostgreSQL, file, memory, etc.) and provides authorization operations.
 #[derive(Clone)]
-pub struct PostgresAuthorizationService {
+pub struct CasbinAuthorizationService {
     enforcer: Arc<RwLock<Enforcer>>,
 }
 
-impl PostgresAuthorizationService {
-    /// Create a new PostgresAuthorizationService with the given PostgreSQL client
-    #[instrument(skip(postgres_client))]
-    pub async fn new(postgres_client: &PostgresClient) -> DomainResult<Self> {
+impl CasbinAuthorizationService {
+    /// Create a new CasbinAuthorizationService with the given adapter.
+    ///
+    /// The adapter can be any implementation of `casbin::Adapter` (PostgreSQL, file, memory, etc.).
+    #[instrument(skip(adapter))]
+    pub async fn new<A>(adapter: A) -> DomainResult<Self>
+    where
+        A: Adapter + 'static,
+    {
         // Create model from string
         let model = DefaultModel::from_str(RBAC_MODEL).await.map_err(|e| {
             DomainError::AuthorizationError(format!("Failed to load model: {}", e))
         })?;
 
-        // Create adapter with existing pool
-        let pool = postgres_client.get_pool();
-        let adapter = TokioPostgresAdapter::new_with_pool(pool).await.map_err(|e| {
-            DomainError::AuthorizationError(format!("Failed to create adapter: {}", e))
-        })?;
-
-        // Create enforcer
+        // Create enforcer with the provided adapter
         let mut enforcer = Enforcer::new(model, adapter).await.map_err(|e| {
             DomainError::AuthorizationError(format!("Failed to create enforcer: {}", e))
         })?;
 
-        // Load existing policies from database
+        // Load existing policies from the adapter's storage
         enforcer.load_policy().await.map_err(|e| {
             DomainError::AuthorizationError(format!("Failed to load policies: {}", e))
         })?;
@@ -56,7 +54,7 @@ impl PostgresAuthorizationService {
 }
 
 #[async_trait]
-impl AuthorizationProvider for PostgresAuthorizationService {
+impl AuthorizationProvider for CasbinAuthorizationService {
     #[instrument(skip(self))]
     async fn check_permission(
         &self,
