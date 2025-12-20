@@ -70,7 +70,7 @@ impl OrganizationService {
     }
 
     /// Get organization by ID (excludes soft deleted)
-    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
     pub async fn get_organization(
         &self,
         user_id: &str,
@@ -104,7 +104,7 @@ impl OrganizationService {
     }
 
     /// Update organization name
-    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
     pub async fn update_organization(
         &self,
         user_id: &str,
@@ -141,7 +141,7 @@ impl OrganizationService {
     }
 
     /// Soft delete organization
-    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
     pub async fn delete_organization(
         &self,
         user_id: &str,

@@ -30,7 +30,7 @@ impl DeviceService {
     /// Create a new device with business logic validation
     /// Generates a unique device_id using xid
     /// Validates that the organization exists and is not deleted
-    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id, device_name = %input.name))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id, device_name = %input.name))]
     pub async fn create_device(
         &self,
         user_id: &str,
@@ -106,7 +106,7 @@ impl DeviceService {
     }
 
     /// Get a device by ID and organization
-    #[instrument(skip(self, user_id, input), fields(device_id = %input.device_id, organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, device_id = %input.device_id, organization_id = %input.organization_id))]
     pub async fn get_device(&self, user_id: &str, input: GetDeviceInput) -> DomainResult<Device> {
         if input.device_id.is_empty() {
             return Err(DomainError::InvalidDeviceId(
@@ -142,7 +142,7 @@ impl DeviceService {
     }
 
     /// List devices for an organization
-    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
     pub async fn list_devices(
         &self,
         user_id: &str,

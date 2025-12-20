@@ -28,7 +28,7 @@ impl GatewayService {
     }
 
     /// Create a new gateway for an organization
-    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id, gateway_type = %input.gateway_type))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id, gateway_type = %input.gateway_type))]
     pub async fn create_gateway(
         &self,
         user_id: &str,
@@ -99,7 +99,7 @@ impl GatewayService {
     }
 
     /// Get a gateway by ID and organization
-    #[instrument(skip(self, user_id, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     pub async fn get_gateway(&self, user_id: &str, input: GetGatewayInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Getting gateway");
 
@@ -135,7 +135,7 @@ impl GatewayService {
     }
 
     /// Update a gateway
-    #[instrument(skip(self, user_id, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     pub async fn update_gateway(
         &self,
         user_id: &str,
@@ -186,7 +186,7 @@ impl GatewayService {
     }
 
     /// Soft delete a gateway
-    #[instrument(skip(self, user_id, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     pub async fn delete_gateway(&self, user_id: &str, input: DeleteGatewayInput) -> DomainResult<()> {
         debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Deleting gateway");
 
@@ -219,7 +219,7 @@ impl GatewayService {
     }
 
     /// List gateways by organization
-    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
     pub async fn list_gateways(
         &self,
         user_id: &str,
