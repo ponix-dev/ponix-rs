@@ -53,6 +53,12 @@ mockall = { workspace = true, optional = true }
 
 ponix-proto-prost.workspace = true
 
+# Authorization
+casbin = { workspace = true }
+
+[dependencies.tokio-postgres-adapter]
+git = "https://github.com/ponix-dev/casbin-tokio-postgres-adapter.git"
+
 [dev-dependencies]
 mockall.workspace = true
 testcontainers.workspace = true

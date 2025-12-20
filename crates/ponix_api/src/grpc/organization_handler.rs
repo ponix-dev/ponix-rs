@@ -3,7 +3,7 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::OrganizationService;
-use common::auth::AuthTokenProvider;
+use common::auth::{extract_user_context, AuthTokenProvider};
 use common::domain::DomainError;
 use common::grpc::domain_error_to_status;
 use common::proto::{
@@ -36,29 +36,6 @@ impl OrganizationServiceHandler {
             auth_token_provider,
         }
     }
-
-    /// Extract user_id from authorization header (mandatory for authenticated endpoints)
-    fn extract_user_id_from_request<T>(&self, request: &Request<T>) -> Result<String, Status> {
-        let auth_header = request
-            .metadata()
-            .get("authorization")
-            .ok_or_else(|| Status::unauthenticated("Missing authorization header"))?
-            .to_str()
-            .map_err(|_| Status::unauthenticated("Invalid authorization header"))?;
-
-        // Extract Bearer token
-        let token = auth_header
-            .strip_prefix("Bearer ")
-            .or_else(|| auth_header.strip_prefix("bearer "))
-            .ok_or_else(|| {
-                Status::unauthenticated("Invalid authorization format, expected 'Bearer <token>'")
-            })?;
-
-        // Validate token and extract user_id
-        self.auth_token_provider
-            .validate_token(token)
-            .map_err(domain_error_to_status)
-    }
 }
 
 #[tonic::async_trait]
@@ -73,7 +50,8 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<CreateOrganizationResponse>, Status> {
         // Extract user_id from authorization header (mandatory)
-        let user_id = self.extract_user_id_from_request(&request)?;
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let user_id = user_context.user_id;
 
         let req = request.into_inner();
 
@@ -203,7 +181,8 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         request: Request<UserOrganizationsRequest>,
     ) -> Result<Response<UserOrganizationsResponse>, Status> {
         // Extract user_id from authorization header (mandatory for authenticated endpoints)
-        let authenticated_user_id = self.extract_user_id_from_request(&request)?;
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let authenticated_user_id = user_context.user_id;
 
         let req = request.into_inner();
 

@@ -1,3 +1,4 @@
+use common::auth::{AuthorizationProvider, OrgRole};
 use common::domain::{
     CreateOrganizationInput, CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError,
     DomainResult, GetOrganizationInput, GetUserOrganizationsInput, ListOrganizationsInput,
@@ -9,11 +10,18 @@ use tracing::{debug, instrument};
 /// Domain service for organization business logic
 pub struct OrganizationService {
     repository: Arc<dyn OrganizationRepository>,
+    authorization_provider: Arc<dyn AuthorizationProvider>,
 }
 
 impl OrganizationService {
-    pub fn new(repository: Arc<dyn OrganizationRepository>) -> Self {
-        Self { repository }
+    pub fn new(
+        repository: Arc<dyn OrganizationRepository>,
+        authorization_provider: Arc<dyn AuthorizationProvider>,
+    ) -> Self {
+        Self {
+            repository,
+            authorization_provider,
+        }
     }
 
     /// Create a new organization with generated ID
@@ -41,6 +49,9 @@ impl OrganizationService {
         // Generate unique organization ID using xid
         let organization_id = xid::new().to_string();
 
+        // Save user_id before moving into repo_input
+        let user_id = input.user_id.clone();
+
         let repo_input = CreateOrganizationInputWithId {
             id: organization_id.clone(),
             name: input.name,
@@ -48,6 +59,11 @@ impl OrganizationService {
         };
 
         let organization = self.repository.create_organization(repo_input).await?;
+
+        // Assign the creator as Admin in the authorization system
+        self.authorization_provider
+            .assign_role(&user_id, &organization.id, OrgRole::Admin)
+            .await?;
 
         debug!(organization_id = %organization.id, "organization created successfully");
         Ok(organization)
@@ -157,7 +173,15 @@ impl OrganizationService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use common::auth::MockAuthorizationProvider;
     use common::domain::MockOrganizationRepository;
+
+    fn create_mock_auth_provider() -> Arc<MockAuthorizationProvider> {
+        let mut mock = MockAuthorizationProvider::new();
+        mock.expect_assign_role()
+            .returning(|_, _, _| Box::pin(async { Ok(()) }));
+        Arc::new(mock)
+    }
 
     #[tokio::test]
     async fn test_create_organization_success() {
@@ -179,7 +203,8 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(expected_org.clone()));
 
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
         let input = CreateOrganizationInput {
             name: "Test Org".to_string(),
             user_id: "user-123".to_string(),
@@ -193,7 +218,8 @@ mod tests {
     #[tokio::test]
     async fn test_create_organization_empty_name() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = CreateOrganizationInput {
             name: "".to_string(),
@@ -210,7 +236,8 @@ mod tests {
     #[tokio::test]
     async fn test_create_organization_empty_user_id() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = CreateOrganizationInput {
             name: "Test Org".to_string(),
@@ -230,7 +257,8 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
         let input = GetOrganizationInput {
             organization_id: "nonexistent".to_string(),
         };
@@ -242,7 +270,8 @@ mod tests {
     #[tokio::test]
     async fn test_get_organization_empty_id() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = GetOrganizationInput {
             organization_id: "".to_string(),
@@ -255,7 +284,8 @@ mod tests {
     #[tokio::test]
     async fn test_update_organization_empty_name() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = UpdateOrganizationInput {
             organization_id: "org-123".to_string(),
@@ -272,7 +302,8 @@ mod tests {
     #[tokio::test]
     async fn test_delete_organization_empty_id() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = DeleteOrganizationInput {
             organization_id: "".to_string(),
@@ -285,7 +316,8 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_organizations_empty_user_id() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = GetUserOrganizationsInput {
             user_id: "".to_string(),
@@ -323,7 +355,8 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(cloned_orgs));
 
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
         let input = GetUserOrganizationsInput {
             user_id: "user-123".to_string(),
         };
