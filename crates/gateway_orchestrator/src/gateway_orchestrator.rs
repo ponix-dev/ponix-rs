@@ -32,11 +32,9 @@ impl GatewayOrchestrator {
 
         // Create raw envelope producer for gateway processes
         let publisher_client = nats_client.create_publisher_client();
-        let raw_envelope_producer: Arc<dyn common::domain::RawEnvelopeProducer> =
-            Arc::new(RawEnvelopeProducer::new(
-                publisher_client,
-                config.raw_envelopes_stream.clone(),
-            ));
+        let raw_envelope_producer: Arc<dyn common::domain::RawEnvelopeProducer> = Arc::new(
+            RawEnvelopeProducer::new(publisher_client, config.raw_envelopes_stream.clone()),
+        );
 
         // Configure gateway runner factory with supported gateway types
         let mut runner_factory = GatewayRunnerFactory::new();

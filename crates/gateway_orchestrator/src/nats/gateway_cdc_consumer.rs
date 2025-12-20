@@ -53,8 +53,8 @@ impl GatewayCdcConsumer {
             &stream_name,
             &consumer_name,
             &filter_subject,
-            10,  // batch size
-            5,   // max wait seconds
+            10, // batch size
+            5,  // max wait seconds
             layered_service,
         )
         .await?;

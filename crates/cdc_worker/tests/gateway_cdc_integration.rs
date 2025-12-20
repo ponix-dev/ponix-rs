@@ -3,9 +3,9 @@
 use async_nats::jetstream;
 use cdc_worker::domain::{CdcConfig, CdcProcess, EntityConfig, GatewayConverter};
 use common::domain::{
-    CreateGatewayInputWithId, CreateOrganizationInputWithId, EmqxGatewayConfig, GatewayConfig,
-    GatewayRepository, OrganizationRepository, RegisterUserInputWithId, UpdateGatewayInput,
-    UserRepository,
+    CreateGatewayInputWithId, CreateOrganizationInputWithId, DeleteGatewayInput, EmqxGatewayConfig,
+    GatewayConfig, GatewayRepository, OrganizationRepository, RegisterUserInputWithId,
+    UpdateGatewayInput, UserRepository,
 };
 use common::nats::NatsClient;
 use common::postgres::{
@@ -371,6 +371,7 @@ async fn test_gateway_update_cdc_event() {
     // Update the gateway
     let update_input = UpdateGatewayInput {
         gateway_id: gateway_id.clone(),
+        organization_id: "test-org-002".to_string(),
         gateway_type: None,
         gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://updated.example.com:8883".to_string(),
@@ -445,8 +446,12 @@ async fn test_gateway_delete_cdc_event() {
     info!("Initial gateway created and create event consumed");
 
     // Delete the gateway (soft delete)
+    let delete_input = DeleteGatewayInput {
+        gateway_id: gateway_id.clone(),
+        organization_id: "test-org-003".to_string(),
+    };
     env.gateway_repo
-        .delete_gateway(&gateway_id)
+        .delete_gateway(delete_input)
         .await
         .expect("Failed to delete gateway");
 

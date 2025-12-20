@@ -2,8 +2,9 @@
 
 use async_trait::async_trait;
 use common::domain::{
-    CreateGatewayInputWithId, DomainError, DomainResult, EmqxGatewayConfig, Gateway, GatewayConfig,
-    GatewayRepository, MockRawEnvelopeProducer, RawEnvelopeProducer, UpdateGatewayInput,
+    CreateGatewayInputWithId, DeleteGatewayInput, DomainError, DomainResult, EmqxGatewayConfig,
+    Gateway, GatewayConfig, GatewayRepository, GetGatewayInput, MockRawEnvelopeProducer,
+    RawEnvelopeProducer, UpdateGatewayInput,
 };
 use gateway_orchestrator::domain::{
     GatewayOrchestrationService, GatewayOrchestrationServiceConfig, GatewayProcessStore,
@@ -81,9 +82,9 @@ mod mocks {
             unimplemented!("Not needed for orchestrator tests")
         }
 
-        async fn get_gateway(&self, gateway_id: &str) -> DomainResult<Option<Gateway>> {
+        async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Option<Gateway>> {
             let gateways = self.gateways.lock().unwrap();
-            Ok(gateways.get(gateway_id).cloned())
+            Ok(gateways.get(&input.gateway_id).cloned())
         }
 
         async fn list_gateways(&self, _organization_id: &str) -> DomainResult<Vec<Gateway>> {
@@ -111,13 +112,13 @@ mod mocks {
             }
         }
 
-        async fn delete_gateway(&self, gateway_id: &str) -> DomainResult<()> {
+        async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()> {
             let mut gateways = self.gateways.lock().unwrap();
-            if let Some(gateway) = gateways.get_mut(gateway_id) {
+            if let Some(gateway) = gateways.get_mut(&input.gateway_id) {
                 gateway.deleted_at = Some(chrono::Utc::now());
                 Ok(())
             } else {
-                Err(DomainError::GatewayNotFound(gateway_id.to_string()))
+                Err(DomainError::GatewayNotFound(input.gateway_id))
             }
         }
     }

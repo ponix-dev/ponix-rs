@@ -65,7 +65,10 @@ impl DeviceServiceTrait for DeviceServiceHandler {
     #[instrument(
         name = "GetEndDevice",
         skip(self, request),
-        fields(device_id = %request.get_ref().device_id)
+        fields(
+            device_id = %request.get_ref().device_id,
+            organization_id = %request.get_ref().organization_id
+        )
     )]
     async fn get_end_device(
         &self,

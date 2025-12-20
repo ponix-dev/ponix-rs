@@ -112,6 +112,7 @@ fn string_to_gateway_type(s: &str) -> GatewayType {
 pub fn to_get_gateway_input(request: GetGatewayRequest) -> GetGatewayInput {
     GetGatewayInput {
         gateway_id: request.gateway_id,
+        organization_id: request.organization_id,
     }
 }
 
@@ -143,6 +144,7 @@ pub fn to_update_gateway_input(request: UpdateGatewayRequest) -> UpdateGatewayIn
 
     UpdateGatewayInput {
         gateway_id: request.gateway_id,
+        organization_id: request.organization_id,
         gateway_type,
         gateway_config,
     }
@@ -152,6 +154,7 @@ pub fn to_update_gateway_input(request: UpdateGatewayRequest) -> UpdateGatewayIn
 pub fn to_delete_gateway_input(request: DeleteGatewayRequest) -> DeleteGatewayInput {
     DeleteGatewayInput {
         gateway_id: request.gateway_id,
+        organization_id: request.organization_id,
     }
 }
 

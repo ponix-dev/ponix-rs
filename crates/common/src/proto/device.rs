@@ -45,6 +45,7 @@ pub fn to_proto_device(device: Device) -> EndDevice {
 pub fn to_get_device_input(req: GetEndDeviceRequest) -> GetDeviceInput {
     GetDeviceInput {
         device_id: req.device_id,
+        organization_id: req.organization_id,
     }
 }
 

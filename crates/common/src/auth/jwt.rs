@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 /// JWT claims structure
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JwtClaims {
-    pub sub: String,  // user_id
+    pub sub: String, // user_id
     pub email: String,
-    pub exp: usize,   // expiration timestamp
-    pub iat: usize,   // issued at timestamp
+    pub exp: usize, // expiration timestamp
+    pub iat: usize, // issued at timestamp
 }
 
 /// JWT-based implementation of AuthTokenProvider
@@ -60,13 +60,9 @@ impl AuthTokenProvider for JwtAuthTokenProvider {
         validation.insecure_disable_signature_validation();
         validation.validate_exp = false;
 
-        decode::<JwtClaims>(
-            token,
-            &DecodingKey::from_secret(&[]),
-            &validation,
-        )
-        .ok()
-        .map(|data| data.claims.sub)
+        decode::<JwtClaims>(token, &DecodingKey::from_secret(&[]), &validation)
+            .ok()
+            .map(|data| data.claims.sub)
     }
 }
 
@@ -89,7 +85,9 @@ mod tests {
     #[test]
     fn test_validate_token_success() {
         let provider = JwtAuthTokenProvider::new(test_config());
-        let token = provider.generate_token("user-123", "test@example.com").unwrap();
+        let token = provider
+            .generate_token("user-123", "test@example.com")
+            .unwrap();
 
         let user_id = provider.validate_token(&token);
         assert!(user_id.is_ok());
@@ -106,9 +104,12 @@ mod tests {
     #[test]
     fn test_validate_token_wrong_secret() {
         let provider1 = JwtAuthTokenProvider::new(test_config());
-        let provider2 = JwtAuthTokenProvider::new(JwtConfig::new("different-secret".to_string(), 24));
+        let provider2 =
+            JwtAuthTokenProvider::new(JwtConfig::new("different-secret".to_string(), 24));
 
-        let token = provider1.generate_token("user-123", "test@example.com").unwrap();
+        let token = provider1
+            .generate_token("user-123", "test@example.com")
+            .unwrap();
         let result = provider2.validate_token(&token);
         assert!(matches!(result, Err(DomainError::InvalidToken(_))));
     }
@@ -116,7 +117,9 @@ mod tests {
     #[test]
     fn test_extract_user_id_success() {
         let provider = JwtAuthTokenProvider::new(test_config());
-        let token = provider.generate_token("user-123", "test@example.com").unwrap();
+        let token = provider
+            .generate_token("user-123", "test@example.com")
+            .unwrap();
 
         let user_id = provider.extract_user_id(&token);
         assert_eq!(user_id, Some("user-123".to_string()));

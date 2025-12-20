@@ -4,13 +4,13 @@ use tracing::{debug, instrument};
 
 use crate::domain::OrganizationService;
 use common::auth::AuthTokenProvider;
+use common::domain::DomainError;
 use common::grpc::domain_error_to_status;
 use common::proto::{
     datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
     to_get_organization_input, to_get_user_organizations_input, to_list_organizations_input,
     to_proto_organization,
 };
-use common::domain::DomainError;
 use ponix_proto_prost::organization::v1::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
     DeleteOrganizationResponse, GetOrganizationRequest, GetOrganizationResponse,
@@ -183,7 +183,10 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
             .map(to_proto_organization)
             .collect();
 
-        debug!(count = proto_organizations.len(), "Organizations listed successfully");
+        debug!(
+            count = proto_organizations.len(),
+            "Organizations listed successfully"
+        );
 
         Ok(Response::new(ListOrganizationsResponse {
             organizations: proto_organizations,
@@ -227,7 +230,10 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
             .map(to_proto_organization)
             .collect();
 
-        debug!(count = proto_organizations.len(), "User organizations retrieved successfully");
+        debug!(
+            count = proto_organizations.len(),
+            "User organizations retrieved successfully"
+        );
 
         Ok(Response::new(UserOrganizationsResponse {
             organizations: proto_organizations,

@@ -37,6 +37,7 @@ pub struct CreateDeviceInputWithId {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GetDeviceInput {
     pub device_id: String,
+    pub organization_id: String,
 }
 
 /// Input for listing devices by organization

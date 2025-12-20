@@ -1,6 +1,6 @@
 use crate::domain::{
-    CreateGatewayInputWithId, DomainError, DomainResult, EmqxGatewayConfig, Gateway, GatewayConfig,
-    GatewayRepository, UpdateGatewayInput,
+    CreateGatewayInputWithId, DeleteGatewayInput, DomainError, DomainResult, EmqxGatewayConfig,
+    Gateway, GatewayConfig, GatewayRepository, GetGatewayInput, UpdateGatewayInput,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -135,9 +135,9 @@ impl GatewayRepository for PostgresGatewayRepository {
         })
     }
 
-    #[instrument(skip(self), fields(gateway_id = %gateway_id))]
-    async fn get_gateway(&self, gateway_id: &str) -> DomainResult<Option<Gateway>> {
-        debug!(gateway_id = %gateway_id, "getting gateway from database");
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Option<Gateway>> {
+        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "getting gateway from database");
 
         let conn = self
             .client
@@ -149,8 +149,8 @@ impl GatewayRepository for PostgresGatewayRepository {
             .query_opt(
                 "SELECT gateway_id, organization_id, gateway_type, gateway_config, deleted_at, created_at, updated_at
                  FROM gateways
-                 WHERE gateway_id = $1 AND deleted_at IS NULL",
-                &[&gateway_id],
+                 WHERE gateway_id = $1 AND organization_id = $2 AND deleted_at IS NULL",
+                &[&input.gateway_id, &input.organization_id],
             )
             .await
             .map_err(|e| DomainError::RepositoryError(e.into()))?;
@@ -171,9 +171,9 @@ impl GatewayRepository for PostgresGatewayRepository {
         Ok(gateway)
     }
 
-    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
-        debug!(gateway_id = %input.gateway_id, "updating gateway in database");
+        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "updating gateway in database");
 
         let conn = self
             .client
@@ -204,11 +204,13 @@ impl GatewayRepository for PostgresGatewayRepository {
         }
 
         query.push_str(&format!(
-            " WHERE gateway_id = ${} AND deleted_at IS NULL
+            " WHERE gateway_id = ${} AND organization_id = ${} AND deleted_at IS NULL
              RETURNING gateway_id, organization_id, gateway_type, gateway_config, deleted_at, created_at, updated_at",
-            param_idx
+            param_idx,
+            param_idx + 1
         ));
         params.push(&input.gateway_id);
+        params.push(&input.organization_id);
 
         let row = conn
             .query_opt(&query, &params[..])
@@ -233,9 +235,9 @@ impl GatewayRepository for PostgresGatewayRepository {
         }
     }
 
-    #[instrument(skip(self), fields(gateway_id = %gateway_id))]
-    async fn delete_gateway(&self, gateway_id: &str) -> DomainResult<()> {
-        debug!(gateway_id = %gateway_id, "soft deleting gateway");
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()> {
+        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "soft deleting gateway");
 
         let conn = self
             .client
@@ -249,17 +251,17 @@ impl GatewayRepository for PostgresGatewayRepository {
             .execute(
                 "UPDATE gateways
                  SET deleted_at = $1, updated_at = $1
-                 WHERE gateway_id = $2 AND deleted_at IS NULL",
-                &[&now, &gateway_id],
+                 WHERE gateway_id = $2 AND organization_id = $3 AND deleted_at IS NULL",
+                &[&now, &input.gateway_id, &input.organization_id],
             )
             .await
             .map_err(|e| DomainError::RepositoryError(e.into()))?;
 
         if rows_affected == 0 {
-            return Err(DomainError::GatewayNotFound(gateway_id.to_string()));
+            return Err(DomainError::GatewayNotFound(input.gateway_id));
         }
 
-        debug!(gateway_id = %gateway_id, "gateway soft deleted");
+        debug!(gateway_id = %input.gateway_id, "gateway soft deleted");
         Ok(())
     }
 

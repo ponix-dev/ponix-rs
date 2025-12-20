@@ -1,6 +1,8 @@
 use crate::domain::GatewayOrchestrationServiceConfig;
 use crate::mqtt::parse_topic;
-use common::domain::{DomainError, DomainResult, Gateway, GatewayConfig, RawEnvelope, RawEnvelopeProducer};
+use common::domain::{
+    DomainError, DomainResult, Gateway, GatewayConfig, RawEnvelope, RawEnvelopeProducer,
+};
 use rumqttc::v5::mqttbytes::QoS;
 use rumqttc::v5::{AsyncClient, Event, MqttOptions};
 use std::sync::Arc;
@@ -137,9 +139,7 @@ async fn run_mqtt_connection(
     client
         .subscribe(&subscribe_topic, QoS::AtLeastOnce)
         .await
-        .map_err(|e| {
-            DomainError::RepositoryError(anyhow::anyhow!("Failed to subscribe: {}", e))
-        })?;
+        .map_err(|e| DomainError::RepositoryError(anyhow::anyhow!("Failed to subscribe: {}", e)))?;
 
     info!(
         gateway_id = %gateway.gateway_id,
@@ -286,7 +286,10 @@ fn parse_broker_url(url: &str) -> DomainResult<(&str, u16)> {
         1 => Ok((parts[0], 1883)), // Default MQTT port
         2 => {
             let port = parts[1].parse::<u16>().map_err(|_| {
-                DomainError::InvalidGatewayConfig(format!("Invalid port in broker URL: {}", parts[1]))
+                DomainError::InvalidGatewayConfig(format!(
+                    "Invalid port in broker URL: {}",
+                    parts[1]
+                ))
             })?;
             Ok((parts[0], port))
         }
@@ -362,7 +365,13 @@ mod tests {
 
         let producer: Arc<dyn RawEnvelopeProducer> = Arc::new(mock_producer);
 
-        handle_mqtt_message(&gateway, "org-001/device-123", &[0x01, 0x02, 0x03], producer).await;
+        handle_mqtt_message(
+            &gateway,
+            "org-001/device-123",
+            &[0x01, 0x02, 0x03],
+            producer,
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -394,6 +403,12 @@ mod tests {
 
         let producer: Arc<dyn RawEnvelopeProducer> = Arc::new(mock_producer);
 
-        handle_mqtt_message(&gateway, "invalid-topic-format", &[0x01, 0x02, 0x03], producer).await;
+        handle_mqtt_message(
+            &gateway,
+            "invalid-topic-format",
+            &[0x01, 0x02, 0x03],
+            producer,
+        )
+        .await;
     }
 }
