@@ -1,9 +1,9 @@
 #![cfg(feature = "integration-tests")]
 
 use common::domain::{
-    CreateGatewayInputWithId, CreateOrganizationInputWithId, DomainError, EmqxGatewayConfig,
-    GatewayConfig, GatewayRepository, OrganizationRepository, RegisterUserInputWithId,
-    UpdateGatewayInput, UserRepository,
+    CreateGatewayInputWithId, CreateOrganizationInputWithId, DeleteGatewayInput, DomainError,
+    EmqxGatewayConfig, GatewayConfig, GatewayRepository, GetGatewayInput, OrganizationRepository,
+    RegisterUserInputWithId, UpdateGatewayInput, UserRepository,
 };
 use common::postgres::{
     PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository,
@@ -113,7 +113,11 @@ async fn test_gateway_crud_operations() {
     assert!(created.created_at.is_some());
 
     // Test Get
-    let retrieved = gateway_repo.get_gateway("gw-test-001").await.unwrap();
+    let get_input = GetGatewayInput {
+        gateway_id: "gw-test-001".to_string(),
+        organization_id: "org-test-001".to_string(),
+    };
+    let retrieved = gateway_repo.get_gateway(get_input).await.unwrap();
     assert!(retrieved.is_some());
     let gateway = retrieved.unwrap();
     assert_eq!(gateway.gateway_id, "gw-test-001");
@@ -121,6 +125,7 @@ async fn test_gateway_crud_operations() {
     // Test Update
     let update_input = UpdateGatewayInput {
         gateway_id: "gw-test-001".to_string(),
+        organization_id: "org-test-001".to_string(),
         gateway_type: None,
         gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt2.example.com:8883".to_string(),
@@ -141,10 +146,18 @@ async fn test_gateway_crud_operations() {
     assert_eq!(gateways.len(), 1);
 
     // Test Delete
-    gateway_repo.delete_gateway("gw-test-001").await.unwrap();
+    let delete_input = DeleteGatewayInput {
+        gateway_id: "gw-test-001".to_string(),
+        organization_id: "org-test-001".to_string(),
+    };
+    gateway_repo.delete_gateway(delete_input).await.unwrap();
 
     // Verify soft delete
-    let deleted = gateway_repo.get_gateway("gw-test-001").await.unwrap();
+    let get_deleted_input = GetGatewayInput {
+        gateway_id: "gw-test-001".to_string(),
+        organization_id: "org-test-001".to_string(),
+    };
+    let deleted = gateway_repo.get_gateway(get_deleted_input).await.unwrap();
     assert!(deleted.is_none());
 }
 
@@ -212,10 +225,169 @@ async fn test_list_excludes_soft_deleted() {
     }
 
     // Soft delete one
-    gateway_repo.delete_gateway("gw-test-2").await.unwrap();
+    let delete_input = DeleteGatewayInput {
+        gateway_id: "gw-test-2".to_string(),
+        organization_id: "org-test-003".to_string(),
+    };
+    gateway_repo.delete_gateway(delete_input).await.unwrap();
 
     // List should only return 2
     let gateways = gateway_repo.list_gateways("org-test-003").await.unwrap();
     assert_eq!(gateways.len(), 2);
     assert!(gateways.iter().all(|g| g.gateway_id != "gw-test-2"));
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_get_gateway_with_wrong_organization_returns_none() {
+    let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
+
+    // Create two organizations
+    let org1_input = CreateOrganizationInputWithId {
+        id: "org-cross-1".to_string(),
+        name: "Organization 1".to_string(),
+        user_id: TEST_USER_ID.to_string(),
+    };
+    org_repo.create_organization(org1_input).await.unwrap();
+
+    let org2_input = CreateOrganizationInputWithId {
+        id: "org-cross-2".to_string(),
+        name: "Organization 2".to_string(),
+        user_id: TEST_USER_ID.to_string(),
+    };
+    org_repo.create_organization(org2_input).await.unwrap();
+
+    // Create gateway in org-cross-1
+    let create_input = CreateGatewayInputWithId {
+        gateway_id: "gw-cross-test".to_string(),
+        organization_id: "org-cross-1".to_string(),
+        gateway_type: "emqx".to_string(),
+        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://mqtt.example.com:1883".to_string(),
+            subscription_group: "test-group".to_string(),
+        }),
+    };
+    gateway_repo.create_gateway(create_input).await.unwrap();
+
+    // Get with correct organization - should succeed
+    let correct_input = GetGatewayInput {
+        gateway_id: "gw-cross-test".to_string(),
+        organization_id: "org-cross-1".to_string(),
+    };
+    let result = gateway_repo.get_gateway(correct_input).await.unwrap();
+    assert!(result.is_some());
+
+    // Get with wrong organization - should return None
+    let wrong_input = GetGatewayInput {
+        gateway_id: "gw-cross-test".to_string(),
+        organization_id: "org-cross-2".to_string(),
+    };
+    let result = gateway_repo.get_gateway(wrong_input).await.unwrap();
+    assert!(
+        result.is_none(),
+        "Gateway from org-cross-1 should not be visible to org-cross-2"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_update_gateway_with_wrong_organization_returns_not_found() {
+    let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
+
+    // Create two organizations
+    let org1_input = CreateOrganizationInputWithId {
+        id: "org-update-1".to_string(),
+        name: "Organization 1".to_string(),
+        user_id: TEST_USER_ID.to_string(),
+    };
+    org_repo.create_organization(org1_input).await.unwrap();
+
+    let org2_input = CreateOrganizationInputWithId {
+        id: "org-update-2".to_string(),
+        name: "Organization 2".to_string(),
+        user_id: TEST_USER_ID.to_string(),
+    };
+    org_repo.create_organization(org2_input).await.unwrap();
+
+    // Create gateway in org-update-1
+    let create_input = CreateGatewayInputWithId {
+        gateway_id: "gw-update-test".to_string(),
+        organization_id: "org-update-1".to_string(),
+        gateway_type: "emqx".to_string(),
+        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://mqtt.example.com:1883".to_string(),
+            subscription_group: "test-group".to_string(),
+        }),
+    };
+    gateway_repo.create_gateway(create_input).await.unwrap();
+
+    // Update with wrong organization - should fail
+    let wrong_update = UpdateGatewayInput {
+        gateway_id: "gw-update-test".to_string(),
+        organization_id: "org-update-2".to_string(),
+        gateway_type: Some("changed".to_string()),
+        gateway_config: None,
+    };
+    let result = gateway_repo.update_gateway(wrong_update).await;
+    assert!(result.is_err());
+    assert!(matches!(
+        result.unwrap_err(),
+        DomainError::GatewayNotFound(_)
+    ));
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_delete_gateway_with_wrong_organization_returns_not_found() {
+    let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
+
+    // Create two organizations
+    let org1_input = CreateOrganizationInputWithId {
+        id: "org-delete-1".to_string(),
+        name: "Organization 1".to_string(),
+        user_id: TEST_USER_ID.to_string(),
+    };
+    org_repo.create_organization(org1_input).await.unwrap();
+
+    let org2_input = CreateOrganizationInputWithId {
+        id: "org-delete-2".to_string(),
+        name: "Organization 2".to_string(),
+        user_id: TEST_USER_ID.to_string(),
+    };
+    org_repo.create_organization(org2_input).await.unwrap();
+
+    // Create gateway in org-delete-1
+    let create_input = CreateGatewayInputWithId {
+        gateway_id: "gw-delete-test".to_string(),
+        organization_id: "org-delete-1".to_string(),
+        gateway_type: "emqx".to_string(),
+        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: "mqtt://mqtt.example.com:1883".to_string(),
+            subscription_group: "test-group".to_string(),
+        }),
+    };
+    gateway_repo.create_gateway(create_input).await.unwrap();
+
+    // Delete with wrong organization - should fail
+    let wrong_delete = DeleteGatewayInput {
+        gateway_id: "gw-delete-test".to_string(),
+        organization_id: "org-delete-2".to_string(),
+    };
+    let result = gateway_repo.delete_gateway(wrong_delete).await;
+    assert!(result.is_err());
+    assert!(matches!(
+        result.unwrap_err(),
+        DomainError::GatewayNotFound(_)
+    ));
+
+    // Verify gateway still exists with correct organization
+    let correct_get = GetGatewayInput {
+        gateway_id: "gw-delete-test".to_string(),
+        organization_id: "org-delete-1".to_string(),
+    };
+    let result = gateway_repo.get_gateway(correct_get).await.unwrap();
+    assert!(
+        result.is_some(),
+        "Gateway should still exist after failed cross-org delete"
+    );
 }

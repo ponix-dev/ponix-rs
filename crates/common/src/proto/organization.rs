@@ -62,9 +62,7 @@ pub fn to_list_organizations_input(_req: ListOrganizationsRequest) -> ListOrgani
 }
 
 /// Convert protobuf UserOrganizationsRequest to domain GetUserOrganizationsInput
-pub fn to_get_user_organizations_input(
-    req: UserOrganizationsRequest,
-) -> GetUserOrganizationsInput {
+pub fn to_get_user_organizations_input(req: UserOrganizationsRequest) -> GetUserOrganizationsInput {
     GetUserOrganizationsInput {
         user_id: req.user_id,
     }

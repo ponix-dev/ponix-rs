@@ -49,10 +49,7 @@ impl Service<ConsumeRequest> for GatewayCdcService {
                         error = %e,
                         "failed to parse gateway CDC event"
                     );
-                    return Ok(ConsumeResponse::Nak(Some(format!(
-                        "parse error: {}",
-                        e
-                    ))));
+                    return Ok(ConsumeResponse::Nak(Some(format!("parse error: {}", e))));
                 }
             };
 

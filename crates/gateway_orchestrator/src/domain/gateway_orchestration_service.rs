@@ -2,7 +2,9 @@ use crate::domain::{
     GatewayOrchestrationServiceConfig, GatewayProcessHandle, GatewayProcessStore,
     GatewayRunnerFactory,
 };
-use common::domain::{DomainResult, Gateway, GatewayRepository, RawEnvelopeProducer};
+use common::domain::{
+    DomainResult, Gateway, GatewayRepository, GetGatewayInput, RawEnvelopeProducer,
+};
 
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -80,7 +82,10 @@ impl GatewayOrchestrationService {
 
         let config_changed = match self
             .gateway_repository
-            .get_gateway(&gateway.gateway_id)
+            .get_gateway(GetGatewayInput {
+                gateway_id: gateway.gateway_id.clone(),
+                organization_id: gateway.organization_id.clone(),
+            })
             .await?
         {
             Some(old_gateway) => old_gateway.gateway_config != gateway.gateway_config,
@@ -231,7 +236,8 @@ mod tests {
     use crate::domain::{GatewayProcessStore, GatewayRunner, InMemoryGatewayProcessStore};
     use async_trait::async_trait;
     use common::domain::{
-        EmqxGatewayConfig, GatewayConfig, MockGatewayRepository, MockRawEnvelopeProducer,
+        EmqxGatewayConfig, GatewayConfig, GetGatewayInput, MockGatewayRepository,
+        MockRawEnvelopeProducer,
     };
 
     // Mock runner for testing - immediately completes
@@ -383,7 +389,9 @@ mod tests {
 
         mock_repo
             .expect_get_gateway()
-            .withf(|gateway_id| gateway_id == "gw1")
+            .withf(|input: &GetGatewayInput| {
+                input.gateway_id == "gw1" && input.organization_id == "org1"
+            })
             .times(1)
             .returning(move |_| Ok(Some(old_gateway_clone.clone())));
 

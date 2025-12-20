@@ -35,12 +35,14 @@ pub struct CreateGatewayInputWithId {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GetGatewayInput {
     pub gateway_id: String,
+    pub organization_id: String,
 }
 
 /// Input for updating a gateway
 #[derive(Debug, Clone, PartialEq)]
 pub struct UpdateGatewayInput {
     pub gateway_id: String,
+    pub organization_id: String,
     pub gateway_type: Option<String>,
     pub gateway_config: Option<GatewayConfig>,
 }
@@ -49,6 +51,7 @@ pub struct UpdateGatewayInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeleteGatewayInput {
     pub gateway_id: String,
+    pub organization_id: String,
 }
 
 /// Input for listing gateways by organization
@@ -82,14 +85,14 @@ pub trait GatewayRepository: Send + Sync {
     /// Create a new gateway
     async fn create_gateway(&self, input: CreateGatewayInputWithId) -> DomainResult<Gateway>;
 
-    /// Get a gateway by ID (excludes soft deleted)
-    async fn get_gateway(&self, gateway_id: &str) -> DomainResult<Option<Gateway>>;
+    /// Get a gateway by ID and organization (excludes soft deleted)
+    async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Option<Gateway>>;
 
     /// Update a gateway
     async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway>;
 
     /// Soft delete a gateway
-    async fn delete_gateway(&self, gateway_id: &str) -> DomainResult<()>;
+    async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()>;
 
     /// List gateways by organization (excludes soft deleted)
     async fn list_gateways(&self, organization_id: &str) -> DomainResult<Vec<Gateway>>;

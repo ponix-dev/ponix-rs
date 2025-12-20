@@ -3,6 +3,9 @@ mod config;
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
+use common::auth::{
+    Argon2PasswordService, CryptoRefreshTokenProvider, JwtAuthTokenProvider, JwtConfig,
+};
 use common::clickhouse::ClickHouseClient;
 use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
@@ -14,7 +17,6 @@ use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, Tel
 use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
-use common::auth::{Argon2PasswordService, CryptoRefreshTokenProvider, JwtAuthTokenProvider, JwtConfig};
 use ponix_api::domain::{DeviceService, GatewayService, OrganizationService, UserService};
 use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
@@ -76,10 +78,7 @@ async fn main() {
         postgres_repos.gateway.clone(),
         postgres_repos.organization.clone(),
     ));
-    let jwt_config = JwtConfig::new(
-        config.jwt_secret.clone(),
-        config.jwt_expiration_hours,
-    );
+    let jwt_config = JwtConfig::new(config.jwt_secret.clone(), config.jwt_expiration_hours);
     let auth_token_provider: Arc<dyn common::auth::AuthTokenProvider> =
         Arc::new(JwtAuthTokenProvider::new(jwt_config));
     let password_service: Arc<dyn common::auth::PasswordService> =

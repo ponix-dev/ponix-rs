@@ -62,7 +62,10 @@ impl GatewayServiceTrait for GatewayServiceHandler {
     #[instrument(
         name = "GetGateway",
         skip(self, request),
-        fields(gateway_id = %request.get_ref().gateway_id)
+        fields(
+            gateway_id = %request.get_ref().gateway_id,
+            organization_id = %request.get_ref().organization_id
+        )
     )]
     async fn get_gateway(
         &self,
@@ -114,7 +117,10 @@ impl GatewayServiceTrait for GatewayServiceHandler {
     #[instrument(
         name = "UpdateGateway",
         skip(self, request),
-        fields(gateway_id = %request.get_ref().gateway_id)
+        fields(
+            gateway_id = %request.get_ref().gateway_id,
+            organization_id = %request.get_ref().organization_id
+        )
     )]
     async fn update_gateway(
         &self,
@@ -140,7 +146,10 @@ impl GatewayServiceTrait for GatewayServiceHandler {
     #[instrument(
         name = "DeleteGateway",
         skip(self, request),
-        fields(gateway_id = %request.get_ref().gateway_id)
+        fields(
+            gateway_id = %request.get_ref().gateway_id,
+            organization_id = %request.get_ref().organization_id
+        )
     )]
     async fn delete_gateway(
         &self,

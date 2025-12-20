@@ -97,7 +97,7 @@ impl DeviceRepository for PostgresDeviceRepository {
         })
     }
 
-    #[instrument(skip(self, input), fields(device_id = %input.device_id))]
+    #[instrument(skip(self, input), fields(device_id = %input.device_id, organization_id = %input.organization_id))]
     async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Option<Device>> {
         let conn = self
             .client
@@ -109,8 +109,8 @@ impl DeviceRepository for PostgresDeviceRepository {
             .query_opt(
                 "SELECT device_id, organization_id, device_name, payload_conversion, created_at, updated_at
                  FROM devices
-                 WHERE device_id = $1",
-                &[&input.device_id],
+                 WHERE device_id = $1 AND organization_id = $2",
+                &[&input.device_id, &input.organization_id],
             )
             .await
             .map_err(|e| DomainError::RepositoryError(e.into()))?;

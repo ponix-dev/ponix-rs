@@ -80,10 +80,10 @@ impl GatewayService {
         Ok(gateway)
     }
 
-    /// Get a gateway by ID
-    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
+    /// Get a gateway by ID and organization
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     pub async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Gateway> {
-        debug!(gateway_id = %input.gateway_id, "Getting gateway");
+        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Getting gateway");
 
         if input.gateway_id.is_empty() {
             return Err(DomainError::InvalidGatewayId(
@@ -91,23 +91,35 @@ impl GatewayService {
             ));
         }
 
+        if input.organization_id.is_empty() {
+            return Err(DomainError::InvalidOrganizationId(
+                "Organization ID cannot be empty".to_string(),
+            ));
+        }
+
         let gateway = self
             .gateway_repository
-            .get_gateway(&input.gateway_id)
+            .get_gateway(input.clone())
             .await?
-            .ok_or_else(|| DomainError::GatewayNotFound(input.gateway_id.clone()))?;
+            .ok_or_else(|| DomainError::GatewayNotFound(input.gateway_id))?;
 
         Ok(gateway)
     }
 
     /// Update a gateway
-    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     pub async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
-        debug!(gateway_id = %input.gateway_id, "Updating gateway");
+        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Updating gateway");
 
         if input.gateway_id.is_empty() {
             return Err(DomainError::InvalidGatewayId(
                 "Gateway ID cannot be empty".to_string(),
+            ));
+        }
+
+        if input.organization_id.is_empty() {
+            return Err(DomainError::InvalidOrganizationId(
+                "Organization ID cannot be empty".to_string(),
             ));
         }
 
@@ -132,9 +144,9 @@ impl GatewayService {
     }
 
     /// Soft delete a gateway
-    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id))]
+    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
     pub async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()> {
-        debug!(gateway_id = %input.gateway_id, "Deleting gateway");
+        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Deleting gateway");
 
         if input.gateway_id.is_empty() {
             return Err(DomainError::InvalidGatewayId(
@@ -142,9 +154,13 @@ impl GatewayService {
             ));
         }
 
-        self.gateway_repository
-            .delete_gateway(&input.gateway_id)
-            .await?;
+        if input.organization_id.is_empty() {
+            return Err(DomainError::InvalidOrganizationId(
+                "Organization ID cannot be empty".to_string(),
+            ));
+        }
+
+        self.gateway_repository.delete_gateway(input).await?;
 
         debug!("Gateway soft deleted successfully");
         Ok(())
@@ -419,5 +435,64 @@ mod tests {
 
         let result = service.create_gateway(input).await;
         assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_gateway_empty_organization_id_fails() {
+        let mock_gateway_repo = MockGatewayRepository::new();
+        let mock_org_repo = MockOrganizationRepository::new();
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+
+        let input = GetGatewayInput {
+            gateway_id: "gw-123".to_string(),
+            organization_id: "".to_string(),
+        };
+
+        let result = service.get_gateway(input).await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DomainError::InvalidOrganizationId(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_update_gateway_empty_organization_id_fails() {
+        let mock_gateway_repo = MockGatewayRepository::new();
+        let mock_org_repo = MockOrganizationRepository::new();
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+
+        let input = UpdateGatewayInput {
+            gateway_id: "gw-123".to_string(),
+            organization_id: "".to_string(),
+            gateway_type: None,
+            gateway_config: None,
+        };
+
+        let result = service.update_gateway(input).await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DomainError::InvalidOrganizationId(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_delete_gateway_empty_organization_id_fails() {
+        let mock_gateway_repo = MockGatewayRepository::new();
+        let mock_org_repo = MockOrganizationRepository::new();
+        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+
+        let input = DeleteGatewayInput {
+            gateway_id: "gw-123".to_string(),
+            organization_id: "".to_string(),
+        };
+
+        let result = service.delete_gateway(input).await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DomainError::InvalidOrganizationId(_)
+        ));
     }
 }

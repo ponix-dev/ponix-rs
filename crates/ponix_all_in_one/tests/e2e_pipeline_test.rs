@@ -262,12 +262,7 @@ async fn initialize_services(
         processed_producer,
     ));
 
-    Ok((
-        device_service,
-        raw_envelope_service,
-        nats_client,
-        pg_client,
-    ))
+    Ok((device_service, raw_envelope_service, nats_client, pg_client))
 }
 
 /// Create a test organization and device with CEL expression for Cayenne LPP transformation
@@ -368,9 +363,9 @@ async fn run_consumers(
     // Create raw envelope consumer with Tower middleware
     let raw_service = RawEnvelopeConsumerService::new(raw_envelope_service);
     let raw_service_stack = ServiceBuilder::new()
-        .layer(NatsConsumeTracingLayer::new(
-            NatsConsumeTracingConfig::new("raw_envelope_consume"),
-        ))
+        .layer(NatsConsumeTracingLayer::new(NatsConsumeTracingConfig::new(
+            "raw_envelope_consume",
+        )))
         .layer(NatsConsumeLoggingLayer::new())
         .service(raw_service);
 
@@ -389,9 +384,9 @@ async fn run_consumers(
     // Create processed envelope consumer with Tower middleware
     let processed_service = ProcessedEnvelopeConsumerService::new(inserter_repo.clone());
     let processed_service_stack = ServiceBuilder::new()
-        .layer(NatsConsumeTracingLayer::new(
-            NatsConsumeTracingConfig::new("processed_envelope_consume"),
-        ))
+        .layer(NatsConsumeTracingLayer::new(NatsConsumeTracingConfig::new(
+            "processed_envelope_consume",
+        )))
         .layer(NatsConsumeLoggingLayer::new())
         .service(processed_service);
 

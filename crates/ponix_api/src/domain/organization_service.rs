@@ -174,9 +174,7 @@ mod tests {
         mock_repo
             .expect_create_organization()
             .withf(|input: &CreateOrganizationInputWithId| {
-                !input.id.is_empty()
-                    && input.name == "Test Org"
-                    && input.user_id == "user-123"
+                !input.id.is_empty() && input.name == "Test Org" && input.user_id == "user-123"
             })
             .times(1)
             .return_once(move |_| Ok(expected_org.clone()));

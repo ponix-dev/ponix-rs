@@ -52,6 +52,7 @@ impl RawEnvelopeService {
             .device_repository
             .get_device(GetDeviceInput {
                 device_id: raw.end_device_id.clone(),
+                organization_id: raw.organization_id.clone(),
             })
             .await?
             .ok_or_else(|| DomainError::DeviceNotFound(raw.end_device_id.clone()))?;
@@ -200,7 +201,9 @@ mod tests {
 
         mock_device_repo
             .expect_get_device()
-            .withf(|input: &GetDeviceInput| input.device_id == "device-123")
+            .withf(|input: &GetDeviceInput| {
+                input.device_id == "device-123" && input.organization_id == "org-456"
+            })
             .times(1)
             .return_once(move |_| Ok(Some(device)));
 

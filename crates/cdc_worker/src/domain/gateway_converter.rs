@@ -56,8 +56,10 @@ impl GatewayConverter {
             .to_string();
 
         // Extract broker_url and subscription_group from config and create Config oneof
-        let config = gateway_config.get("broker_url").and_then(|v| v.as_str()).map(
-            |broker_url| {
+        let config = gateway_config
+            .get("broker_url")
+            .and_then(|v| v.as_str())
+            .map(|broker_url| {
                 let subscription_group = gateway_config
                     .get("subscription_group")
                     .and_then(|v| v.as_str())
@@ -68,8 +70,7 @@ impl GatewayConverter {
                     broker_url: broker_url.to_string(),
                     subscription_group,
                 })
-            },
-        );
+            });
 
         // Default status to ACTIVE
         let status = GatewayStatus::Active as i32;

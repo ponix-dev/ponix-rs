@@ -4,8 +4,12 @@ use tracing::{debug, info, instrument};
 
 use crate::domain::UserService;
 use common::auth::{LogoutInput, RefreshTokenInput};
-use common::grpc::{domain_error_to_status, extract_refresh_token_from_cookies, RefreshTokenCookie};
-use common::proto::{to_get_user_input, to_login_user_input, to_proto_user, to_register_user_input};
+use common::grpc::{
+    domain_error_to_status, extract_refresh_token_from_cookies, RefreshTokenCookie,
+};
+use common::proto::{
+    to_get_user_input, to_login_user_input, to_proto_user, to_register_user_input,
+};
 use ponix_proto_prost::user::v1::{
     GetUserRequest, GetUserResponse, LoginRequest, LoginResponse, LogoutRequest, LogoutResponse,
     RefreshRequest, RefreshResponse, RegisterUserRequest, RegisterUserResponse,
@@ -151,8 +155,8 @@ impl UserServiceTrait for UserServiceHandler {
             "Refresh endpoint - received cookie header"
         );
 
-        let refresh_token = extracted_token
-            .ok_or_else(|| Status::unauthenticated("Refresh token not found"))?;
+        let refresh_token =
+            extracted_token.ok_or_else(|| Status::unauthenticated("Refresh token not found"))?;
 
         let output = self
             .domain_service

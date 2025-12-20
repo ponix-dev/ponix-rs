@@ -88,6 +88,7 @@ async fn test_create_and_get_device() {
     // Get device
     let get_input = GetDeviceInput {
         device_id: "test-device-123".to_string(),
+        organization_id: "test-org-456".to_string(),
     };
     let retrieved = repo.get_device(get_input).await.unwrap();
     assert!(retrieved.is_some());
@@ -105,6 +106,7 @@ async fn test_get_nonexistent_device() {
 
     let get_input = GetDeviceInput {
         device_id: "nonexistent-device".to_string(),
+        organization_id: "some-org".to_string(),
     };
     let result = repo.get_device(get_input).await.unwrap();
     assert!(result.is_none());
@@ -189,4 +191,53 @@ async fn test_create_duplicate_device() {
         result.unwrap_err(),
         DomainError::DeviceAlreadyExists(_)
     ));
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_get_device_with_wrong_organization_returns_none() {
+    let (_container, repo, client) = setup_test_db().await;
+
+    // Create two organizations
+    let conn = client.get_connection().await.unwrap();
+    conn.execute(
+        "INSERT INTO organizations (id, name) VALUES ($1, $2)",
+        &[&"org-1", &"Organization 1"],
+    )
+    .await
+    .unwrap();
+    conn.execute(
+        "INSERT INTO organizations (id, name) VALUES ($1, $2)",
+        &[&"org-2", &"Organization 2"],
+    )
+    .await
+    .unwrap();
+
+    // Create device in org-1
+    let input = CreateDeviceInputWithId {
+        device_id: "device-in-org-1".to_string(),
+        organization_id: "org-1".to_string(),
+        name: "Device in Org 1".to_string(),
+        payload_conversion: "test conversion".to_string(),
+    };
+    repo.create_device(input).await.unwrap();
+
+    // Try to get device with correct organization - should succeed
+    let correct_input = GetDeviceInput {
+        device_id: "device-in-org-1".to_string(),
+        organization_id: "org-1".to_string(),
+    };
+    let result = repo.get_device(correct_input).await.unwrap();
+    assert!(result.is_some());
+
+    // Try to get device with wrong organization - should return None
+    let wrong_input = GetDeviceInput {
+        device_id: "device-in-org-1".to_string(),
+        organization_id: "org-2".to_string(),
+    };
+    let result = repo.get_device(wrong_input).await.unwrap();
+    assert!(
+        result.is_none(),
+        "Device from org-1 should not be visible to org-2"
+    );
 }

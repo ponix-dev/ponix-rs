@@ -178,7 +178,10 @@ impl UserService {
 
     /// Refresh access token using a valid refresh token
     #[instrument(skip(self, input))]
-    pub async fn refresh_token(&self, input: RefreshTokenInput) -> DomainResult<RefreshTokenOutput> {
+    pub async fn refresh_token(
+        &self,
+        input: RefreshTokenInput,
+    ) -> DomainResult<RefreshTokenOutput> {
         debug!("attempting token refresh");
 
         // Hash the incoming token to look up in database

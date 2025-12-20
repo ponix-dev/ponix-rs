@@ -87,8 +87,8 @@ impl DeviceService {
         Ok(device)
     }
 
-    /// Get a device by ID
-    #[instrument(skip(self, input), fields(device_id = %input.device_id))]
+    /// Get a device by ID and organization
+    #[instrument(skip(self, input), fields(device_id = %input.device_id, organization_id = %input.organization_id))]
     pub async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Device> {
         if input.device_id.is_empty() {
             return Err(DomainError::InvalidDeviceId(
@@ -96,7 +96,13 @@ impl DeviceService {
             ));
         }
 
-        debug!(device_id = %input.device_id, "getting device");
+        if input.organization_id.is_empty() {
+            return Err(DomainError::InvalidOrganizationId(
+                "Organization ID cannot be empty".to_string(),
+            ));
+        }
+
+        debug!(device_id = %input.device_id, organization_id = %input.organization_id, "getting device");
 
         let device = self
             .device_repository
@@ -284,7 +290,9 @@ mod tests {
 
         mock_device_repo
             .expect_get_device()
-            .withf(|input: &GetDeviceInput| input.device_id == "device-123")
+            .withf(|input: &GetDeviceInput| {
+                input.device_id == "device-123" && input.organization_id == "org-456"
+            })
             .times(1)
             .return_once(move |_| Ok(Some(expected_device)));
 
@@ -292,6 +300,7 @@ mod tests {
 
         let input = GetDeviceInput {
             device_id: "device-123".to_string(),
+            organization_id: "org-456".to_string(),
         };
 
         let result = service.get_device(input).await;
@@ -312,6 +321,7 @@ mod tests {
 
         let input = GetDeviceInput {
             device_id: "nonexistent".to_string(),
+            organization_id: "org-456".to_string(),
         };
 
         let result = service.get_device(input).await;
@@ -319,6 +329,25 @@ mod tests {
         assert!(matches!(
             result.unwrap_err(),
             DomainError::DeviceNotFound(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_get_device_empty_organization_id_fails() {
+        let mock_device_repo = MockDeviceRepository::new();
+        let mock_org_repo = MockOrganizationRepository::new();
+        let service = DeviceService::new(Arc::new(mock_device_repo), Arc::new(mock_org_repo));
+
+        let input = GetDeviceInput {
+            device_id: "device-123".to_string(),
+            organization_id: "".to_string(),
+        };
+
+        let result = service.get_device(input).await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DomainError::InvalidOrganizationId(_)
         ));
     }
 
