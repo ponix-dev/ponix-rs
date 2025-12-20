@@ -89,15 +89,17 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         &self,
         request: Request<GetOrganizationRequest>,
     ) -> Result<Response<GetOrganizationResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
         // Convert proto → domain
         let input = to_get_organization_input(req);
 
-        // Call domain service
+        // Call domain service with user_id for authorization
         let organization = self
             .domain_service
-            .get_organization(input)
+            .get_organization(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -118,15 +120,17 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         &self,
         request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<DeleteOrganizationResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
         // Convert proto → domain
         let input = to_delete_organization_input(req);
         let organization_id = input.organization_id.clone();
 
-        // Call domain service
+        // Call domain service with user_id for authorization
         self.domain_service
-            .delete_organization(input)
+            .delete_organization(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 

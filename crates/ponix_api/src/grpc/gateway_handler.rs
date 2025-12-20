@@ -3,6 +3,12 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::GatewayService;
+use common::auth::{extract_user_context, AuthTokenProvider};
+use common::grpc::domain_error_to_status;
+use common::proto::{
+    to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input, to_list_gateways_input,
+    to_proto_gateway, to_update_gateway_input,
+};
 use ponix_proto_prost::gateway::v1::{
     CreateGatewayRequest, CreateGatewayResponse, DeleteGatewayRequest, DeleteGatewayResponse,
     GetGatewayRequest, GetGatewayResponse, ListGatewaysRequest, ListGatewaysResponse,
@@ -10,21 +16,22 @@ use ponix_proto_prost::gateway::v1::{
 };
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayService as GatewayServiceTrait;
 
-use common::grpc::domain_error_to_status;
-use common::proto::{
-    to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input, to_list_gateways_input,
-    to_proto_gateway, to_update_gateway_input,
-};
-
 /// gRPC handler for GatewayService
 /// Handles Proto → Domain mapping and error conversion
 pub struct GatewayServiceHandler {
     domain_service: Arc<GatewayService>,
+    auth_token_provider: Arc<dyn AuthTokenProvider>,
 }
 
 impl GatewayServiceHandler {
-    pub fn new(domain_service: Arc<GatewayService>) -> Self {
-        Self { domain_service }
+    pub fn new(
+        domain_service: Arc<GatewayService>,
+        auth_token_provider: Arc<dyn AuthTokenProvider>,
+    ) -> Self {
+        Self {
+            domain_service,
+            auth_token_provider,
+        }
     }
 }
 
@@ -42,13 +49,17 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<CreateGatewayRequest>,
     ) -> Result<Response<CreateGatewayResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
+        // Convert proto → domain
         let input = to_create_gateway_input(req);
 
+        // Call domain service with user_id for authorization
         let gateway = self
             .domain_service
-            .create_gateway(input)
+            .create_gateway(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -71,13 +82,17 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<GetGatewayRequest>,
     ) -> Result<Response<GetGatewayResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
+        // Convert proto → domain
         let input = to_get_gateway_input(req);
 
+        // Call domain service with user_id for authorization
         let gateway = self
             .domain_service
-            .get_gateway(input)
+            .get_gateway(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -95,13 +110,17 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<ListGatewaysRequest>,
     ) -> Result<Response<ListGatewaysResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
+        // Convert proto → domain
         let input = to_list_gateways_input(req);
 
+        // Call domain service with user_id for authorization
         let gateways = self
             .domain_service
-            .list_gateways(input)
+            .list_gateways(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -126,13 +145,17 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<UpdateGatewayRequest>,
     ) -> Result<Response<UpdateGatewayResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
+        // Convert proto → domain
         let input = to_update_gateway_input(req);
 
+        // Call domain service with user_id for authorization
         let gateway = self
             .domain_service
-            .update_gateway(input)
+            .update_gateway(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -155,13 +178,17 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<DeleteGatewayRequest>,
     ) -> Result<Response<DeleteGatewayResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
         let gateway_id = req.gateway_id.clone();
 
+        // Convert proto → domain
         let input = to_delete_gateway_input(req);
 
+        // Call domain service with user_id for authorization
         self.domain_service
-            .delete_gateway(input)
+            .delete_gateway(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 

@@ -1,4 +1,4 @@
-use common::auth::{AuthorizationProvider, OrgRole};
+use common::auth::{Action, AuthorizationProvider, OrgRole, Resource};
 use common::domain::{
     CreateOrganizationInput, CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError,
     DomainResult, GetOrganizationInput, GetUserOrganizationsInput, ListOrganizationsInput,
@@ -70,9 +70,10 @@ impl OrganizationService {
     }
 
     /// Get organization by ID (excludes soft deleted)
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
     pub async fn get_organization(
         &self,
+        user_id: &str,
         input: GetOrganizationInput,
     ) -> DomainResult<Organization> {
         debug!(organization_id = %input.organization_id, "getting organization");
@@ -82,6 +83,16 @@ impl OrganizationService {
                 "Organization ID cannot be empty".to_string(),
             ));
         }
+
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Organization,
+                Action::Read,
+            )
+            .await?;
 
         let organization = self
             .repository
@@ -93,9 +104,10 @@ impl OrganizationService {
     }
 
     /// Update organization name
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
     pub async fn update_organization(
         &self,
+        user_id: &str,
         input: UpdateOrganizationInput,
     ) -> DomainResult<Organization> {
         debug!(organization_id = %input.organization_id, "updating organization");
@@ -112,6 +124,16 @@ impl OrganizationService {
             ));
         }
 
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Organization,
+                Action::Update,
+            )
+            .await?;
+
         let organization = self.repository.update_organization(input).await?;
 
         debug!(organization_id = %organization.id, "organization updated successfully");
@@ -119,8 +141,12 @@ impl OrganizationService {
     }
 
     /// Soft delete organization
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
-    pub async fn delete_organization(&self, input: DeleteOrganizationInput) -> DomainResult<()> {
+    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
+    pub async fn delete_organization(
+        &self,
+        user_id: &str,
+        input: DeleteOrganizationInput,
+    ) -> DomainResult<()> {
         debug!(organization_id = %input.organization_id, "Deleting organization");
 
         if input.organization_id.is_empty() {
@@ -128,6 +154,16 @@ impl OrganizationService {
                 "Organization ID cannot be empty".to_string(),
             ));
         }
+
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Organization,
+                Action::Delete,
+            )
+            .await?;
 
         self.repository.delete_organization(input.clone()).await?;
 
@@ -176,10 +212,14 @@ mod tests {
     use common::auth::MockAuthorizationProvider;
     use common::domain::MockOrganizationRepository;
 
+    const TEST_USER_ID: &str = "user-123";
+
     fn create_mock_auth_provider() -> Arc<MockAuthorizationProvider> {
         let mut mock = MockAuthorizationProvider::new();
         mock.expect_assign_role()
             .returning(|_, _, _| Box::pin(async { Ok(()) }));
+        mock.expect_require_permission()
+            .returning(|_, _, _, _| Box::pin(async { Ok(()) }));
         Arc::new(mock)
     }
 
@@ -263,7 +303,7 @@ mod tests {
             organization_id: "nonexistent".to_string(),
         };
 
-        let result = service.get_organization(input).await;
+        let result = service.get_organization(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::OrganizationNotFound(_))));
     }
 
@@ -277,7 +317,7 @@ mod tests {
             organization_id: "".to_string(),
         };
 
-        let result = service.get_organization(input).await;
+        let result = service.get_organization(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
     }
 
@@ -292,7 +332,7 @@ mod tests {
             name: "".to_string(),
         };
 
-        let result = service.update_organization(input).await;
+        let result = service.update_organization(TEST_USER_ID, input).await;
         assert!(matches!(
             result,
             Err(DomainError::InvalidOrganizationName(_))
@@ -309,7 +349,7 @@ mod tests {
             organization_id: "".to_string(),
         };
 
-        let result = service.delete_organization(input).await;
+        let result = service.delete_organization(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
     }
 

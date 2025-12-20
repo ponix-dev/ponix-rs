@@ -80,6 +80,7 @@ async fn main() {
     let device_service = Arc::new(DeviceService::new(
         postgres_repos.device.clone(),
         postgres_repos.organization.clone(),
+        authorization_service.clone(),
     ));
     let organization_service = Arc::new(OrganizationService::new(
         postgres_repos.organization.clone(),
@@ -88,6 +89,7 @@ async fn main() {
     let gateway_service = Arc::new(GatewayService::new(
         postgres_repos.gateway.clone(),
         postgres_repos.organization.clone(),
+        authorization_service.clone(),
     ));
     let jwt_config = JwtConfig::new(config.jwt_secret.clone(), config.jwt_expiration_hours);
     let auth_token_provider: Arc<dyn common::auth::AuthTokenProvider> =

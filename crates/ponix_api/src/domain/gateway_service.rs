@@ -1,3 +1,4 @@
+use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
     CreateGatewayInput, CreateGatewayInputWithId, DeleteGatewayInput, DomainError, DomainResult,
     Gateway, GatewayConfig, GatewayRepository, GetGatewayInput, GetOrganizationInput,
@@ -10,23 +11,40 @@ use tracing::{debug, instrument};
 pub struct GatewayService {
     gateway_repository: Arc<dyn GatewayRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
+    authorization_provider: Arc<dyn AuthorizationProvider>,
 }
 
 impl GatewayService {
     pub fn new(
         gateway_repository: Arc<dyn GatewayRepository>,
         organization_repository: Arc<dyn OrganizationRepository>,
+        authorization_provider: Arc<dyn AuthorizationProvider>,
     ) -> Self {
         Self {
             gateway_repository,
             organization_repository,
+            authorization_provider,
         }
     }
 
     /// Create a new gateway for an organization
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id, gateway_type = %input.gateway_type))]
-    pub async fn create_gateway(&self, input: CreateGatewayInput) -> DomainResult<Gateway> {
+    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id, gateway_type = %input.gateway_type))]
+    pub async fn create_gateway(
+        &self,
+        user_id: &str,
+        input: CreateGatewayInput,
+    ) -> DomainResult<Gateway> {
         debug!(organization_id = %input.organization_id, gateway_type = %input.gateway_type, "Creating gateway");
+
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Gateway,
+                Action::Create,
+            )
+            .await?;
 
         // Validate organization exists and is not deleted
         let org_input = GetOrganizationInput {
@@ -81,8 +99,8 @@ impl GatewayService {
     }
 
     /// Get a gateway by ID and organization
-    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    pub async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Gateway> {
+    #[instrument(skip(self, user_id, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    pub async fn get_gateway(&self, user_id: &str, input: GetGatewayInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Getting gateway");
 
         if input.gateway_id.is_empty() {
@@ -97,6 +115,16 @@ impl GatewayService {
             ));
         }
 
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Gateway,
+                Action::Read,
+            )
+            .await?;
+
         let gateway = self
             .gateway_repository
             .get_gateway(input.clone())
@@ -107,8 +135,12 @@ impl GatewayService {
     }
 
     /// Update a gateway
-    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    pub async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
+    #[instrument(skip(self, user_id, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    pub async fn update_gateway(
+        &self,
+        user_id: &str,
+        input: UpdateGatewayInput,
+    ) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Updating gateway");
 
         if input.gateway_id.is_empty() {
@@ -122,6 +154,16 @@ impl GatewayService {
                 "Organization ID cannot be empty".to_string(),
             ));
         }
+
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Gateway,
+                Action::Update,
+            )
+            .await?;
 
         // Validate gateway_type if provided
         if let Some(ref gateway_type) = input.gateway_type {
@@ -144,8 +186,8 @@ impl GatewayService {
     }
 
     /// Soft delete a gateway
-    #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    pub async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()> {
+    #[instrument(skip(self, user_id, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
+    pub async fn delete_gateway(&self, user_id: &str, input: DeleteGatewayInput) -> DomainResult<()> {
         debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Deleting gateway");
 
         if input.gateway_id.is_empty() {
@@ -160,6 +202,16 @@ impl GatewayService {
             ));
         }
 
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Gateway,
+                Action::Delete,
+            )
+            .await?;
+
         self.gateway_repository.delete_gateway(input).await?;
 
         debug!("Gateway soft deleted successfully");
@@ -167,8 +219,12 @@ impl GatewayService {
     }
 
     /// List gateways by organization
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
-    pub async fn list_gateways(&self, input: ListGatewaysInput) -> DomainResult<Vec<Gateway>> {
+    #[instrument(skip(self, user_id, input), fields(organization_id = %input.organization_id))]
+    pub async fn list_gateways(
+        &self,
+        user_id: &str,
+        input: ListGatewaysInput,
+    ) -> DomainResult<Vec<Gateway>> {
         debug!(organization_id = %input.organization_id, "Listing gateways");
 
         if input.organization_id.is_empty() {
@@ -176,6 +232,16 @@ impl GatewayService {
                 "Organization ID cannot be empty".to_string(),
             ));
         }
+
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Gateway,
+                Action::Read,
+            )
+            .await?;
 
         let gateways = self
             .gateway_repository
@@ -210,10 +276,20 @@ impl GatewayService {
 mod tests {
     use super::*;
     use chrono::Utc;
+    use common::auth::MockAuthorizationProvider;
     use common::domain::{
         EmqxGatewayConfig, GatewayConfig, MockGatewayRepository, MockOrganizationRepository,
         Organization,
     };
+
+    const TEST_USER_ID: &str = "user-123";
+
+    fn create_mock_auth_provider() -> Arc<MockAuthorizationProvider> {
+        let mut mock = MockAuthorizationProvider::new();
+        mock.expect_require_permission()
+            .returning(|_, _, _, _| Box::pin(async { Ok(()) }));
+        Arc::new(mock)
+    }
 
     #[tokio::test]
     async fn test_create_gateway_success() {
@@ -259,7 +335,11 @@ mod tests {
                 })
             });
 
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),
@@ -267,7 +347,7 @@ mod tests {
             gateway_config: test_config,
         };
 
-        let result = service.create_gateway(input).await;
+        let result = service.create_gateway(TEST_USER_ID, input).await;
         assert!(result.is_ok());
         let gateway = result.unwrap();
         assert_eq!(gateway.organization_id, "org-001");
@@ -284,7 +364,11 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = CreateGatewayInput {
             organization_id: "org-999".to_string(),
@@ -295,7 +379,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(input).await;
+        let result = service.create_gateway(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::OrganizationNotFound(_))));
     }
 
@@ -317,7 +401,11 @@ mod tests {
                 }))
             });
 
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),
@@ -328,7 +416,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(input).await;
+        let result = service.create_gateway(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::OrganizationDeleted(_))));
     }
 
@@ -350,7 +438,11 @@ mod tests {
                 }))
             });
 
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),
@@ -361,7 +453,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(input).await;
+        let result = service.create_gateway(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
         if let Err(DomainError::InvalidGatewayConfig(msg)) = result {
             assert!(msg.contains("broker_url"));
@@ -386,7 +478,11 @@ mod tests {
                 }))
             });
 
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),
@@ -397,7 +493,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(input).await;
+        let result = service.create_gateway(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
         if let Err(DomainError::InvalidGatewayConfig(msg)) = result {
             assert!(msg.contains("subscription_group"));
@@ -422,7 +518,11 @@ mod tests {
                 }))
             });
 
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = CreateGatewayInput {
             organization_id: "org-001".to_string(),
@@ -433,7 +533,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(input).await;
+        let result = service.create_gateway(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
     }
 
@@ -441,14 +541,18 @@ mod tests {
     async fn test_get_gateway_empty_organization_id_fails() {
         let mock_gateway_repo = MockGatewayRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = GetGatewayInput {
             gateway_id: "gw-123".to_string(),
             organization_id: "".to_string(),
         };
 
-        let result = service.get_gateway(input).await;
+        let result = service.get_gateway(TEST_USER_ID, input).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -460,7 +564,11 @@ mod tests {
     async fn test_update_gateway_empty_organization_id_fails() {
         let mock_gateway_repo = MockGatewayRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = UpdateGatewayInput {
             gateway_id: "gw-123".to_string(),
@@ -469,7 +577,7 @@ mod tests {
             gateway_config: None,
         };
 
-        let result = service.update_gateway(input).await;
+        let result = service.update_gateway(TEST_USER_ID, input).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -481,14 +589,18 @@ mod tests {
     async fn test_delete_gateway_empty_organization_id_fails() {
         let mock_gateway_repo = MockGatewayRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let service = GatewayService::new(Arc::new(mock_gateway_repo), Arc::new(mock_org_repo));
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
 
         let input = DeleteGatewayInput {
             gateway_id: "gw-123".to_string(),
             organization_id: "".to_string(),
         };
 
-        let result = service.delete_gateway(input).await;
+        let result = service.delete_gateway(TEST_USER_ID, input).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
