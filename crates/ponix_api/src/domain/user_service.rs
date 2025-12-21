@@ -8,20 +8,25 @@ use common::domain::{
     DomainError, DomainResult, GetUserByEmailRepoInput, GetUserRepoInput,
     RegisterUserRepoInputWithId, User, UserRepository,
 };
+use garde::Validate;
 use std::sync::Arc;
 use tracing::{debug, instrument};
 
 // Service Request Types
 // Note: RegisterUserRequest doesn't have user_id because the user is being created
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct RegisterUserRequest {
+    #[garde(email)]
     pub email: String,
+    #[garde(length(min = 8))]
     pub password: String,
+    #[garde(length(min = 1))]
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct GetUserRequest {
+    #[garde(length(min = 1))]
     pub user_id: String,
 }
 
@@ -57,28 +62,10 @@ impl UserService {
     /// Register a new user with hashed password
     #[instrument(skip(self, request), fields(email = %request.email))]
     pub async fn register_user(&self, request: RegisterUserRequest) -> DomainResult<User> {
+        // Validate request using garde
+        common::validation::validate(&request)?;
+
         debug!(email = %request.email, "registering new user");
-
-        // Validate email format (basic validation)
-        if !Self::is_valid_email(&request.email) {
-            return Err(DomainError::InvalidEmail(
-                "Invalid email format".to_string(),
-            ));
-        }
-
-        // Validate password (minimum length)
-        if request.password.len() < 8 {
-            return Err(DomainError::InvalidPassword(
-                "Password must be at least 8 characters".to_string(),
-            ));
-        }
-
-        // Validate name is not empty
-        if request.name.trim().is_empty() {
-            return Err(DomainError::InvalidUserName(
-                "Name cannot be empty".to_string(),
-            ));
-        }
 
         // Hash the password using injected password service
         let password_hash = self.password_service.hash_password(&request.password)?;
@@ -104,13 +91,10 @@ impl UserService {
     /// Get user by ID
     #[instrument(skip(self, request), fields(user_id = %request.user_id))]
     pub async fn get_user(&self, request: GetUserRequest) -> DomainResult<User> {
-        debug!(user_id = %request.user_id, "getting user");
+        // Validate request using garde
+        common::validation::validate(&request)?;
 
-        if request.user_id.is_empty() {
-            return Err(DomainError::InvalidUserId(
-                "User ID cannot be empty".to_string(),
-            ));
-        }
+        debug!(user_id = %request.user_id, "getting user");
 
         let repo_input = GetUserRepoInput {
             user_id: request.user_id.clone(),
@@ -400,7 +384,7 @@ mod tests {
         };
 
         let result = service.register_user(request).await;
-        assert!(matches!(result, Err(DomainError::InvalidEmail(_))));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -426,7 +410,7 @@ mod tests {
         };
 
         let result = service.register_user(request).await;
-        assert!(matches!(result, Err(DomainError::InvalidPassword(_))));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -452,7 +436,7 @@ mod tests {
         };
 
         let result = service.register_user(request).await;
-        assert!(matches!(result, Err(DomainError::InvalidUserName(_))));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -476,7 +460,7 @@ mod tests {
         };
 
         let result = service.get_user(request).await;
-        assert!(matches!(result, Err(DomainError::InvalidUserId(_))));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]

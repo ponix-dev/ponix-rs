@@ -4,6 +4,7 @@ use common::domain::{
     GetOrganizationRepoInput, GetUserOrganizationsRepoInput, ListOrganizationsRepoInput,
     Organization, OrganizationRepository, UpdateOrganizationRepoInput,
 };
+use garde::Validate;
 use std::sync::Arc;
 use tracing::{debug, instrument};
 
@@ -13,41 +14,51 @@ use tracing::{debug, instrument};
 // These types are used by the service layer and embed user_id for authorization
 
 /// Request to create an organization
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct CreateOrganizationRequest {
+    #[garde(length(min = 1))]
     pub user_id: String,
+    #[garde(length(min = 1))]
     pub name: String,
 }
 
 /// Request to get an organization by ID
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct GetOrganizationRequest {
+    #[garde(skip)]
     pub user_id: String,
+    #[garde(length(min = 1))]
     pub organization_id: String,
 }
 
 /// Request to update an organization
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct UpdateOrganizationRequest {
+    #[garde(skip)]
     pub user_id: String,
+    #[garde(length(min = 1))]
     pub organization_id: String,
+    #[garde(length(min = 1))]
     pub name: String,
 }
 
 /// Request to delete an organization
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct DeleteOrganizationRequest {
+    #[garde(skip)]
     pub user_id: String,
+    #[garde(length(min = 1))]
     pub organization_id: String,
 }
 
 /// Request to list all organizations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct ListOrganizationsRequest {}
 
 /// Request to get organizations for a user
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct GetUserOrganizationsRequest {
+    #[garde(length(min = 1))]
     pub user_id: String,
 }
 
@@ -74,21 +85,10 @@ impl OrganizationService {
         &self,
         request: CreateOrganizationRequest,
     ) -> DomainResult<Organization> {
+        // Validate request using garde
+        common::validation::validate(&request)?;
+
         debug!(name = %request.name, user_id = %request.user_id, "creating organization");
-
-        // Validate name is not empty
-        if request.name.trim().is_empty() {
-            return Err(DomainError::InvalidOrganizationName(
-                "Organization name cannot be empty".to_string(),
-            ));
-        }
-
-        // Validate user_id is not empty (mandatory field)
-        if request.user_id.trim().is_empty() {
-            return Err(DomainError::InvalidUserId(
-                "User ID cannot be empty".to_string(),
-            ));
-        }
 
         // Generate unique organization ID using xid
         let organization_id = xid::new().to_string();
@@ -119,13 +119,10 @@ impl OrganizationService {
         &self,
         request: GetOrganizationRequest,
     ) -> DomainResult<Organization> {
-        debug!(organization_id = %request.organization_id, "getting organization");
+        // Validate request using garde
+        common::validation::validate(&request)?;
 
-        if request.organization_id.is_empty() {
-            return Err(DomainError::InvalidOrganizationId(
-                "Organization ID cannot be empty".to_string(),
-            ));
-        }
+        debug!(organization_id = %request.organization_id, "getting organization");
 
         // Check authorization
         self.authorization_provider
@@ -156,19 +153,10 @@ impl OrganizationService {
         &self,
         request: UpdateOrganizationRequest,
     ) -> DomainResult<Organization> {
+        // Validate request using garde
+        common::validation::validate(&request)?;
+
         debug!(organization_id = %request.organization_id, "updating organization");
-
-        if request.organization_id.is_empty() {
-            return Err(DomainError::InvalidOrganizationId(
-                "Organization ID cannot be empty".to_string(),
-            ));
-        }
-
-        if request.name.trim().is_empty() {
-            return Err(DomainError::InvalidOrganizationName(
-                "Organization name cannot be empty".to_string(),
-            ));
-        }
 
         // Check authorization
         self.authorization_provider
@@ -197,13 +185,10 @@ impl OrganizationService {
         &self,
         request: DeleteOrganizationRequest,
     ) -> DomainResult<()> {
-        debug!(organization_id = %request.organization_id, "Deleting organization");
+        // Validate request using garde
+        common::validation::validate(&request)?;
 
-        if request.organization_id.is_empty() {
-            return Err(DomainError::InvalidOrganizationId(
-                "Organization ID cannot be empty".to_string(),
-            ));
-        }
+        debug!(organization_id = %request.organization_id, "Deleting organization");
 
         // Check authorization
         self.authorization_provider
@@ -246,13 +231,10 @@ impl OrganizationService {
         &self,
         request: GetUserOrganizationsRequest,
     ) -> DomainResult<Vec<Organization>> {
-        debug!(user_id = %request.user_id, "getting organizations for user");
+        // Validate request using garde
+        common::validation::validate(&request)?;
 
-        if request.user_id.trim().is_empty() {
-            return Err(DomainError::InvalidUserId(
-                "User ID cannot be empty".to_string(),
-            ));
-        }
+        debug!(user_id = %request.user_id, "getting organizations for user");
 
         let repo_input = GetUserOrganizationsRepoInput {
             user_id: request.user_id,
@@ -327,10 +309,7 @@ mod tests {
         };
 
         let result = service.create_organization(request).await;
-        assert!(matches!(
-            result,
-            Err(DomainError::InvalidOrganizationName(_))
-        ));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -344,7 +323,7 @@ mod tests {
         };
 
         let result = service.create_organization(request).await;
-        assert!(matches!(result, Err(DomainError::InvalidUserId(_))));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -377,7 +356,7 @@ mod tests {
         };
 
         let result = service.get_organization(request).await;
-        assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -392,10 +371,7 @@ mod tests {
         };
 
         let result = service.update_organization(request).await;
-        assert!(matches!(
-            result,
-            Err(DomainError::InvalidOrganizationName(_))
-        ));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -409,7 +385,7 @@ mod tests {
         };
 
         let result = service.delete_organization(request).await;
-        assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -422,7 +398,7 @@ mod tests {
         };
 
         let result = service.get_user_organizations(request).await;
-        assert!(matches!(result, Err(DomainError::InvalidUserId(_))));
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]

@@ -63,5 +63,7 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
         DomainError::AuthorizationError(msg) => Status::internal(msg),
 
         DomainError::RepositoryError(err) => Status::internal(format!("Internal error: {}", err)),
+
+        DomainError::ValidationError(msg) => Status::invalid_argument(msg),
     }
 }
