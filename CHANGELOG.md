@@ -1,3 +1,9 @@
+## [1.9.1](https://github.com/ponix-dev/ponix-rs/compare/v1.9.0...v1.9.1) (2025-12-21)
+
+### Code Refactoring
+
+* decouples service and repo inputs ([#95](https://github.com/ponix-dev/ponix-rs/issues/95)) ([2c24b6b](https://github.com/ponix-dev/ponix-rs/commit/2c24b6b564c2e9b63ff58b6a64fdac2a67799e3a))
+
 ## [1.9.0](https://github.com/ponix-dev/ponix-rs/compare/v1.8.0...v1.9.0) (2025-12-21)
 
 ### Features
