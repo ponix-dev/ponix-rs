@@ -2,9 +2,9 @@
 
 use async_trait::async_trait;
 use common::domain::{
-    CreateGatewayInputWithId, DeleteGatewayInput, DomainError, DomainResult, EmqxGatewayConfig,
-    Gateway, GatewayConfig, GatewayRepository, GetGatewayInput, MockRawEnvelopeProducer,
-    RawEnvelopeProducer, UpdateGatewayInput,
+    CreateGatewayRepoInput, DeleteGatewayRepoInput, DomainError, DomainResult, EmqxGatewayConfig,
+    Gateway, GatewayConfig, GatewayRepository, GetGatewayRepoInput, ListGatewaysRepoInput,
+    MockRawEnvelopeProducer, RawEnvelopeProducer, UpdateGatewayRepoInput,
 };
 use gateway_orchestrator::domain::{
     GatewayOrchestrationService, GatewayOrchestrationServiceConfig, GatewayProcessStore,
@@ -78,16 +78,16 @@ mod mocks {
 
     #[async_trait]
     impl GatewayRepository for MockGatewayRepository {
-        async fn create_gateway(&self, _input: CreateGatewayInputWithId) -> DomainResult<Gateway> {
+        async fn create_gateway(&self, _input: CreateGatewayRepoInput) -> DomainResult<Gateway> {
             unimplemented!("Not needed for orchestrator tests")
         }
 
-        async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Option<Gateway>> {
+        async fn get_gateway(&self, input: GetGatewayRepoInput) -> DomainResult<Option<Gateway>> {
             let gateways = self.gateways.lock().unwrap();
             Ok(gateways.get(&input.gateway_id).cloned())
         }
 
-        async fn list_gateways(&self, _organization_id: &str) -> DomainResult<Vec<Gateway>> {
+        async fn list_gateways(&self, _input: ListGatewaysRepoInput) -> DomainResult<Vec<Gateway>> {
             unimplemented!("Not needed for orchestrator tests")
         }
 
@@ -96,7 +96,7 @@ mod mocks {
             Ok(gateways.values().cloned().collect())
         }
 
-        async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
+        async fn update_gateway(&self, input: UpdateGatewayRepoInput) -> DomainResult<Gateway> {
             let mut gateways = self.gateways.lock().unwrap();
             if let Some(gateway) = gateways.get_mut(&input.gateway_id) {
                 if let Some(config) = input.gateway_config {
@@ -112,7 +112,7 @@ mod mocks {
             }
         }
 
-        async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()> {
+        async fn delete_gateway(&self, input: DeleteGatewayRepoInput) -> DomainResult<()> {
             let mut gateways = self.gateways.lock().unwrap();
             if let Some(gateway) = gateways.get_mut(&input.gateway_id) {
                 gateway.deleted_at = Some(chrono::Utc::now());

@@ -13,7 +13,7 @@ use tower::ServiceBuilder;
 
 use common::auth::MockAuthorizationProvider;
 use common::clickhouse::ClickHouseClient;
-use common::domain::{CreateDeviceInput, Device, RawEnvelope, RawEnvelopeProducer as _};
+use common::domain::{Device, RawEnvelope, RawEnvelopeProducer as _};
 use common::nats::{
     NatsClient, NatsConsumeLoggingLayer, NatsConsumeTracingConfig, NatsConsumeTracingLayer,
     TowerConsumer,
@@ -22,7 +22,7 @@ use common::postgres::{PostgresClient, PostgresDeviceRepository, PostgresOrganiz
 
 use gateway_orchestrator::nats::RawEnvelopeProducer;
 
-use ponix_api::domain::DeviceService;
+use ponix_api::domain::{CreateDeviceRequest, DeviceService};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -300,14 +300,12 @@ async fn create_test_device(
     }"#;
 
     let device = device_service
-        .create_device(
-            "test-user-id",
-            CreateDeviceInput {
-                organization_id: "test-org-123".to_string(),
-                name: "Test Environmental Sensor".to_string(),
-                payload_conversion: cel_expression.to_string(),
-            },
-        )
+        .create_device(CreateDeviceRequest {
+            user_id: "test-user-id".to_string(),
+            organization_id: "test-org-123".to_string(),
+            name: "Test Environmental Sensor".to_string(),
+            payload_conversion: cel_expression.to_string(),
+        })
         .await?;
 
     Ok(device)

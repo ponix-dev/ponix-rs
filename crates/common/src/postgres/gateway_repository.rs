@@ -1,6 +1,7 @@
 use crate::domain::{
-    CreateGatewayInputWithId, DeleteGatewayInput, DomainError, DomainResult, EmqxGatewayConfig,
-    Gateway, GatewayConfig, GatewayRepository, GetGatewayInput, UpdateGatewayInput,
+    CreateGatewayRepoInput, DeleteGatewayRepoInput, DomainError, DomainResult, EmqxGatewayConfig,
+    Gateway, GatewayConfig, GatewayRepository, GetGatewayRepoInput, ListGatewaysRepoInput,
+    UpdateGatewayRepoInput,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -84,7 +85,7 @@ impl PostgresGatewayRepository {
 #[async_trait]
 impl GatewayRepository for PostgresGatewayRepository {
     #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    async fn create_gateway(&self, input: CreateGatewayInputWithId) -> DomainResult<Gateway> {
+    async fn create_gateway(&self, input: CreateGatewayRepoInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, "creating gateway in database");
 
         let conn = self
@@ -136,7 +137,7 @@ impl GatewayRepository for PostgresGatewayRepository {
     }
 
     #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Option<Gateway>> {
+    async fn get_gateway(&self, input: GetGatewayRepoInput) -> DomainResult<Option<Gateway>> {
         debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "getting gateway from database");
 
         let conn = self
@@ -172,7 +173,7 @@ impl GatewayRepository for PostgresGatewayRepository {
     }
 
     #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway> {
+    async fn update_gateway(&self, input: UpdateGatewayRepoInput) -> DomainResult<Gateway> {
         debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "updating gateway in database");
 
         let conn = self
@@ -236,7 +237,7 @@ impl GatewayRepository for PostgresGatewayRepository {
     }
 
     #[instrument(skip(self, input), fields(gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()> {
+    async fn delete_gateway(&self, input: DeleteGatewayRepoInput) -> DomainResult<()> {
         debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "soft deleting gateway");
 
         let conn = self
@@ -265,9 +266,9 @@ impl GatewayRepository for PostgresGatewayRepository {
         Ok(())
     }
 
-    #[instrument(skip(self), fields(organization_id = %organization_id))]
-    async fn list_gateways(&self, organization_id: &str) -> DomainResult<Vec<Gateway>> {
-        debug!(organization_id = %organization_id, "listing gateways from database");
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
+    async fn list_gateways(&self, input: ListGatewaysRepoInput) -> DomainResult<Vec<Gateway>> {
+        debug!(organization_id = %input.organization_id, "listing gateways from database");
 
         let conn = self
             .client
@@ -281,7 +282,7 @@ impl GatewayRepository for PostgresGatewayRepository {
                  FROM gateways
                  WHERE organization_id = $1 AND deleted_at IS NULL
                  ORDER BY created_at DESC",
-                &[&organization_id],
+                &[&input.organization_id],
             )
             .await
             .map_err(|e| DomainError::RepositoryError(e.into()))?;

@@ -7,10 +7,10 @@ use common::auth::{
     Argon2PasswordService, CasbinAuthorizationService, CryptoRefreshTokenProvider,
     JwtAuthTokenProvider, JwtConfig,
 };
-use common::postgres::create_postgres_authorization_adapter;
 use common::clickhouse::ClickHouseClient;
 use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
+use common::postgres::create_postgres_authorization_adapter;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
     PostgresOrganizationRepository, PostgresRefreshTokenRepository, PostgresUserRepository,
@@ -77,8 +77,7 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    let authorization_service = match CasbinAuthorizationService::new(authorization_adapter).await
-    {
+    let authorization_service = match CasbinAuthorizationService::new(authorization_adapter).await {
         Ok(service) => Arc::new(service),
         Err(e) => {
             error!("Failed to initialize authorization service: {}", e);
@@ -277,7 +276,12 @@ struct PostgresRepositories {
 
 async fn initialize_shared_dependencies(
     config: &ServiceConfig,
-) -> anyhow::Result<(PostgresRepositories, PostgresClient, ClickHouseClient, Arc<NatsClient>)> {
+) -> anyhow::Result<(
+    PostgresRepositories,
+    PostgresClient,
+    ClickHouseClient,
+    Arc<NatsClient>,
+)> {
     // PostgreSQL initialization
     info!("Initializing PostgreSQL...");
     run_postgres_migrations(config).await?;
@@ -306,7 +310,12 @@ async fn initialize_shared_dependencies(
     );
     ensure_nats_streams(&nats_client, config).await?;
 
-    Ok((postgres_repos, postgres_client, clickhouse_client, nats_client))
+    Ok((
+        postgres_repos,
+        postgres_client,
+        clickhouse_client,
+        nats_client,
+    ))
 }
 
 async fn run_postgres_migrations(config: &ServiceConfig) -> anyhow::Result<()> {

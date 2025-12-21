@@ -1,11 +1,53 @@
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
-    CreateGatewayInput, CreateGatewayInputWithId, DeleteGatewayInput, DomainError, DomainResult,
-    Gateway, GatewayConfig, GatewayRepository, GetGatewayInput, GetOrganizationInput,
-    ListGatewaysInput, OrganizationRepository, UpdateGatewayInput,
+    CreateGatewayRepoInput, DeleteGatewayRepoInput, DomainError, DomainResult, Gateway,
+    GatewayConfig, GatewayRepository, GetGatewayRepoInput, GetOrganizationRepoInput,
+    ListGatewaysRepoInput, OrganizationRepository, UpdateGatewayRepoInput,
 };
 use std::sync::Arc;
 use tracing::{debug, instrument};
+
+/// Service request for creating a gateway
+#[derive(Debug, Clone)]
+pub struct CreateGatewayRequest {
+    pub user_id: String,
+    pub organization_id: String,
+    pub gateway_type: String,
+    pub gateway_config: GatewayConfig,
+}
+
+/// Service request for getting a gateway
+#[derive(Debug, Clone)]
+pub struct GetGatewayRequest {
+    pub user_id: String,
+    pub gateway_id: String,
+    pub organization_id: String,
+}
+
+/// Service request for updating a gateway
+#[derive(Debug, Clone)]
+pub struct UpdateGatewayRequest {
+    pub user_id: String,
+    pub gateway_id: String,
+    pub organization_id: String,
+    pub gateway_type: Option<String>,
+    pub gateway_config: Option<GatewayConfig>,
+}
+
+/// Service request for deleting a gateway
+#[derive(Debug, Clone)]
+pub struct DeleteGatewayRequest {
+    pub user_id: String,
+    pub gateway_id: String,
+    pub organization_id: String,
+}
+
+/// Service request for listing gateways
+#[derive(Debug, Clone)]
+pub struct ListGatewaysRequest {
+    pub user_id: String,
+    pub organization_id: String,
+}
 
 /// Service for gateway business logic
 pub struct GatewayService {
@@ -28,27 +70,23 @@ impl GatewayService {
     }
 
     /// Create a new gateway for an organization
-    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id, gateway_type = %input.gateway_type))]
-    pub async fn create_gateway(
-        &self,
-        user_id: &str,
-        input: CreateGatewayInput,
-    ) -> DomainResult<Gateway> {
-        debug!(organization_id = %input.organization_id, gateway_type = %input.gateway_type, "Creating gateway");
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, gateway_type = %request.gateway_type))]
+    pub async fn create_gateway(&self, request: CreateGatewayRequest) -> DomainResult<Gateway> {
+        debug!(organization_id = %request.organization_id, gateway_type = %request.gateway_type, "Creating gateway");
 
         // Check authorization
         self.authorization_provider
             .require_permission(
-                user_id,
-                &input.organization_id,
+                &request.user_id,
+                &request.organization_id,
                 Resource::Gateway,
                 Action::Create,
             )
             .await?;
 
         // Validate organization exists and is not deleted
-        let org_input = GetOrganizationInput {
-            organization_id: input.organization_id.clone(),
+        let org_input = GetOrganizationRepoInput {
+            organization_id: request.organization_id.clone(),
         };
 
         match self
@@ -60,36 +98,36 @@ impl GatewayService {
                 if org.deleted_at.is_some() {
                     return Err(DomainError::OrganizationDeleted(format!(
                         "Cannot create gateway for deleted organization: {}",
-                        input.organization_id
+                        request.organization_id
                     )));
                 }
             }
             None => {
                 return Err(DomainError::OrganizationNotFound(format!(
                     "Organization not found: {}",
-                    input.organization_id
+                    request.organization_id
                 )));
             }
         }
 
         // Validate gateway_type is not empty
-        if input.gateway_type.trim().is_empty() {
+        if request.gateway_type.trim().is_empty() {
             return Err(DomainError::InvalidGatewayType(
                 "Gateway type cannot be empty".to_string(),
             ));
         }
 
         // Validate gateway config fields
-        Self::validate_gateway_config(&input.gateway_config)?;
+        Self::validate_gateway_config(&request.gateway_config)?;
 
         // Generate gateway ID
         let gateway_id = xid::new().to_string();
 
-        let repo_input = CreateGatewayInputWithId {
+        let repo_input = CreateGatewayRepoInput {
             gateway_id: gateway_id.clone(),
-            organization_id: input.organization_id,
-            gateway_type: input.gateway_type,
-            gateway_config: input.gateway_config,
+            organization_id: request.organization_id,
+            gateway_type: request.gateway_type,
+            gateway_config: request.gateway_config,
         };
 
         let gateway = self.gateway_repository.create_gateway(repo_input).await?;
@@ -99,17 +137,17 @@ impl GatewayService {
     }
 
     /// Get a gateway by ID and organization
-    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    pub async fn get_gateway(&self, user_id: &str, input: GetGatewayInput) -> DomainResult<Gateway> {
-        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Getting gateway");
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
+    pub async fn get_gateway(&self, request: GetGatewayRequest) -> DomainResult<Gateway> {
+        debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Getting gateway");
 
-        if input.gateway_id.is_empty() {
+        if request.gateway_id.is_empty() {
             return Err(DomainError::InvalidGatewayId(
                 "Gateway ID cannot be empty".to_string(),
             ));
         }
 
-        if input.organization_id.is_empty() {
+        if request.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
                 "Organization ID cannot be empty".to_string(),
             ));
@@ -118,38 +156,39 @@ impl GatewayService {
         // Check authorization
         self.authorization_provider
             .require_permission(
-                user_id,
-                &input.organization_id,
+                &request.user_id,
+                &request.organization_id,
                 Resource::Gateway,
                 Action::Read,
             )
             .await?;
 
+        let repo_input = GetGatewayRepoInput {
+            gateway_id: request.gateway_id.clone(),
+            organization_id: request.organization_id,
+        };
+
         let gateway = self
             .gateway_repository
-            .get_gateway(input.clone())
+            .get_gateway(repo_input)
             .await?
-            .ok_or_else(|| DomainError::GatewayNotFound(input.gateway_id))?;
+            .ok_or_else(|| DomainError::GatewayNotFound(request.gateway_id))?;
 
         Ok(gateway)
     }
 
     /// Update a gateway
-    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    pub async fn update_gateway(
-        &self,
-        user_id: &str,
-        input: UpdateGatewayInput,
-    ) -> DomainResult<Gateway> {
-        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Updating gateway");
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
+    pub async fn update_gateway(&self, request: UpdateGatewayRequest) -> DomainResult<Gateway> {
+        debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Updating gateway");
 
-        if input.gateway_id.is_empty() {
+        if request.gateway_id.is_empty() {
             return Err(DomainError::InvalidGatewayId(
                 "Gateway ID cannot be empty".to_string(),
             ));
         }
 
-        if input.organization_id.is_empty() {
+        if request.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
                 "Organization ID cannot be empty".to_string(),
             ));
@@ -158,15 +197,15 @@ impl GatewayService {
         // Check authorization
         self.authorization_provider
             .require_permission(
-                user_id,
-                &input.organization_id,
+                &request.user_id,
+                &request.organization_id,
                 Resource::Gateway,
                 Action::Update,
             )
             .await?;
 
         // Validate gateway_type if provided
-        if let Some(ref gateway_type) = input.gateway_type {
+        if let Some(ref gateway_type) = request.gateway_type {
             if gateway_type.trim().is_empty() {
                 return Err(DomainError::InvalidGatewayType(
                     "Gateway type cannot be empty".to_string(),
@@ -175,28 +214,35 @@ impl GatewayService {
         }
 
         // Validate gateway config fields if provided
-        if let Some(ref config) = input.gateway_config {
+        if let Some(ref config) = request.gateway_config {
             Self::validate_gateway_config(config)?;
         }
 
-        let gateway = self.gateway_repository.update_gateway(input).await?;
+        let repo_input = UpdateGatewayRepoInput {
+            gateway_id: request.gateway_id,
+            organization_id: request.organization_id,
+            gateway_type: request.gateway_type,
+            gateway_config: request.gateway_config,
+        };
+
+        let gateway = self.gateway_repository.update_gateway(repo_input).await?;
 
         debug!(gateway_id = %gateway.gateway_id, "Gateway updated successfully");
         Ok(gateway)
     }
 
     /// Soft delete a gateway
-    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, gateway_id = %input.gateway_id, organization_id = %input.organization_id))]
-    pub async fn delete_gateway(&self, user_id: &str, input: DeleteGatewayInput) -> DomainResult<()> {
-        debug!(gateway_id = %input.gateway_id, organization_id = %input.organization_id, "Deleting gateway");
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
+    pub async fn delete_gateway(&self, request: DeleteGatewayRequest) -> DomainResult<()> {
+        debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Deleting gateway");
 
-        if input.gateway_id.is_empty() {
+        if request.gateway_id.is_empty() {
             return Err(DomainError::InvalidGatewayId(
                 "Gateway ID cannot be empty".to_string(),
             ));
         }
 
-        if input.organization_id.is_empty() {
+        if request.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
                 "Organization ID cannot be empty".to_string(),
             ));
@@ -205,29 +251,30 @@ impl GatewayService {
         // Check authorization
         self.authorization_provider
             .require_permission(
-                user_id,
-                &input.organization_id,
+                &request.user_id,
+                &request.organization_id,
                 Resource::Gateway,
                 Action::Delete,
             )
             .await?;
 
-        self.gateway_repository.delete_gateway(input).await?;
+        let repo_input = DeleteGatewayRepoInput {
+            gateway_id: request.gateway_id,
+            organization_id: request.organization_id,
+        };
+
+        self.gateway_repository.delete_gateway(repo_input).await?;
 
         debug!("Gateway soft deleted successfully");
         Ok(())
     }
 
     /// List gateways by organization
-    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
-    pub async fn list_gateways(
-        &self,
-        user_id: &str,
-        input: ListGatewaysInput,
-    ) -> DomainResult<Vec<Gateway>> {
-        debug!(organization_id = %input.organization_id, "Listing gateways");
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
+    pub async fn list_gateways(&self, request: ListGatewaysRequest) -> DomainResult<Vec<Gateway>> {
+        debug!(organization_id = %request.organization_id, "Listing gateways");
 
-        if input.organization_id.is_empty() {
+        if request.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
                 "Organization ID cannot be empty".to_string(),
             ));
@@ -236,17 +283,18 @@ impl GatewayService {
         // Check authorization
         self.authorization_provider
             .require_permission(
-                user_id,
-                &input.organization_id,
+                &request.user_id,
+                &request.organization_id,
                 Resource::Gateway,
                 Action::Read,
             )
             .await?;
 
-        let gateways = self
-            .gateway_repository
-            .list_gateways(&input.organization_id)
-            .await?;
+        let repo_input = ListGatewaysRepoInput {
+            organization_id: request.organization_id,
+        };
+
+        let gateways = self.gateway_repository.list_gateways(repo_input).await?;
 
         debug!(count = gateways.len(), "Listed gateways");
         Ok(gateways)
@@ -341,13 +389,14 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateGatewayInput {
+        let request = CreateGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: test_config,
         };
 
-        let result = service.create_gateway(TEST_USER_ID, input).await;
+        let result = service.create_gateway(request).await;
         assert!(result.is_ok());
         let gateway = result.unwrap();
         assert_eq!(gateway.organization_id, "org-001");
@@ -370,7 +419,8 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateGatewayInput {
+        let request = CreateGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-999".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
@@ -379,7 +429,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(TEST_USER_ID, input).await;
+        let result = service.create_gateway(request).await;
         assert!(matches!(result, Err(DomainError::OrganizationNotFound(_))));
     }
 
@@ -407,7 +457,8 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateGatewayInput {
+        let request = CreateGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
@@ -416,7 +467,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(TEST_USER_ID, input).await;
+        let result = service.create_gateway(request).await;
         assert!(matches!(result, Err(DomainError::OrganizationDeleted(_))));
     }
 
@@ -444,7 +495,8 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateGatewayInput {
+        let request = CreateGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
@@ -453,7 +505,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(TEST_USER_ID, input).await;
+        let result = service.create_gateway(request).await;
         assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
         if let Err(DomainError::InvalidGatewayConfig(msg)) = result {
             assert!(msg.contains("broker_url"));
@@ -484,7 +536,8 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateGatewayInput {
+        let request = CreateGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
@@ -493,7 +546,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(TEST_USER_ID, input).await;
+        let result = service.create_gateway(request).await;
         assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
         if let Err(DomainError::InvalidGatewayConfig(msg)) = result {
             assert!(msg.contains("subscription_group"));
@@ -524,7 +577,8 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateGatewayInput {
+        let request = CreateGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
@@ -533,7 +587,7 @@ mod tests {
             }),
         };
 
-        let result = service.create_gateway(TEST_USER_ID, input).await;
+        let result = service.create_gateway(request).await;
         assert!(matches!(result, Err(DomainError::InvalidGatewayConfig(_))));
     }
 
@@ -547,12 +601,13 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = GetGatewayInput {
+        let request = GetGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             gateway_id: "gw-123".to_string(),
             organization_id: "".to_string(),
         };
 
-        let result = service.get_gateway(TEST_USER_ID, input).await;
+        let result = service.get_gateway(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -570,14 +625,15 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = UpdateGatewayInput {
+        let request = UpdateGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             gateway_id: "gw-123".to_string(),
             organization_id: "".to_string(),
             gateway_type: None,
             gateway_config: None,
         };
 
-        let result = service.update_gateway(TEST_USER_ID, input).await;
+        let result = service.update_gateway(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -595,12 +651,13 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = DeleteGatewayInput {
+        let request = DeleteGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
             gateway_id: "gw-123".to_string(),
             organization_id: "".to_string(),
         };
 
-        let result = service.delete_gateway(TEST_USER_ID, input).await;
+        let result = service.delete_gateway(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),

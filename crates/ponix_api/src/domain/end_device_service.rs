@@ -1,10 +1,34 @@
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
-    CreateDeviceInput, CreateDeviceInputWithId, Device, DeviceRepository, DomainError,
-    DomainResult, GetDeviceInput, GetOrganizationInput, ListDevicesInput, OrganizationRepository,
+    CreateDeviceRepoInput, Device, DeviceRepository, DomainError, DomainResult, GetDeviceRepoInput,
+    GetOrganizationRepoInput, ListDevicesRepoInput, OrganizationRepository,
 };
 use std::sync::Arc;
 use tracing::{debug, instrument};
+
+/// Service request for creating a device
+#[derive(Debug, Clone)]
+pub struct CreateDeviceRequest {
+    pub user_id: String,
+    pub organization_id: String,
+    pub name: String,
+    pub payload_conversion: String,
+}
+
+/// Service request for getting a device
+#[derive(Debug, Clone)]
+pub struct GetDeviceRequest {
+    pub user_id: String,
+    pub device_id: String,
+    pub organization_id: String,
+}
+
+/// Service request for listing devices
+#[derive(Debug, Clone)]
+pub struct ListDevicesRequest {
+    pub user_id: String,
+    pub organization_id: String,
+}
 
 /// Domain service for device management business logic
 /// This is the orchestration layer that handlers call
@@ -30,20 +54,16 @@ impl DeviceService {
     /// Create a new device with business logic validation
     /// Generates a unique device_id using xid
     /// Validates that the organization exists and is not deleted
-    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id, device_name = %input.name))]
-    pub async fn create_device(
-        &self,
-        user_id: &str,
-        input: CreateDeviceInput,
-    ) -> DomainResult<Device> {
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, device_name = %request.name))]
+    pub async fn create_device(&self, request: CreateDeviceRequest) -> DomainResult<Device> {
         // Business logic: validate inputs
-        if input.organization_id.is_empty() {
+        if request.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
                 "Organization ID cannot be empty".to_string(),
             ));
         }
 
-        if input.name.is_empty() {
+        if request.name.is_empty() {
             return Err(DomainError::InvalidDeviceName(
                 "Device name cannot be empty".to_string(),
             ));
@@ -52,8 +72,8 @@ impl DeviceService {
         // Check authorization
         self.authorization_provider
             .require_permission(
-                user_id,
-                &input.organization_id,
+                &request.user_id,
+                &request.organization_id,
                 Resource::Device,
                 Action::Create,
             )
@@ -61,9 +81,9 @@ impl DeviceService {
 
         // TODO: this may be more efficient to do at the db layer with a foreign key constraint
         // Validate organization exists and is not deleted
-        debug!(organization_id = %input.organization_id, "validating organization exists");
-        let org_input = GetOrganizationInput {
-            organization_id: input.organization_id.clone(),
+        debug!(organization_id = %request.organization_id, "validating organization exists");
+        let org_input = GetOrganizationRepoInput {
+            organization_id: request.organization_id.clone(),
         };
 
         match self
@@ -75,14 +95,14 @@ impl DeviceService {
                 if org.deleted_at.is_some() {
                     return Err(DomainError::OrganizationDeleted(format!(
                         "Cannot create device for deleted organization: {}",
-                        input.organization_id
+                        request.organization_id
                     )));
                 }
             }
             None => {
                 return Err(DomainError::OrganizationNotFound(format!(
                     "Organization not found: {}",
-                    input.organization_id
+                    request.organization_id
                 )));
             }
         }
@@ -90,14 +110,14 @@ impl DeviceService {
         // Generate unique device ID
         let device_id = xid::new().to_string();
 
-        debug!(device_id = %device_id, organization_id = %input.organization_id, "creating device");
+        debug!(device_id = %device_id, organization_id = %request.organization_id, "creating device");
 
         // Create input with generated ID for repository
-        let repo_input = CreateDeviceInputWithId {
+        let repo_input = CreateDeviceRepoInput {
             device_id,
-            organization_id: input.organization_id,
-            name: input.name,
-            payload_conversion: input.payload_conversion,
+            organization_id: request.organization_id,
+            name: request.name,
+            payload_conversion: request.payload_conversion,
         };
 
         let device = self.device_repository.create_device(repo_input).await?;
@@ -106,15 +126,15 @@ impl DeviceService {
     }
 
     /// Get a device by ID and organization
-    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, device_id = %input.device_id, organization_id = %input.organization_id))]
-    pub async fn get_device(&self, user_id: &str, input: GetDeviceInput) -> DomainResult<Device> {
-        if input.device_id.is_empty() {
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id))]
+    pub async fn get_device(&self, request: GetDeviceRequest) -> DomainResult<Device> {
+        if request.device_id.is_empty() {
             return Err(DomainError::InvalidDeviceId(
                 "Device ID cannot be empty".to_string(),
             ));
         }
 
-        if input.organization_id.is_empty() {
+        if request.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
                 "Organization ID cannot be empty".to_string(),
             ));
@@ -123,18 +143,23 @@ impl DeviceService {
         // Check authorization
         self.authorization_provider
             .require_permission(
-                user_id,
-                &input.organization_id,
+                &request.user_id,
+                &request.organization_id,
                 Resource::Device,
                 Action::Read,
             )
             .await?;
 
-        debug!(device_id = %input.device_id, organization_id = %input.organization_id, "getting device");
+        debug!(device_id = %request.device_id, organization_id = %request.organization_id, "getting device");
+
+        let repo_input = GetDeviceRepoInput {
+            device_id: request.device_id,
+            organization_id: request.organization_id,
+        };
 
         let device = self
             .device_repository
-            .get_device(input)
+            .get_device(repo_input)
             .await?
             .ok_or_else(|| DomainError::DeviceNotFound("Device not found".to_string()))?;
 
@@ -142,13 +167,9 @@ impl DeviceService {
     }
 
     /// List devices for an organization
-    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
-    pub async fn list_devices(
-        &self,
-        user_id: &str,
-        input: ListDevicesInput,
-    ) -> DomainResult<Vec<Device>> {
-        if input.organization_id.is_empty() {
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
+    pub async fn list_devices(&self, request: ListDevicesRequest) -> DomainResult<Vec<Device>> {
+        if request.organization_id.is_empty() {
             return Err(DomainError::InvalidOrganizationId(
                 "Organization ID cannot be empty".to_string(),
             ));
@@ -157,16 +178,20 @@ impl DeviceService {
         // Check authorization
         self.authorization_provider
             .require_permission(
-                user_id,
-                &input.organization_id,
+                &request.user_id,
+                &request.organization_id,
                 Resource::Device,
                 Action::Read,
             )
             .await?;
 
-        debug!(organization_id = %input.organization_id, "listing devices");
+        debug!(organization_id = %request.organization_id, "listing devices");
 
-        let devices = self.device_repository.list_devices(input).await?;
+        let repo_input = ListDevicesRepoInput {
+            organization_id: request.organization_id,
+        };
+
+        let devices = self.device_repository.list_devices(repo_input).await?;
 
         debug!(count = devices.len(), "listed devices");
         Ok(devices)
@@ -204,7 +229,7 @@ mod tests {
 
         mock_org_repo
             .expect_get_organization()
-            .withf(|input: &GetOrganizationInput| input.organization_id == "org-456")
+            .withf(|input: &GetOrganizationRepoInput| input.organization_id == "org-456")
             .times(1)
             .return_once(move |_| Ok(Some(org)));
 
@@ -219,7 +244,7 @@ mod tests {
 
         mock_device_repo
             .expect_create_device()
-            .withf(|input: &CreateDeviceInputWithId| {
+            .withf(|input: &CreateDeviceRepoInput| {
                 !input.device_id.is_empty() // ID is generated
                     && input.organization_id == "org-456"
                     && input.name == "Test Device"
@@ -234,13 +259,14 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateDeviceInput {
+        let request = CreateDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "test conversion".to_string(),
         };
 
-        let result = service.create_device(TEST_USER_ID, input).await;
+        let result = service.create_device(request).await;
         assert!(result.is_ok());
 
         let device = result.unwrap();
@@ -258,13 +284,14 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateDeviceInput {
+        let request = CreateDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "".to_string(),
             payload_conversion: "test conversion".to_string(),
         };
 
-        let result = service.create_device(TEST_USER_ID, input).await;
+        let result = service.create_device(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -289,13 +316,14 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateDeviceInput {
+        let request = CreateDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "nonexistent-org".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "test conversion".to_string(),
         };
 
-        let result = service.create_device(TEST_USER_ID, input).await;
+        let result = service.create_device(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -328,13 +356,14 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = CreateDeviceInput {
+        let request = CreateDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-deleted".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "test conversion".to_string(),
         };
 
-        let result = service.create_device(TEST_USER_ID, input).await;
+        let result = service.create_device(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -358,7 +387,7 @@ mod tests {
 
         mock_device_repo
             .expect_get_device()
-            .withf(|input: &GetDeviceInput| {
+            .withf(|input: &GetDeviceRepoInput| {
                 input.device_id == "device-123" && input.organization_id == "org-456"
             })
             .times(1)
@@ -370,12 +399,13 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = GetDeviceInput {
+        let request = GetDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
         };
 
-        let result = service.get_device(TEST_USER_ID, input).await;
+        let result = service.get_device(request).await;
         assert!(result.is_ok());
     }
 
@@ -395,12 +425,13 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = GetDeviceInput {
+        let request = GetDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
             device_id: "nonexistent".to_string(),
             organization_id: "org-456".to_string(),
         };
 
-        let result = service.get_device(TEST_USER_ID, input).await;
+        let result = service.get_device(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -418,12 +449,13 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = GetDeviceInput {
+        let request = GetDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
             device_id: "device-123".to_string(),
             organization_id: "".to_string(),
         };
 
-        let result = service.get_device(TEST_USER_ID, input).await;
+        let result = service.get_device(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -457,7 +489,7 @@ mod tests {
 
         mock_device_repo
             .expect_list_devices()
-            .withf(|input: &ListDevicesInput| input.organization_id == "org-456")
+            .withf(|input: &ListDevicesRepoInput| input.organization_id == "org-456")
             .times(1)
             .return_once(move |_| Ok(devices));
 
@@ -467,11 +499,12 @@ mod tests {
             create_mock_auth_provider(),
         );
 
-        let input = ListDevicesInput {
+        let request = ListDevicesRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
         };
 
-        let result = service.list_devices(TEST_USER_ID, input).await;
+        let result = service.list_devices(request).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
     }
@@ -498,13 +531,14 @@ mod tests {
             Arc::new(mock_auth),
         );
 
-        let input = CreateDeviceInput {
+        let request = CreateDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "test conversion".to_string(),
         };
 
-        let result = service.create_device(TEST_USER_ID, input).await;
+        let result = service.create_device(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),

@@ -1,6 +1,6 @@
 use crate::domain::{
-    DomainError, DomainResult, GetUserByEmailInput, GetUserInput, RegisterUserInputWithId, User,
-    UserRepository,
+    DomainError, DomainResult, GetUserByEmailRepoInput, GetUserRepoInput,
+    RegisterUserRepoInputWithId, User, UserRepository,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -47,7 +47,7 @@ impl PostgresUserRepository {
 #[async_trait]
 impl UserRepository for PostgresUserRepository {
     #[instrument(skip(self, input), fields(user_id = %input.id, email = %input.email))]
-    async fn register_user(&self, input: RegisterUserInputWithId) -> DomainResult<User> {
+    async fn register_user(&self, input: RegisterUserRepoInputWithId) -> DomainResult<User> {
         let conn = self
             .client
             .get_connection()
@@ -94,7 +94,7 @@ impl UserRepository for PostgresUserRepository {
     }
 
     #[instrument(skip(self, input), fields(user_id = %input.user_id))]
-    async fn get_user(&self, input: GetUserInput) -> DomainResult<Option<User>> {
+    async fn get_user(&self, input: GetUserRepoInput) -> DomainResult<Option<User>> {
         let conn = self
             .client
             .get_connection()
@@ -130,7 +130,10 @@ impl UserRepository for PostgresUserRepository {
     }
 
     #[instrument(skip(self, input), fields(email = %input.email))]
-    async fn get_user_by_email(&self, input: GetUserByEmailInput) -> DomainResult<Option<User>> {
+    async fn get_user_by_email(
+        &self,
+        input: GetUserByEmailRepoInput,
+    ) -> DomainResult<Option<User>> {
         let conn = self
             .client
             .get_connection()

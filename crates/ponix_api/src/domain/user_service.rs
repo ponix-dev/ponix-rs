@@ -5,11 +5,25 @@ use common::auth::{
     RotateRefreshTokenInput,
 };
 use common::domain::{
-    DomainError, DomainResult, GetUserByEmailInput, GetUserInput, RegisterUserInput,
-    RegisterUserInputWithId, User, UserRepository,
+    DomainError, DomainResult, GetUserByEmailRepoInput, GetUserRepoInput,
+    RegisterUserRepoInputWithId, User, UserRepository,
 };
 use std::sync::Arc;
 use tracing::{debug, instrument};
+
+// Service Request Types
+// Note: RegisterUserRequest doesn't have user_id because the user is being created
+#[derive(Debug, Clone)]
+pub struct RegisterUserRequest {
+    pub email: String,
+    pub password: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct GetUserRequest {
+    pub user_id: String,
+}
 
 /// Domain service for user registration and management
 pub struct UserService {
@@ -41,44 +55,44 @@ impl UserService {
     }
 
     /// Register a new user with hashed password
-    #[instrument(skip(self, input), fields(email = %input.email))]
-    pub async fn register_user(&self, input: RegisterUserInput) -> DomainResult<User> {
-        debug!(email = %input.email, "registering new user");
+    #[instrument(skip(self, request), fields(email = %request.email))]
+    pub async fn register_user(&self, request: RegisterUserRequest) -> DomainResult<User> {
+        debug!(email = %request.email, "registering new user");
 
         // Validate email format (basic validation)
-        if !Self::is_valid_email(&input.email) {
+        if !Self::is_valid_email(&request.email) {
             return Err(DomainError::InvalidEmail(
                 "Invalid email format".to_string(),
             ));
         }
 
         // Validate password (minimum length)
-        if input.password.len() < 8 {
+        if request.password.len() < 8 {
             return Err(DomainError::InvalidPassword(
                 "Password must be at least 8 characters".to_string(),
             ));
         }
 
         // Validate name is not empty
-        if input.name.trim().is_empty() {
+        if request.name.trim().is_empty() {
             return Err(DomainError::InvalidUserName(
                 "Name cannot be empty".to_string(),
             ));
         }
 
         // Hash the password using injected password service
-        let password_hash = self.password_service.hash_password(&input.password)?;
+        let password_hash = self.password_service.hash_password(&request.password)?;
 
         // Generate unique user ID using xid
         let user_id = xid::new().to_string();
 
-        debug!(user_id = %user_id, email = %input.email, "registering user with hashed password");
+        debug!(user_id = %user_id, email = %request.email, "registering user with hashed password");
 
-        let repo_input = RegisterUserInputWithId {
+        let repo_input = RegisterUserRepoInputWithId {
             id: user_id,
-            email: input.email,
+            email: request.email,
             password_hash,
-            name: input.name,
+            name: request.name,
         };
 
         let user = self.user_repository.register_user(repo_input).await?;
@@ -88,21 +102,25 @@ impl UserService {
     }
 
     /// Get user by ID
-    #[instrument(skip(self, input), fields(user_id = %input.user_id))]
-    pub async fn get_user(&self, input: GetUserInput) -> DomainResult<User> {
-        debug!(user_id = %input.user_id, "getting user");
+    #[instrument(skip(self, request), fields(user_id = %request.user_id))]
+    pub async fn get_user(&self, request: GetUserRequest) -> DomainResult<User> {
+        debug!(user_id = %request.user_id, "getting user");
 
-        if input.user_id.is_empty() {
+        if request.user_id.is_empty() {
             return Err(DomainError::InvalidUserId(
                 "User ID cannot be empty".to_string(),
             ));
         }
 
+        let repo_input = GetUserRepoInput {
+            user_id: request.user_id.clone(),
+        };
+
         let user = self
             .user_repository
-            .get_user(input.clone())
+            .get_user(repo_input)
             .await?
-            .ok_or_else(|| DomainError::UserNotFound(input.user_id.clone()))?;
+            .ok_or_else(|| DomainError::UserNotFound(request.user_id))?;
 
         Ok(user)
     }
@@ -131,7 +149,7 @@ impl UserService {
         // Look up user by email
         let user = self
             .user_repository
-            .get_user_by_email(GetUserByEmailInput {
+            .get_user_by_email(GetUserByEmailRepoInput {
                 email: input.email.clone(),
             })
             .await?
@@ -210,7 +228,7 @@ impl UserService {
         // Get the user to generate new access token
         let user = self
             .user_repository
-            .get_user(GetUserInput {
+            .get_user(GetUserRepoInput {
                 user_id: stored_token.user_id.clone(),
             })
             .await?
@@ -321,7 +339,7 @@ mod tests {
 
         mock_repo
             .expect_register_user()
-            .withf(|input: &RegisterUserInputWithId| {
+            .withf(|input: &RegisterUserRepoInputWithId| {
                 !input.id.is_empty()
                     && input.email == "test@example.com"
                     && input.password_hash == "hashed-password"
@@ -346,13 +364,13 @@ mod tests {
             mock_refresh_provider,
             mock_password,
         );
-        let input = RegisterUserInput {
+        let request = RegisterUserRequest {
             email: "test@example.com".to_string(),
             password: "securepassword123".to_string(),
             name: "John Doe".to_string(),
         };
 
-        let result = service.register_user(input).await;
+        let result = service.register_user(request).await;
         assert!(result.is_ok());
         let user = result.unwrap();
         assert_eq!(user.email, "test@example.com");
@@ -375,13 +393,13 @@ mod tests {
             mock_password,
         );
 
-        let input = RegisterUserInput {
+        let request = RegisterUserRequest {
             email: "invalid-email".to_string(),
             password: "securepassword123".to_string(),
             name: "John Doe".to_string(),
         };
 
-        let result = service.register_user(input).await;
+        let result = service.register_user(request).await;
         assert!(matches!(result, Err(DomainError::InvalidEmail(_))));
     }
 
@@ -401,13 +419,13 @@ mod tests {
             mock_password,
         );
 
-        let input = RegisterUserInput {
+        let request = RegisterUserRequest {
             email: "test@example.com".to_string(),
             password: "short".to_string(),
             name: "John Doe".to_string(),
         };
 
-        let result = service.register_user(input).await;
+        let result = service.register_user(request).await;
         assert!(matches!(result, Err(DomainError::InvalidPassword(_))));
     }
 
@@ -427,13 +445,13 @@ mod tests {
             mock_password,
         );
 
-        let input = RegisterUserInput {
+        let request = RegisterUserRequest {
             email: "test@example.com".to_string(),
             password: "securepassword123".to_string(),
             name: "".to_string(),
         };
 
-        let result = service.register_user(input).await;
+        let result = service.register_user(request).await;
         assert!(matches!(result, Err(DomainError::InvalidUserName(_))));
     }
 
@@ -453,11 +471,11 @@ mod tests {
             mock_password,
         );
 
-        let input = GetUserInput {
+        let request = GetUserRequest {
             user_id: "".to_string(),
         };
 
-        let result = service.get_user(input).await;
+        let result = service.get_user(request).await;
         assert!(matches!(result, Err(DomainError::InvalidUserId(_))));
     }
 
@@ -481,11 +499,11 @@ mod tests {
             mock_refresh_provider,
             mock_password,
         );
-        let input = GetUserInput {
+        let request = GetUserRequest {
             user_id: "nonexistent".to_string(),
         };
 
-        let result = service.get_user(input).await;
+        let result = service.get_user(request).await;
         assert!(matches!(result, Err(DomainError::UserNotFound(_))));
     }
 
@@ -508,7 +526,7 @@ mod tests {
 
         mock_repo
             .expect_get_user_by_email()
-            .withf(|input: &GetUserByEmailInput| input.email == "test@example.com")
+            .withf(|input: &GetUserByEmailRepoInput| input.email == "test@example.com")
             .times(1)
             .return_once(move |_| Ok(Some(stored_user)));
 

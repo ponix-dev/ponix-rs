@@ -1,15 +1,11 @@
-use crate::domain::{
-    CreateGatewayInput, DeleteGatewayInput, EmqxGatewayConfig, Gateway, GatewayCdcEvent,
-    GatewayConfig, GetGatewayInput, ListGatewaysInput, UpdateGatewayInput,
-};
+use crate::domain::{EmqxGatewayConfig, Gateway, GatewayCdcEvent, GatewayConfig};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use ponix_proto_prost::gateway::v1::gateway::Config;
 use ponix_proto_prost::gateway::v1::{
     create_gateway_request::Config as CreateConfig, gateway::Config as ProtoGatewayConfig,
-    update_gateway_request::Config as UpdateConfig, CreateGatewayRequest, DeleteGatewayRequest,
-    EmqxGatewayConfig as ProtoEmqxConfig, Gateway as ProtoGateway, GatewayType, GetGatewayRequest,
-    ListGatewaysRequest, UpdateGatewayRequest,
+    update_gateway_request::Config as UpdateConfig, EmqxGatewayConfig as ProtoEmqxConfig,
+    Gateway as ProtoGateway, GatewayType,
 };
 use prost::Message;
 use prost_types::Timestamp;
@@ -67,34 +63,8 @@ pub fn proto_to_domain_gateway(proto: &ProtoGateway) -> Result<Gateway> {
     })
 }
 
-/// Convert CreateGatewayRequest to domain CreateGatewayInput
-pub fn to_create_gateway_input(request: CreateGatewayRequest) -> CreateGatewayInput {
-    let gateway_type = gateway_type_to_string(request.r#type());
-
-    // Convert config from protobuf enum to domain enum
-    let gateway_config = match request.config {
-        Some(CreateConfig::EmqxConfig(emqx)) => GatewayConfig::Emqx(EmqxGatewayConfig {
-            broker_url: emqx.broker_url,
-            subscription_group: emqx.subscription_group,
-        }),
-        None => {
-            // Default to empty EMQX config if not provided
-            GatewayConfig::Emqx(EmqxGatewayConfig {
-                broker_url: String::new(),
-                subscription_group: String::new(),
-            })
-        }
-    };
-
-    CreateGatewayInput {
-        organization_id: request.organization_id,
-        gateway_type,
-        gateway_config,
-    }
-}
-
 /// Convert GatewayType enum to string
-fn gateway_type_to_string(gateway_type: GatewayType) -> String {
+pub fn proto_gateway_type_to_string(gateway_type: GatewayType) -> String {
     match gateway_type {
         GatewayType::Unspecified => "unspecified".to_string(),
         GatewayType::Emqx => "emqx".to_string(),
@@ -109,53 +79,31 @@ fn string_to_gateway_type(s: &str) -> GatewayType {
     }
 }
 
-/// Convert GetGatewayRequest to domain GetGatewayInput
-pub fn to_get_gateway_input(request: GetGatewayRequest) -> GetGatewayInput {
-    GetGatewayInput {
-        gateway_id: request.gateway_id,
-        organization_id: request.organization_id,
+/// Convert proto CreateConfig to domain GatewayConfig
+pub fn proto_create_config_to_domain(config: Option<CreateConfig>) -> GatewayConfig {
+    match config {
+        Some(CreateConfig::EmqxConfig(emqx)) => GatewayConfig::Emqx(EmqxGatewayConfig {
+            broker_url: emqx.broker_url,
+            subscription_group: emqx.subscription_group,
+        }),
+        None => {
+            // Default to empty EMQX config if not provided
+            GatewayConfig::Emqx(EmqxGatewayConfig {
+                broker_url: String::new(),
+                subscription_group: String::new(),
+            })
+        }
     }
 }
 
-/// Convert ListGatewaysRequest to domain ListGatewaysInput
-pub fn to_list_gateways_input(request: ListGatewaysRequest) -> ListGatewaysInput {
-    ListGatewaysInput {
-        organization_id: request.organization_id,
-    }
-}
-
-/// Convert UpdateGatewayRequest to domain UpdateGatewayInput
-pub fn to_update_gateway_input(request: UpdateGatewayRequest) -> UpdateGatewayInput {
-    let gateway_type = if request.r#type != 0 {
-        Some(gateway_type_to_string(
-            GatewayType::try_from(request.r#type).unwrap_or(GatewayType::Unspecified),
-        ))
-    } else {
-        None
-    };
-
-    // Convert config from protobuf enum to domain enum
-    let gateway_config = match request.config {
+/// Convert proto UpdateConfig to domain GatewayConfig (optional)
+pub fn proto_update_config_to_domain(config: Option<UpdateConfig>) -> Option<GatewayConfig> {
+    match config {
         Some(UpdateConfig::EmqxConfig(emqx)) => Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: emqx.broker_url,
             subscription_group: emqx.subscription_group,
         })),
         None => None,
-    };
-
-    UpdateGatewayInput {
-        gateway_id: request.gateway_id,
-        organization_id: request.organization_id,
-        gateway_type,
-        gateway_config,
-    }
-}
-
-/// Convert DeleteGatewayRequest to domain DeleteGatewayInput
-pub fn to_delete_gateway_input(request: DeleteGatewayRequest) -> DeleteGatewayInput {
-    DeleteGatewayInput {
-        gateway_id: request.gateway_id,
-        organization_id: request.organization_id,
     }
 }
 
