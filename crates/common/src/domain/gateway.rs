@@ -1,6 +1,7 @@
 use crate::domain::result::DomainResult;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use garde::Validate;
 
 /// Gateway entity representing a configured gateway for an organization
 #[derive(Debug, Clone, PartialEq)]
@@ -54,19 +55,21 @@ pub struct ListGatewaysRepoInput {
 
 /// Gateway configuration types
 /// Mirrors the protobuf Gateway config structure but as a domain type
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Validate)]
 pub enum GatewayConfig {
     /// EMQX gateway configuration
-    Emqx(EmqxGatewayConfig),
+    Emqx(#[garde(dive)] EmqxGatewayConfig),
 }
 
 /// EMQX gateway configuration
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Validate)]
 pub struct EmqxGatewayConfig {
+    #[garde(length(min = 1))]
     pub broker_url: String,
     /// Shared subscription group name for MQTT 5.
     /// Subscribes using `$share/{group}/{topic}` format.
     /// This enables load balancing across multiple gateway instances.
+    #[garde(length(min = 1))]
     pub subscription_group: String,
 }
 

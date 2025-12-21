@@ -93,3 +93,6 @@ which = "7.0"
 
 # Authorization
 casbin = "2"
+
+# Validation
+garde = { version = "0.22", features = ["derive"] }

@@ -3,30 +3,40 @@ use common::domain::{
     CreateDeviceRepoInput, Device, DeviceRepository, DomainError, DomainResult, GetDeviceRepoInput,
     GetOrganizationRepoInput, ListDevicesRepoInput, OrganizationRepository,
 };
+use garde::Validate;
 use std::sync::Arc;
 use tracing::{debug, instrument};
 
 /// Service request for creating a device
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct CreateDeviceRequest {
+    #[garde(skip)] // user_id validated by auth layer
     pub user_id: String,
+    #[garde(length(min = 1))]
     pub organization_id: String,
+    #[garde(length(min = 1))]
     pub name: String,
+    #[garde(skip)] // payload_conversion can be empty
     pub payload_conversion: String,
 }
 
 /// Service request for getting a device
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct GetDeviceRequest {
+    #[garde(skip)]
     pub user_id: String,
+    #[garde(length(min = 1))]
     pub device_id: String,
+    #[garde(length(min = 1))]
     pub organization_id: String,
 }
 
 /// Service request for listing devices
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct ListDevicesRequest {
+    #[garde(skip)]
     pub user_id: String,
+    #[garde(length(min = 1))]
     pub organization_id: String,
 }
 
@@ -56,18 +66,8 @@ impl DeviceService {
     /// Validates that the organization exists and is not deleted
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, device_name = %request.name))]
     pub async fn create_device(&self, request: CreateDeviceRequest) -> DomainResult<Device> {
-        // Business logic: validate inputs
-        if request.organization_id.is_empty() {
-            return Err(DomainError::InvalidOrganizationId(
-                "Organization ID cannot be empty".to_string(),
-            ));
-        }
-
-        if request.name.is_empty() {
-            return Err(DomainError::InvalidDeviceName(
-                "Device name cannot be empty".to_string(),
-            ));
-        }
+        // Validate request using garde
+        common::validation::validate(&request)?;
 
         // Check authorization
         self.authorization_provider
@@ -128,17 +128,8 @@ impl DeviceService {
     /// Get a device by ID and organization
     #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id))]
     pub async fn get_device(&self, request: GetDeviceRequest) -> DomainResult<Device> {
-        if request.device_id.is_empty() {
-            return Err(DomainError::InvalidDeviceId(
-                "Device ID cannot be empty".to_string(),
-            ));
-        }
-
-        if request.organization_id.is_empty() {
-            return Err(DomainError::InvalidOrganizationId(
-                "Organization ID cannot be empty".to_string(),
-            ));
-        }
+        // Validate request using garde
+        common::validation::validate(&request)?;
 
         // Check authorization
         self.authorization_provider
@@ -169,11 +160,8 @@ impl DeviceService {
     /// List devices for an organization
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
     pub async fn list_devices(&self, request: ListDevicesRequest) -> DomainResult<Vec<Device>> {
-        if request.organization_id.is_empty() {
-            return Err(DomainError::InvalidOrganizationId(
-                "Organization ID cannot be empty".to_string(),
-            ));
-        }
+        // Validate request using garde
+        common::validation::validate(&request)?;
 
         // Check authorization
         self.authorization_provider
@@ -295,7 +283,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            DomainError::InvalidDeviceName(_)
+            DomainError::ValidationError(_)
         ));
     }
 
@@ -459,7 +447,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            DomainError::InvalidOrganizationId(_)
+            DomainError::ValidationError(_)
         ));
     }
 

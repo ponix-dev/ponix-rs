@@ -96,4 +96,7 @@ pub enum DomainError {
 
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
+
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
