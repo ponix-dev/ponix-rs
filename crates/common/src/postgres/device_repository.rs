@@ -1,6 +1,6 @@
 use crate::domain::{
-    CreateDeviceInputWithId, Device, DeviceRepository, DomainError, DomainResult, GetDeviceInput,
-    ListDevicesInput,
+    CreateDeviceRepoInput, Device, DeviceRepository, DomainError, DomainResult, GetDeviceRepoInput,
+    ListDevicesRepoInput,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -48,7 +48,7 @@ impl PostgresDeviceRepository {
 #[async_trait]
 impl DeviceRepository for PostgresDeviceRepository {
     #[instrument(skip(self, input), fields(device_id = %input.device_id, organization_id = %input.organization_id))]
-    async fn create_device(&self, input: CreateDeviceInputWithId) -> DomainResult<Device> {
+    async fn create_device(&self, input: CreateDeviceRepoInput) -> DomainResult<Device> {
         let conn = self
             .client
             .get_connection()
@@ -98,7 +98,7 @@ impl DeviceRepository for PostgresDeviceRepository {
     }
 
     #[instrument(skip(self, input), fields(device_id = %input.device_id, organization_id = %input.organization_id))]
-    async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Option<Device>> {
+    async fn get_device(&self, input: GetDeviceRepoInput) -> DomainResult<Option<Device>> {
         let conn = self
             .client
             .get_connection()
@@ -132,7 +132,7 @@ impl DeviceRepository for PostgresDeviceRepository {
     }
 
     #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
-    async fn list_devices(&self, input: ListDevicesInput) -> DomainResult<Vec<Device>> {
+    async fn list_devices(&self, input: ListDevicesRepoInput) -> DomainResult<Vec<Device>> {
         let conn = self
             .client
             .get_connection()

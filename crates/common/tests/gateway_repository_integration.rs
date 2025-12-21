@@ -1,9 +1,10 @@
 #![cfg(feature = "integration-tests")]
 
 use common::domain::{
-    CreateGatewayInputWithId, CreateOrganizationInputWithId, DeleteGatewayInput, DomainError,
-    EmqxGatewayConfig, GatewayConfig, GatewayRepository, GetGatewayInput, OrganizationRepository,
-    RegisterUserInputWithId, UpdateGatewayInput, UserRepository,
+    CreateGatewayRepoInput, CreateOrganizationRepoInputWithId, DeleteGatewayRepoInput, DomainError,
+    EmqxGatewayConfig, GatewayConfig, GatewayRepository, GetGatewayRepoInput,
+    ListGatewaysRepoInput, OrganizationRepository, RegisterUserRepoInputWithId,
+    UpdateGatewayRepoInput, UserRepository,
 };
 use common::postgres::{
     PostgresClient, PostgresGatewayRepository, PostgresOrganizationRepository,
@@ -62,7 +63,7 @@ async fn setup_test_db() -> (
 
     // Create a test user first (needed for user_organizations foreign key)
     let user_repo = PostgresUserRepository::new(client.clone());
-    let user_input = RegisterUserInputWithId {
+    let user_input = RegisterUserRepoInputWithId {
         id: TEST_USER_ID.to_string(),
         email: "test@example.com".to_string(),
         name: "Test User".to_string(),
@@ -82,7 +83,7 @@ async fn test_gateway_crud_operations() {
     let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
 
     // Create organization first
-    let org_input = CreateOrganizationInputWithId {
+    let org_input = CreateOrganizationRepoInputWithId {
         id: "org-test-001".to_string(),
         name: "Test Organization".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -90,7 +91,7 @@ async fn test_gateway_crud_operations() {
     org_repo.create_organization(org_input).await.unwrap();
 
     // Test Create
-    let create_input = CreateGatewayInputWithId {
+    let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-test-001".to_string(),
         organization_id: "org-test-001".to_string(),
         gateway_type: "emqx".to_string(),
@@ -113,7 +114,7 @@ async fn test_gateway_crud_operations() {
     assert!(created.created_at.is_some());
 
     // Test Get
-    let get_input = GetGatewayInput {
+    let get_input = GetGatewayRepoInput {
         gateway_id: "gw-test-001".to_string(),
         organization_id: "org-test-001".to_string(),
     };
@@ -123,7 +124,7 @@ async fn test_gateway_crud_operations() {
     assert_eq!(gateway.gateway_id, "gw-test-001");
 
     // Test Update
-    let update_input = UpdateGatewayInput {
+    let update_input = UpdateGatewayRepoInput {
         gateway_id: "gw-test-001".to_string(),
         organization_id: "org-test-001".to_string(),
         gateway_type: None,
@@ -142,18 +143,21 @@ async fn test_gateway_crud_operations() {
     }
 
     // Test List
-    let gateways = gateway_repo.list_gateways("org-test-001").await.unwrap();
+    let list_input = ListGatewaysRepoInput {
+        organization_id: "org-test-001".to_string(),
+    };
+    let gateways = gateway_repo.list_gateways(list_input).await.unwrap();
     assert_eq!(gateways.len(), 1);
 
     // Test Delete
-    let delete_input = DeleteGatewayInput {
+    let delete_input = DeleteGatewayRepoInput {
         gateway_id: "gw-test-001".to_string(),
         organization_id: "org-test-001".to_string(),
     };
     gateway_repo.delete_gateway(delete_input).await.unwrap();
 
     // Verify soft delete
-    let get_deleted_input = GetGatewayInput {
+    let get_deleted_input = GetGatewayRepoInput {
         gateway_id: "gw-test-001".to_string(),
         organization_id: "org-test-001".to_string(),
     };
@@ -166,14 +170,14 @@ async fn test_gateway_crud_operations() {
 async fn test_gateway_unique_constraint() {
     let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
 
-    let org_input = CreateOrganizationInputWithId {
+    let org_input = CreateOrganizationRepoInputWithId {
         id: "org-test-002".to_string(),
         name: "Test Organization 2".to_string(),
         user_id: TEST_USER_ID.to_string(),
     };
     org_repo.create_organization(org_input).await.unwrap();
 
-    let create_input = CreateGatewayInputWithId {
+    let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-test-002".to_string(),
         organization_id: "org-test-002".to_string(),
         gateway_type: "emqx".to_string(),
@@ -203,7 +207,7 @@ async fn test_list_excludes_soft_deleted() {
     let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
 
     // Create organization
-    let org_input = CreateOrganizationInputWithId {
+    let org_input = CreateOrganizationRepoInputWithId {
         id: "org-test-003".to_string(),
         name: "Test Organization 3".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -212,7 +216,7 @@ async fn test_list_excludes_soft_deleted() {
 
     // Create multiple gateways
     for i in 1..=3 {
-        let create_input = CreateGatewayInputWithId {
+        let create_input = CreateGatewayRepoInput {
             gateway_id: format!("gw-test-{}", i),
             organization_id: "org-test-003".to_string(),
             gateway_type: "emqx".to_string(),
@@ -225,14 +229,17 @@ async fn test_list_excludes_soft_deleted() {
     }
 
     // Soft delete one
-    let delete_input = DeleteGatewayInput {
+    let delete_input = DeleteGatewayRepoInput {
         gateway_id: "gw-test-2".to_string(),
         organization_id: "org-test-003".to_string(),
     };
     gateway_repo.delete_gateway(delete_input).await.unwrap();
 
     // List should only return 2
-    let gateways = gateway_repo.list_gateways("org-test-003").await.unwrap();
+    let list_input = ListGatewaysRepoInput {
+        organization_id: "org-test-003".to_string(),
+    };
+    let gateways = gateway_repo.list_gateways(list_input).await.unwrap();
     assert_eq!(gateways.len(), 2);
     assert!(gateways.iter().all(|g| g.gateway_id != "gw-test-2"));
 }
@@ -243,14 +250,14 @@ async fn test_get_gateway_with_wrong_organization_returns_none() {
     let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
 
     // Create two organizations
-    let org1_input = CreateOrganizationInputWithId {
+    let org1_input = CreateOrganizationRepoInputWithId {
         id: "org-cross-1".to_string(),
         name: "Organization 1".to_string(),
         user_id: TEST_USER_ID.to_string(),
     };
     org_repo.create_organization(org1_input).await.unwrap();
 
-    let org2_input = CreateOrganizationInputWithId {
+    let org2_input = CreateOrganizationRepoInputWithId {
         id: "org-cross-2".to_string(),
         name: "Organization 2".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -258,7 +265,7 @@ async fn test_get_gateway_with_wrong_organization_returns_none() {
     org_repo.create_organization(org2_input).await.unwrap();
 
     // Create gateway in org-cross-1
-    let create_input = CreateGatewayInputWithId {
+    let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-cross-test".to_string(),
         organization_id: "org-cross-1".to_string(),
         gateway_type: "emqx".to_string(),
@@ -270,7 +277,7 @@ async fn test_get_gateway_with_wrong_organization_returns_none() {
     gateway_repo.create_gateway(create_input).await.unwrap();
 
     // Get with correct organization - should succeed
-    let correct_input = GetGatewayInput {
+    let correct_input = GetGatewayRepoInput {
         gateway_id: "gw-cross-test".to_string(),
         organization_id: "org-cross-1".to_string(),
     };
@@ -278,7 +285,7 @@ async fn test_get_gateway_with_wrong_organization_returns_none() {
     assert!(result.is_some());
 
     // Get with wrong organization - should return None
-    let wrong_input = GetGatewayInput {
+    let wrong_input = GetGatewayRepoInput {
         gateway_id: "gw-cross-test".to_string(),
         organization_id: "org-cross-2".to_string(),
     };
@@ -295,14 +302,14 @@ async fn test_update_gateway_with_wrong_organization_returns_not_found() {
     let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
 
     // Create two organizations
-    let org1_input = CreateOrganizationInputWithId {
+    let org1_input = CreateOrganizationRepoInputWithId {
         id: "org-update-1".to_string(),
         name: "Organization 1".to_string(),
         user_id: TEST_USER_ID.to_string(),
     };
     org_repo.create_organization(org1_input).await.unwrap();
 
-    let org2_input = CreateOrganizationInputWithId {
+    let org2_input = CreateOrganizationRepoInputWithId {
         id: "org-update-2".to_string(),
         name: "Organization 2".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -310,7 +317,7 @@ async fn test_update_gateway_with_wrong_organization_returns_not_found() {
     org_repo.create_organization(org2_input).await.unwrap();
 
     // Create gateway in org-update-1
-    let create_input = CreateGatewayInputWithId {
+    let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-update-test".to_string(),
         organization_id: "org-update-1".to_string(),
         gateway_type: "emqx".to_string(),
@@ -322,7 +329,7 @@ async fn test_update_gateway_with_wrong_organization_returns_not_found() {
     gateway_repo.create_gateway(create_input).await.unwrap();
 
     // Update with wrong organization - should fail
-    let wrong_update = UpdateGatewayInput {
+    let wrong_update = UpdateGatewayRepoInput {
         gateway_id: "gw-update-test".to_string(),
         organization_id: "org-update-2".to_string(),
         gateway_type: Some("changed".to_string()),
@@ -342,14 +349,14 @@ async fn test_delete_gateway_with_wrong_organization_returns_not_found() {
     let (_container, gateway_repo, org_repo, _client) = setup_test_db().await;
 
     // Create two organizations
-    let org1_input = CreateOrganizationInputWithId {
+    let org1_input = CreateOrganizationRepoInputWithId {
         id: "org-delete-1".to_string(),
         name: "Organization 1".to_string(),
         user_id: TEST_USER_ID.to_string(),
     };
     org_repo.create_organization(org1_input).await.unwrap();
 
-    let org2_input = CreateOrganizationInputWithId {
+    let org2_input = CreateOrganizationRepoInputWithId {
         id: "org-delete-2".to_string(),
         name: "Organization 2".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -357,7 +364,7 @@ async fn test_delete_gateway_with_wrong_organization_returns_not_found() {
     org_repo.create_organization(org2_input).await.unwrap();
 
     // Create gateway in org-delete-1
-    let create_input = CreateGatewayInputWithId {
+    let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-delete-test".to_string(),
         organization_id: "org-delete-1".to_string(),
         gateway_type: "emqx".to_string(),
@@ -369,7 +376,7 @@ async fn test_delete_gateway_with_wrong_organization_returns_not_found() {
     gateway_repo.create_gateway(create_input).await.unwrap();
 
     // Delete with wrong organization - should fail
-    let wrong_delete = DeleteGatewayInput {
+    let wrong_delete = DeleteGatewayRepoInput {
         gateway_id: "gw-delete-test".to_string(),
         organization_id: "org-delete-2".to_string(),
     };
@@ -381,7 +388,7 @@ async fn test_delete_gateway_with_wrong_organization_returns_not_found() {
     ));
 
     // Verify gateway still exists with correct organization
-    let correct_get = GetGatewayInput {
+    let correct_get = GetGatewayRepoInput {
         gateway_id: "gw-delete-test".to_string(),
         organization_id: "org-delete-1".to_string(),
     };

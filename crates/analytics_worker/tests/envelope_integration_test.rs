@@ -9,11 +9,11 @@ use std::sync::Arc;
 mod mocks {
     use async_trait::async_trait;
     use common::domain::{
-        CreateDeviceInputWithId, CreateOrganizationInputWithId, DeleteOrganizationInput, Device,
-        DeviceRepository, DomainResult, GetDeviceInput, GetOrganizationInput,
-        GetUserOrganizationsInput, ListDevicesInput, ListOrganizationsInput, Organization,
-        OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer,
-        UpdateOrganizationInput,
+        CreateDeviceRepoInput, CreateOrganizationRepoInputWithId, DeleteOrganizationRepoInput,
+        Device, DeviceRepository, DomainResult, GetDeviceRepoInput, GetOrganizationRepoInput,
+        GetUserOrganizationsRepoInput, ListDevicesRepoInput, ListOrganizationsRepoInput,
+        Organization, OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer,
+        UpdateOrganizationRepoInput,
     };
     use std::sync::{Arc, Mutex};
 
@@ -36,16 +36,16 @@ mod mocks {
 
     #[async_trait]
     impl DeviceRepository for InMemoryDeviceRepository {
-        async fn create_device(&self, _input: CreateDeviceInputWithId) -> DomainResult<Device> {
+        async fn create_device(&self, _input: CreateDeviceRepoInput) -> DomainResult<Device> {
             unimplemented!("Not needed for envelope tests")
         }
 
-        async fn get_device(&self, input: GetDeviceInput) -> DomainResult<Option<Device>> {
+        async fn get_device(&self, input: GetDeviceRepoInput) -> DomainResult<Option<Device>> {
             let devices = self.devices.lock().unwrap();
             Ok(devices.get(&input.device_id).cloned())
         }
 
-        async fn list_devices(&self, _input: ListDevicesInput) -> DomainResult<Vec<Device>> {
+        async fn list_devices(&self, _input: ListDevicesRepoInput) -> DomainResult<Vec<Device>> {
             unimplemented!("Not needed for envelope tests")
         }
     }
@@ -71,40 +71,43 @@ mod mocks {
     impl OrganizationRepository for InMemoryOrganizationRepository {
         async fn create_organization(
             &self,
-            _input: CreateOrganizationInputWithId,
+            _input: CreateOrganizationRepoInputWithId,
         ) -> DomainResult<Organization> {
             unimplemented!("Not needed for envelope tests")
         }
 
         async fn get_organization(
             &self,
-            input: GetOrganizationInput,
+            input: GetOrganizationRepoInput,
         ) -> DomainResult<Option<Organization>> {
             let orgs = self.organizations.lock().unwrap();
             Ok(orgs.get(&input.organization_id).cloned())
         }
 
-        async fn delete_organization(&self, _input: DeleteOrganizationInput) -> DomainResult<()> {
+        async fn delete_organization(
+            &self,
+            _input: DeleteOrganizationRepoInput,
+        ) -> DomainResult<()> {
             unimplemented!("Not needed for envelope tests")
         }
 
         async fn update_organization(
             &self,
-            _input: UpdateOrganizationInput,
+            _input: UpdateOrganizationRepoInput,
         ) -> DomainResult<Organization> {
             unimplemented!("Not needed for envelope tests")
         }
 
         async fn list_organizations(
             &self,
-            _input: ListOrganizationsInput,
+            _input: ListOrganizationsRepoInput,
         ) -> DomainResult<Vec<Organization>> {
             unimplemented!("Not needed for envelope tests")
         }
 
         async fn get_organizations_by_user_id(
             &self,
-            _input: GetUserOrganizationsInput,
+            _input: GetUserOrganizationsRepoInput,
         ) -> DomainResult<Vec<Organization>> {
             unimplemented!("Not needed for envelope tests")
         }

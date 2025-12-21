@@ -2,12 +2,16 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
-use crate::domain::GatewayService;
+use crate::domain::{
+    CreateGatewayRequest as DomainCreateRequest, DeleteGatewayRequest as DomainDeleteRequest,
+    GatewayService, GetGatewayRequest as DomainGetRequest,
+    ListGatewaysRequest as DomainListRequest, UpdateGatewayRequest as DomainUpdateRequest,
+};
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
 use common::proto::{
-    to_create_gateway_input, to_delete_gateway_input, to_get_gateway_input, to_list_gateways_input,
-    to_proto_gateway, to_update_gateway_input,
+    proto_create_config_to_domain, proto_gateway_type_to_string, proto_update_config_to_domain,
+    to_proto_gateway,
 };
 use ponix_proto_prost::gateway::v1::{
     CreateGatewayRequest, CreateGatewayResponse, DeleteGatewayRequest, DeleteGatewayResponse,
@@ -53,13 +57,22 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_create_gateway_input(req);
+        // Convert proto types before constructing request (to avoid borrow issues)
+        let gateway_type = proto_gateway_type_to_string(req.r#type());
+        let gateway_config = proto_create_config_to_domain(req.config);
 
-        // Call domain service with user_id for authorization
+        // Construct domain request
+        let service_request = DomainCreateRequest {
+            user_id: user_context.user_id,
+            organization_id: req.organization_id,
+            gateway_type,
+            gateway_config,
+        };
+
+        // Call domain service
         let gateway = self
             .domain_service
-            .create_gateway(&user_context.user_id, input)
+            .create_gateway(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -86,13 +99,17 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_get_gateway_input(req);
+        // Construct domain request directly
+        let service_request = DomainGetRequest {
+            user_id: user_context.user_id,
+            gateway_id: req.gateway_id,
+            organization_id: req.organization_id,
+        };
 
-        // Call domain service with user_id for authorization
+        // Call domain service
         let gateway = self
             .domain_service
-            .get_gateway(&user_context.user_id, input)
+            .get_gateway(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -114,13 +131,16 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_list_gateways_input(req);
+        // Construct domain request directly
+        let service_request = DomainListRequest {
+            user_id: user_context.user_id,
+            organization_id: req.organization_id,
+        };
 
-        // Call domain service with user_id for authorization
+        // Call domain service
         let gateways = self
             .domain_service
-            .list_gateways(&user_context.user_id, input)
+            .list_gateways(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -149,13 +169,29 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_update_gateway_input(req);
+        // Convert gateway_type (only if not 0/unspecified)
+        let gateway_type = if req.r#type != 0 {
+            Some(proto_gateway_type_to_string(
+                ponix_proto_prost::gateway::v1::GatewayType::try_from(req.r#type)
+                    .unwrap_or(ponix_proto_prost::gateway::v1::GatewayType::Unspecified),
+            ))
+        } else {
+            None
+        };
 
-        // Call domain service with user_id for authorization
+        // Construct domain request directly
+        let service_request = DomainUpdateRequest {
+            user_id: user_context.user_id,
+            gateway_id: req.gateway_id,
+            organization_id: req.organization_id,
+            gateway_type,
+            gateway_config: proto_update_config_to_domain(req.config),
+        };
+
+        // Call domain service
         let gateway = self
             .domain_service
-            .update_gateway(&user_context.user_id, input)
+            .update_gateway(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -183,12 +219,16 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         let req = request.into_inner();
         let gateway_id = req.gateway_id.clone();
 
-        // Convert proto → domain
-        let input = to_delete_gateway_input(req);
+        // Construct domain request directly
+        let service_request = DomainDeleteRequest {
+            user_id: user_context.user_id,
+            gateway_id: req.gateway_id,
+            organization_id: req.organization_id,
+        };
 
-        // Call domain service with user_id for authorization
+        // Call domain service
         self.domain_service
-            .delete_gateway(&user_context.user_id, input)
+            .delete_gateway(service_request)
             .await
             .map_err(domain_error_to_status)?;
 

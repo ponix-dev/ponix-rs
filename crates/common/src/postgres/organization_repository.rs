@@ -1,7 +1,7 @@
 use crate::domain::{
-    CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError, DomainResult,
-    GetOrganizationInput, GetUserOrganizationsInput, ListOrganizationsInput, Organization,
-    OrganizationRepository, UpdateOrganizationInput,
+    CreateOrganizationRepoInputWithId, DeleteOrganizationRepoInput, DomainError, DomainResult,
+    GetOrganizationRepoInput, GetUserOrganizationsRepoInput, ListOrganizationsRepoInput,
+    Organization, OrganizationRepository, UpdateOrganizationRepoInput,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -48,7 +48,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
     #[instrument(skip(self, input), fields(organization_id = %input.id, user_id = %input.user_id))]
     async fn create_organization(
         &self,
-        input: CreateOrganizationInputWithId,
+        input: CreateOrganizationRepoInputWithId,
     ) -> DomainResult<Organization> {
         let mut conn = self
             .client
@@ -131,7 +131,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
     #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     async fn get_organization(
         &self,
-        input: GetOrganizationInput,
+        input: GetOrganizationRepoInput,
     ) -> DomainResult<Option<Organization>> {
         let conn = self
             .client
@@ -169,7 +169,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
     #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     async fn update_organization(
         &self,
-        input: UpdateOrganizationInput,
+        input: UpdateOrganizationRepoInput,
     ) -> DomainResult<Organization> {
         let conn = self
             .client
@@ -210,7 +210,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
     }
 
     #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
-    async fn delete_organization(&self, input: DeleteOrganizationInput) -> DomainResult<()> {
+    async fn delete_organization(&self, input: DeleteOrganizationRepoInput) -> DomainResult<()> {
         let conn = self
             .client
             .get_connection()
@@ -243,7 +243,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
     #[instrument(skip(self, _input))]
     async fn list_organizations(
         &self,
-        _input: ListOrganizationsInput,
+        _input: ListOrganizationsRepoInput,
     ) -> DomainResult<Vec<Organization>> {
         let conn = self
             .client
@@ -284,7 +284,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
     #[instrument(skip(self, input), fields(user_id = %input.user_id))]
     async fn get_organizations_by_user_id(
         &self,
-        input: GetUserOrganizationsInput,
+        input: GetUserOrganizationsRepoInput,
     ) -> DomainResult<Vec<Organization>> {
         let conn = self
             .client

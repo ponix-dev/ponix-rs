@@ -38,12 +38,10 @@ pub fn build_ponix_api_routes(
     secure_cookies: bool,
 ) -> Routes {
     // Create handlers
-    let device_handler =
-        DeviceServiceHandler::new(device_service, auth_token_provider.clone());
+    let device_handler = DeviceServiceHandler::new(device_service, auth_token_provider.clone());
     let organization_handler =
         OrganizationServiceHandler::new(organization_service, auth_token_provider.clone());
-    let gateway_handler =
-        GatewayServiceHandler::new(gateway_service, auth_token_provider);
+    let gateway_handler = GatewayServiceHandler::new(gateway_service, auth_token_provider);
     let user_handler =
         UserServiceHandler::new(user_service, refresh_token_expiration_days, secure_cookies);
 

@@ -3,7 +3,7 @@ use crate::domain::{
     GatewayRunnerFactory,
 };
 use common::domain::{
-    DomainResult, Gateway, GatewayRepository, GetGatewayInput, RawEnvelopeProducer,
+    DomainResult, Gateway, GatewayRepository, GetGatewayRepoInput, RawEnvelopeProducer,
 };
 
 use std::sync::Arc;
@@ -82,7 +82,7 @@ impl GatewayOrchestrationService {
 
         let config_changed = match self
             .gateway_repository
-            .get_gateway(GetGatewayInput {
+            .get_gateway(GetGatewayRepoInput {
                 gateway_id: gateway.gateway_id.clone(),
                 organization_id: gateway.organization_id.clone(),
             })
@@ -236,7 +236,7 @@ mod tests {
     use crate::domain::{GatewayProcessStore, GatewayRunner, InMemoryGatewayProcessStore};
     use async_trait::async_trait;
     use common::domain::{
-        EmqxGatewayConfig, GatewayConfig, GetGatewayInput, MockGatewayRepository,
+        EmqxGatewayConfig, GatewayConfig, GetGatewayRepoInput, MockGatewayRepository,
         MockRawEnvelopeProducer,
     };
 
@@ -389,7 +389,7 @@ mod tests {
 
         mock_repo
             .expect_get_gateway()
-            .withf(|input: &GetGatewayInput| {
+            .withf(|input: &GetGatewayRepoInput| {
                 input.gateway_id == "gw1" && input.organization_id == "org1"
             })
             .times(1)

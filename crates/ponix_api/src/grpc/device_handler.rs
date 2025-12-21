@@ -2,12 +2,10 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
-use crate::domain::DeviceService;
+use crate::domain::{CreateDeviceRequest, DeviceService, GetDeviceRequest, ListDevicesRequest};
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
-use common::proto::{
-    to_create_device_input, to_get_device_input, to_list_devices_input, to_proto_device,
-};
+use common::proto::to_proto_device;
 use ponix_proto_prost::end_device::v1::{
     CreateEndDeviceRequest, CreateEndDeviceResponse, EndDevice, GetEndDeviceRequest,
     GetEndDeviceResponse, ListEndDevicesRequest, ListEndDevicesResponse,
@@ -51,13 +49,18 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_create_device_input(req);
+        // Construct service request with embedded user_id
+        let service_request = CreateDeviceRequest {
+            user_id: user_context.user_id,
+            organization_id: req.organization_id,
+            name: req.name,
+            payload_conversion: req.payload_conversion,
+        };
 
-        // Call domain service with user_id for authorization
+        // Call domain service
         let device = self
             .domain_service
-            .create_device(&user_context.user_id, input)
+            .create_device(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -87,13 +90,17 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_get_device_input(req);
+        // Construct service request with embedded user_id
+        let service_request = GetDeviceRequest {
+            user_id: user_context.user_id,
+            device_id: req.device_id,
+            organization_id: req.organization_id,
+        };
 
-        // Call domain service with user_id for authorization
+        // Call domain service
         let device = self
             .domain_service
-            .get_device(&user_context.user_id, input)
+            .get_device(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -118,13 +125,16 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_list_devices_input(req);
+        // Construct service request with embedded user_id
+        let service_request = ListDevicesRequest {
+            user_id: user_context.user_id,
+            organization_id: req.organization_id,
+        };
 
-        // Call domain service with user_id for authorization
+        // Call domain service
         let devices = self
             .domain_service
-            .list_devices(&user_context.user_id, input)
+            .list_devices(service_request)
             .await
             .map_err(domain_error_to_status)?;
 

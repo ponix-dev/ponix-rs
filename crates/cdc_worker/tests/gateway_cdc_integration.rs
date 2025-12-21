@@ -3,9 +3,9 @@
 use async_nats::jetstream;
 use cdc_worker::domain::{CdcConfig, CdcProcess, EntityConfig, GatewayConverter};
 use common::domain::{
-    CreateGatewayInputWithId, CreateOrganizationInputWithId, DeleteGatewayInput, EmqxGatewayConfig,
-    GatewayConfig, GatewayRepository, OrganizationRepository, RegisterUserInputWithId,
-    UpdateGatewayInput, UserRepository,
+    CreateGatewayRepoInput, CreateOrganizationRepoInputWithId, DeleteGatewayRepoInput,
+    EmqxGatewayConfig, GatewayConfig, GatewayRepository, OrganizationRepository,
+    RegisterUserRepoInputWithId, UpdateGatewayRepoInput, UserRepository,
 };
 use common::nats::NatsClient;
 use common::postgres::{
@@ -142,7 +142,7 @@ async fn setup_test_env() -> TestEnvironment {
 
     // Create a test user (needed for user_organizations foreign key)
     let user_repo = PostgresUserRepository::new(postgres_client.clone());
-    let user_input = RegisterUserInputWithId {
+    let user_input = RegisterUserRepoInputWithId {
         id: TEST_USER_ID.to_string(),
         email: "test@example.com".to_string(),
         name: "Test User".to_string(),
@@ -225,7 +225,7 @@ async fn setup_test_env() -> TestEnvironment {
 /// Helper function to create an organization for testing
 async fn create_test_organization(env: &TestEnvironment, org_id: &str) {
     env.organization_repo
-        .create_organization(CreateOrganizationInputWithId {
+        .create_organization(CreateOrganizationRepoInputWithId {
             id: org_id.to_string(),
             name: format!("Test Organization {}", org_id),
             user_id: TEST_USER_ID.to_string(),
@@ -290,7 +290,7 @@ async fn test_gateway_create_cdc_event() {
 
     // Create a gateway
     let gateway_id = "test-gateway-create-001".to_string();
-    let input = CreateGatewayInputWithId {
+    let input = CreateGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-001".to_string(),
         gateway_type: "EMQX".to_string(),
@@ -345,7 +345,7 @@ async fn test_gateway_update_cdc_event() {
 
     // Create a gateway first
     let gateway_id = "test-gateway-update-001".to_string();
-    let create_input = CreateGatewayInputWithId {
+    let create_input = CreateGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-002".to_string(),
         gateway_type: "EMQX".to_string(),
@@ -369,7 +369,7 @@ async fn test_gateway_update_cdc_event() {
     info!("Initial gateway created and create event consumed");
 
     // Update the gateway
-    let update_input = UpdateGatewayInput {
+    let update_input = UpdateGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-002".to_string(),
         gateway_type: None,
@@ -422,7 +422,7 @@ async fn test_gateway_delete_cdc_event() {
 
     // Create a gateway first
     let gateway_id = "test-gateway-delete-001".to_string();
-    let create_input = CreateGatewayInputWithId {
+    let create_input = CreateGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-003".to_string(),
         gateway_type: "EMQX".to_string(),
@@ -446,7 +446,7 @@ async fn test_gateway_delete_cdc_event() {
     info!("Initial gateway created and create event consumed");
 
     // Delete the gateway (soft delete)
-    let delete_input = DeleteGatewayInput {
+    let delete_input = DeleteGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-003".to_string(),
     };

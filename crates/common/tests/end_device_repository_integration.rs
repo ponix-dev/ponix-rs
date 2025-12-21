@@ -1,7 +1,7 @@
 #![cfg(feature = "integration-tests")]
 
 use common::domain::{
-    CreateDeviceInputWithId, DeviceRepository, DomainError, GetDeviceInput, ListDevicesInput,
+    CreateDeviceRepoInput, DeviceRepository, DomainError, GetDeviceRepoInput, ListDevicesRepoInput,
 };
 use common::postgres::{PostgresClient, PostgresDeviceRepository};
 use goose::MigrationRunner;
@@ -71,7 +71,7 @@ async fn test_create_and_get_device() {
     .await
     .unwrap();
 
-    let input = CreateDeviceInputWithId {
+    let input = CreateDeviceRepoInput {
         device_id: "test-device-123".to_string(),
         organization_id: "test-org-456".to_string(),
         name: "Test Device".to_string(),
@@ -86,7 +86,7 @@ async fn test_create_and_get_device() {
     assert!(created.created_at.is_some());
 
     // Get device
-    let get_input = GetDeviceInput {
+    let get_input = GetDeviceRepoInput {
         device_id: "test-device-123".to_string(),
         organization_id: "test-org-456".to_string(),
     };
@@ -104,7 +104,7 @@ async fn test_create_and_get_device() {
 async fn test_get_nonexistent_device() {
     let (_container, repo, _client) = setup_test_db().await;
 
-    let get_input = GetDeviceInput {
+    let get_input = GetDeviceRepoInput {
         device_id: "nonexistent-device".to_string(),
         organization_id: "some-org".to_string(),
     };
@@ -128,7 +128,7 @@ async fn test_list_devices_by_organization() {
 
     // Create multiple devices
     for i in 1..=3 {
-        let input = CreateDeviceInputWithId {
+        let input = CreateDeviceRepoInput {
             device_id: format!("device-{}", i),
             organization_id: "test-org".to_string(),
             name: format!("Device {}", i),
@@ -138,7 +138,7 @@ async fn test_list_devices_by_organization() {
     }
 
     // List devices
-    let list_input = ListDevicesInput {
+    let list_input = ListDevicesRepoInput {
         organization_id: "test-org".to_string(),
     };
     let devices = repo.list_devices(list_input).await.unwrap();
@@ -152,7 +152,7 @@ async fn test_list_devices_by_organization() {
 async fn test_list_devices_for_empty_organization() {
     let (_container, repo, _client) = setup_test_db().await;
 
-    let list_input = ListDevicesInput {
+    let list_input = ListDevicesRepoInput {
         organization_id: "empty-org".to_string(),
     };
     let devices = repo.list_devices(list_input).await.unwrap();
@@ -174,7 +174,7 @@ async fn test_create_duplicate_device() {
     .await
     .unwrap();
 
-    let input = CreateDeviceInputWithId {
+    let input = CreateDeviceRepoInput {
         device_id: "duplicate-device".to_string(),
         organization_id: "test-org".to_string(),
         name: "Original Device".to_string(),
@@ -214,7 +214,7 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     .unwrap();
 
     // Create device in org-1
-    let input = CreateDeviceInputWithId {
+    let input = CreateDeviceRepoInput {
         device_id: "device-in-org-1".to_string(),
         organization_id: "org-1".to_string(),
         name: "Device in Org 1".to_string(),
@@ -223,7 +223,7 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     repo.create_device(input).await.unwrap();
 
     // Try to get device with correct organization - should succeed
-    let correct_input = GetDeviceInput {
+    let correct_input = GetDeviceRepoInput {
         device_id: "device-in-org-1".to_string(),
         organization_id: "org-1".to_string(),
     };
@@ -231,7 +231,7 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     assert!(result.is_some());
 
     // Try to get device with wrong organization - should return None
-    let wrong_input = GetDeviceInput {
+    let wrong_input = GetDeviceRepoInput {
         device_id: "device-in-org-1".to_string(),
         organization_id: "org-2".to_string(),
     };

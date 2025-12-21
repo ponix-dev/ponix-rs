@@ -14,49 +14,41 @@ pub struct Gateway {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-/// External input for creating a gateway (no ID)
+/// Repository input for creating a gateway (domain service -> repository)
 #[derive(Debug, Clone, PartialEq)]
-pub struct CreateGatewayInput {
-    pub organization_id: String,
-    pub gateway_type: String,
-    pub gateway_config: GatewayConfig,
-}
-
-/// Internal input with generated ID
-#[derive(Debug, Clone, PartialEq)]
-pub struct CreateGatewayInputWithId {
+pub struct CreateGatewayRepoInput {
     pub gateway_id: String,
     pub organization_id: String,
     pub gateway_type: String,
     pub gateway_config: GatewayConfig,
 }
 
-/// Input for getting a gateway by ID
+/// Repository input for getting a gateway by ID
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GetGatewayInput {
+pub struct GetGatewayRepoInput {
     pub gateway_id: String,
     pub organization_id: String,
 }
 
-/// Input for updating a gateway
+/// Repository input for updating a gateway
 #[derive(Debug, Clone, PartialEq)]
-pub struct UpdateGatewayInput {
+pub struct UpdateGatewayRepoInput {
     pub gateway_id: String,
     pub organization_id: String,
     pub gateway_type: Option<String>,
     pub gateway_config: Option<GatewayConfig>,
 }
 
-/// Input for deleting a gateway
+/// Repository input for deleting a gateway
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeleteGatewayInput {
+pub struct DeleteGatewayRepoInput {
     pub gateway_id: String,
     pub organization_id: String,
 }
 
-/// Input for listing gateways by organization
+/// Repository input for listing gateways by organization
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ListGatewaysInput {
+pub struct ListGatewaysRepoInput {
     pub organization_id: String,
 }
 
@@ -83,19 +75,19 @@ pub struct EmqxGatewayConfig {
 #[async_trait]
 pub trait GatewayRepository: Send + Sync {
     /// Create a new gateway
-    async fn create_gateway(&self, input: CreateGatewayInputWithId) -> DomainResult<Gateway>;
+    async fn create_gateway(&self, input: CreateGatewayRepoInput) -> DomainResult<Gateway>;
 
     /// Get a gateway by ID and organization (excludes soft deleted)
-    async fn get_gateway(&self, input: GetGatewayInput) -> DomainResult<Option<Gateway>>;
+    async fn get_gateway(&self, input: GetGatewayRepoInput) -> DomainResult<Option<Gateway>>;
 
     /// Update a gateway
-    async fn update_gateway(&self, input: UpdateGatewayInput) -> DomainResult<Gateway>;
+    async fn update_gateway(&self, input: UpdateGatewayRepoInput) -> DomainResult<Gateway>;
 
     /// Soft delete a gateway
-    async fn delete_gateway(&self, input: DeleteGatewayInput) -> DomainResult<()>;
+    async fn delete_gateway(&self, input: DeleteGatewayRepoInput) -> DomainResult<()>;
 
     /// List gateways by organization (excludes soft deleted)
-    async fn list_gateways(&self, organization_id: &str) -> DomainResult<Vec<Gateway>>;
+    async fn list_gateways(&self, input: ListGatewaysRepoInput) -> DomainResult<Vec<Gateway>>;
 
     /// List all non-deleted gateways across all organizations
     async fn list_all_gateways(&self) -> DomainResult<Vec<Gateway>>;

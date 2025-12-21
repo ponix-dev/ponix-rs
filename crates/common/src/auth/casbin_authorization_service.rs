@@ -27,9 +27,9 @@ impl CasbinAuthorizationService {
         A: Adapter + 'static,
     {
         // Create model from string
-        let model = DefaultModel::from_str(RBAC_MODEL).await.map_err(|e| {
-            DomainError::AuthorizationError(format!("Failed to load model: {}", e))
-        })?;
+        let model = DefaultModel::from_str(RBAC_MODEL)
+            .await
+            .map_err(|e| DomainError::AuthorizationError(format!("Failed to load model: {}", e)))?;
 
         // Create enforcer with the provided adapter
         let mut enforcer = Enforcer::new(model, adapter).await.map_err(|e| {

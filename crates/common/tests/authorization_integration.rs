@@ -1,9 +1,7 @@
 #![cfg(feature = "integration-tests")]
 
-use common::auth::{
-    Action, AuthorizationProvider, CasbinAuthorizationService, OrgRole, Resource,
-};
-use common::domain::{RegisterUserInputWithId, UserRepository};
+use common::auth::{Action, AuthorizationProvider, CasbinAuthorizationService, OrgRole, Resource};
+use common::domain::{RegisterUserRepoInputWithId, UserRepository};
 use common::postgres::{
     create_postgres_authorization_adapter, PostgresClient, PostgresUserRepository,
 };
@@ -15,7 +13,11 @@ use testcontainers_modules::postgres::Postgres;
 const TEST_USER_ID: &str = "test-user-001";
 const TEST_ORG_ID: &str = "test-org-001";
 
-async fn setup_test_db() -> (ContainerAsync<Postgres>, CasbinAuthorizationService, PostgresClient) {
+async fn setup_test_db() -> (
+    ContainerAsync<Postgres>,
+    CasbinAuthorizationService,
+    PostgresClient,
+) {
     let postgres = Postgres::default().start().await.unwrap();
     let host = postgres.get_host().await.unwrap();
     let port = postgres.get_host_port_ipv4(5432).await.unwrap();
@@ -56,7 +58,7 @@ async fn setup_test_db() -> (ContainerAsync<Postgres>, CasbinAuthorizationServic
 
     // Create a test user first (needed for user_organizations foreign key)
     let user_repo = PostgresUserRepository::new(client.clone());
-    let user_input = RegisterUserInputWithId {
+    let user_input = RegisterUserRepoInputWithId {
         id: TEST_USER_ID.to_string(),
         email: "test@example.com".to_string(),
         name: "Test User".to_string(),
@@ -245,10 +247,7 @@ async fn test_require_permission_allowed_succeeds() {
 async fn test_super_admin_cross_org_access() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
-    auth_service
-        .assign_super_admin(TEST_USER_ID)
-        .await
-        .unwrap();
+    auth_service.assign_super_admin(TEST_USER_ID).await.unwrap();
 
     // Should have access to any org
     let allowed = auth_service
@@ -264,10 +263,7 @@ async fn test_super_admin_cross_org_access() {
 async fn test_super_admin_can_access_any_resource() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
-    auth_service
-        .assign_super_admin(TEST_USER_ID)
-        .await
-        .unwrap();
+    auth_service.assign_super_admin(TEST_USER_ID).await.unwrap();
 
     // Check all resources and actions
     for resource in [Resource::Device, Resource::Gateway, Resource::Organization] {
@@ -296,10 +292,7 @@ async fn test_is_super_admin() {
     assert!(!is_super);
 
     // Assign super admin
-    auth_service
-        .assign_super_admin(TEST_USER_ID)
-        .await
-        .unwrap();
+    auth_service.assign_super_admin(TEST_USER_ID).await.unwrap();
 
     // Now should be super admin
     let is_super = auth_service.is_super_admin(TEST_USER_ID).await.unwrap();
@@ -318,7 +311,12 @@ async fn test_user_cannot_access_other_org() {
 
     // Should NOT have access to org2
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, "other-org-id", Resource::Device, Action::Create)
+        .check_permission(
+            TEST_USER_ID,
+            "other-org-id",
+            Resource::Device,
+            Action::Create,
+        )
         .await
         .unwrap();
 
@@ -390,7 +388,7 @@ async fn test_multiple_users_in_same_org() {
 
     // Create second user
     let user_repo = PostgresUserRepository::new(client);
-    let user_input = RegisterUserInputWithId {
+    let user_input = RegisterUserRepoInputWithId {
         id: "user-2".to_string(),
         email: "user2@example.com".to_string(),
         name: "User Two".to_string(),
@@ -629,7 +627,7 @@ async fn test_role_persisted_in_database() {
 
     // Create test user
     let user_repo = PostgresUserRepository::new(client.clone());
-    let user_input = RegisterUserInputWithId {
+    let user_input = RegisterUserRepoInputWithId {
         id: TEST_USER_ID.to_string(),
         email: "test@example.com".to_string(),
         name: "Test User".to_string(),

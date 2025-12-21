@@ -59,37 +59,17 @@ impl OrgRole {
 pub fn base_policies() -> Vec<Vec<String>> {
     vec![
         // Admin policies - full CRUD on all resources
-        vec![
-            "admin".into(),
-            "*".into(),
-            "device".into(),
-            "create".into(),
-        ],
+        vec!["admin".into(), "*".into(), "device".into(), "create".into()],
         vec!["admin".into(), "*".into(), "device".into(), "read".into()],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "device".into(),
-            "update".into(),
-        ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "device".into(),
-            "delete".into(),
-        ],
+        vec!["admin".into(), "*".into(), "device".into(), "update".into()],
+        vec!["admin".into(), "*".into(), "device".into(), "delete".into()],
         vec![
             "admin".into(),
             "*".into(),
             "gateway".into(),
             "create".into(),
         ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "gateway".into(),
-            "read".into(),
-        ],
+        vec!["admin".into(), "*".into(), "gateway".into(), "read".into()],
         vec![
             "admin".into(),
             "*".into(),
@@ -127,12 +107,7 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "device".into(),
             "create".into(),
         ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "device".into(),
-            "read".into(),
-        ],
+        vec!["member".into(), "*".into(), "device".into(), "read".into()],
         vec![
             "member".into(),
             "*".into(),
@@ -151,12 +126,7 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "gateway".into(),
             "create".into(),
         ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "gateway".into(),
-            "read".into(),
-        ],
+        vec!["member".into(), "*".into(), "gateway".into(), "read".into()],
         vec![
             "member".into(),
             "*".into(),

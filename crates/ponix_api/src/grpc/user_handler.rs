@@ -2,14 +2,15 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info, instrument};
 
-use crate::domain::UserService;
-use common::auth::{LogoutInput, RefreshTokenInput};
+use crate::domain::{
+    GetUserRequest as DomainGetUserRequest, RegisterUserRequest as DomainRegisterUserRequest,
+    UserService,
+};
+use common::auth::{LoginUserInput, LogoutInput, RefreshTokenInput};
 use common::grpc::{
     domain_error_to_status, extract_refresh_token_from_cookies, RefreshTokenCookie,
 };
-use common::proto::{
-    to_get_user_input, to_login_user_input, to_proto_user, to_register_user_input,
-};
+use common::proto::to_proto_user;
 use ponix_proto_prost::user::v1::{
     GetUserRequest, GetUserResponse, LoginRequest, LoginResponse, LogoutRequest, LogoutResponse,
     RefreshRequest, RefreshResponse, RegisterUserRequest, RegisterUserResponse,
@@ -50,13 +51,17 @@ impl UserServiceTrait for UserServiceHandler {
     ) -> Result<Response<RegisterUserResponse>, Status> {
         let req = request.into_inner();
 
-        // Convert proto -> domain
-        let input = to_register_user_input(req);
+        // Construct domain request directly
+        let service_request = DomainRegisterUserRequest {
+            email: req.email,
+            password: req.password,
+            name: req.name,
+        };
 
         // Call domain service
         let user = self
             .domain_service
-            .register_user(input)
+            .register_user(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -81,13 +86,15 @@ impl UserServiceTrait for UserServiceHandler {
     ) -> Result<Response<GetUserResponse>, Status> {
         let req = request.into_inner();
 
-        // Convert proto -> domain
-        let input = to_get_user_input(req);
+        // Construct domain request directly
+        let service_request = DomainGetUserRequest {
+            user_id: req.user_id,
+        };
 
         // Call domain service
         let user = self
             .domain_service
-            .get_user(input)
+            .get_user(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -110,13 +117,16 @@ impl UserServiceTrait for UserServiceHandler {
     ) -> Result<Response<LoginResponse>, Status> {
         let req = request.into_inner();
 
-        // Convert proto -> domain
-        let input = to_login_user_input(req);
+        // Construct domain request directly
+        let login_input = LoginUserInput {
+            email: req.email,
+            password: req.password,
+        };
 
         // Call domain service
         let output = self
             .domain_service
-            .login_user(input)
+            .login_user(login_input)
             .await
             .map_err(domain_error_to_status)?;
 

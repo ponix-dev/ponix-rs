@@ -1,9 +1,10 @@
 #![cfg(feature = "integration-tests")]
 
 use common::domain::{
-    CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError, GetOrganizationInput,
-    GetUserOrganizationsInput, ListOrganizationsInput, OrganizationRepository,
-    RegisterUserInputWithId, UpdateOrganizationInput, UserRepository,
+    CreateOrganizationRepoInputWithId, DeleteOrganizationRepoInput, DomainError,
+    GetOrganizationRepoInput, GetUserOrganizationsRepoInput, ListOrganizationsRepoInput,
+    OrganizationRepository, RegisterUserRepoInputWithId, UpdateOrganizationRepoInput,
+    UserRepository,
 };
 use common::postgres::{PostgresClient, PostgresOrganizationRepository, PostgresUserRepository};
 use goose::MigrationRunner;
@@ -58,7 +59,7 @@ async fn setup_test_db() -> (
 
     // Create a test user first (needed for user_organizations foreign key)
     let user_repo = PostgresUserRepository::new(client.clone());
-    let user_input = RegisterUserInputWithId {
+    let user_input = RegisterUserRepoInputWithId {
         id: TEST_USER_ID.to_string(),
         email: "test@example.com".to_string(),
         name: "Test User".to_string(),
@@ -76,7 +77,7 @@ async fn setup_test_db() -> (
 async fn test_create_and_get_organization() {
     let (_container, repo, _client) = setup_test_db().await;
 
-    let input = CreateOrganizationInputWithId {
+    let input = CreateOrganizationRepoInputWithId {
         id: "test-org-123".to_string(),
         name: "Test Organization".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -90,7 +91,7 @@ async fn test_create_and_get_organization() {
     assert!(created.created_at.is_some());
 
     // Get organization
-    let get_input = GetOrganizationInput {
+    let get_input = GetOrganizationRepoInput {
         organization_id: "test-org-123".to_string(),
     };
     let retrieved = repo.get_organization(get_input).await.unwrap();
@@ -107,7 +108,7 @@ async fn test_create_and_get_organization() {
 async fn test_get_nonexistent_organization() {
     let (_container, repo, _client) = setup_test_db().await;
 
-    let get_input = GetOrganizationInput {
+    let get_input = GetOrganizationRepoInput {
         organization_id: "nonexistent-org".to_string(),
     };
     let result = repo.get_organization(get_input).await.unwrap();
@@ -120,7 +121,7 @@ async fn test_update_organization() {
     let (_container, repo, _client) = setup_test_db().await;
 
     // Create organization
-    let input = CreateOrganizationInputWithId {
+    let input = CreateOrganizationRepoInputWithId {
         id: "test-org-456".to_string(),
         name: "Original Name".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -128,7 +129,7 @@ async fn test_update_organization() {
     repo.create_organization(input).await.unwrap();
 
     // Update organization
-    let update_input = UpdateOrganizationInput {
+    let update_input = UpdateOrganizationRepoInput {
         organization_id: "test-org-456".to_string(),
         name: "Updated Name".to_string(),
     };
@@ -142,7 +143,7 @@ async fn test_update_organization() {
 async fn test_update_nonexistent_organization() {
     let (_container, repo, _client) = setup_test_db().await;
 
-    let update_input = UpdateOrganizationInput {
+    let update_input = UpdateOrganizationRepoInput {
         organization_id: "nonexistent".to_string(),
         name: "New Name".to_string(),
     };
@@ -156,7 +157,7 @@ async fn test_delete_organization() {
     let (_container, repo, _client) = setup_test_db().await;
 
     // Create organization
-    let input = CreateOrganizationInputWithId {
+    let input = CreateOrganizationRepoInputWithId {
         id: "test-org-789".to_string(),
         name: "To Be Deleted".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -164,13 +165,13 @@ async fn test_delete_organization() {
     repo.create_organization(input).await.unwrap();
 
     // Delete organization
-    let delete_input = DeleteOrganizationInput {
+    let delete_input = DeleteOrganizationRepoInput {
         organization_id: "test-org-789".to_string(),
     };
     repo.delete_organization(delete_input).await.unwrap();
 
     // Verify it's not returned by get (soft deleted)
-    let get_input = GetOrganizationInput {
+    let get_input = GetOrganizationRepoInput {
         organization_id: "test-org-789".to_string(),
     };
     let result = repo.get_organization(get_input).await.unwrap();
@@ -182,7 +183,7 @@ async fn test_delete_organization() {
 async fn test_delete_nonexistent_organization() {
     let (_container, repo, _client) = setup_test_db().await;
 
-    let delete_input = DeleteOrganizationInput {
+    let delete_input = DeleteOrganizationRepoInput {
         organization_id: "nonexistent".to_string(),
     };
     let result = repo.delete_organization(delete_input).await;
@@ -196,7 +197,7 @@ async fn test_list_organizations() {
 
     // Create multiple organizations
     for i in 1..=3 {
-        let input = CreateOrganizationInputWithId {
+        let input = CreateOrganizationRepoInputWithId {
             id: format!("org-{}", i),
             name: format!("Organization {}", i),
             user_id: TEST_USER_ID.to_string(),
@@ -205,7 +206,7 @@ async fn test_list_organizations() {
     }
 
     // List organizations
-    let list_input = ListOrganizationsInput {};
+    let list_input = ListOrganizationsRepoInput {};
     let organizations = repo.list_organizations(list_input).await.unwrap();
 
     assert_eq!(organizations.len(), 3);
@@ -219,7 +220,7 @@ async fn test_list_excludes_soft_deleted() {
 
     // Create organizations
     for i in 1..=3 {
-        let input = CreateOrganizationInputWithId {
+        let input = CreateOrganizationRepoInputWithId {
             id: format!("org-{}", i),
             name: format!("Organization {}", i),
             user_id: TEST_USER_ID.to_string(),
@@ -228,13 +229,13 @@ async fn test_list_excludes_soft_deleted() {
     }
 
     // Soft delete one
-    let delete_input = DeleteOrganizationInput {
+    let delete_input = DeleteOrganizationRepoInput {
         organization_id: "org-2".to_string(),
     };
     repo.delete_organization(delete_input).await.unwrap();
 
     // List should only return 2
-    let list_input = ListOrganizationsInput {};
+    let list_input = ListOrganizationsRepoInput {};
     let organizations = repo.list_organizations(list_input).await.unwrap();
 
     assert_eq!(organizations.len(), 2);
@@ -246,7 +247,7 @@ async fn test_list_excludes_soft_deleted() {
 async fn test_create_duplicate_organization() {
     let (_container, repo, _client) = setup_test_db().await;
 
-    let input = CreateOrganizationInputWithId {
+    let input = CreateOrganizationRepoInputWithId {
         id: "duplicate-org".to_string(),
         name: "Original Organization".to_string(),
         user_id: TEST_USER_ID.to_string(),
@@ -269,7 +270,7 @@ async fn test_create_duplicate_organization() {
 async fn test_create_organization_with_nonexistent_user() {
     let (_container, repo, _client) = setup_test_db().await;
 
-    let input = CreateOrganizationInputWithId {
+    let input = CreateOrganizationRepoInputWithId {
         id: "org-with-bad-user".to_string(),
         name: "Test Org".to_string(),
         user_id: "nonexistent-user".to_string(),
@@ -288,7 +289,7 @@ async fn test_get_organizations_by_user_id() {
 
     // Create multiple organizations for the test user
     for i in 1..=3 {
-        let input = CreateOrganizationInputWithId {
+        let input = CreateOrganizationRepoInputWithId {
             id: format!("user-org-{}", i),
             name: format!("User Organization {}", i),
             user_id: TEST_USER_ID.to_string(),
@@ -297,7 +298,7 @@ async fn test_get_organizations_by_user_id() {
     }
 
     // Get organizations for the user
-    let input = GetUserOrganizationsInput {
+    let input = GetUserOrganizationsRepoInput {
         user_id: TEST_USER_ID.to_string(),
     };
     let organizations = repo.get_organizations_by_user_id(input).await.unwrap();
@@ -315,7 +316,7 @@ async fn test_get_organizations_by_user_id_empty() {
 
     // Create a second user with no organizations
     let user_repo = PostgresUserRepository::new(client);
-    let user_input = RegisterUserInputWithId {
+    let user_input = RegisterUserRepoInputWithId {
         id: "user-no-orgs".to_string(),
         email: "noorganizations@example.com".to_string(),
         name: "No Orgs User".to_string(),
@@ -324,7 +325,7 @@ async fn test_get_organizations_by_user_id_empty() {
     user_repo.register_user(user_input).await.unwrap();
 
     // Get organizations for user with no orgs
-    let input = GetUserOrganizationsInput {
+    let input = GetUserOrganizationsRepoInput {
         user_id: "user-no-orgs".to_string(),
     };
     let organizations = repo.get_organizations_by_user_id(input).await.unwrap();
@@ -339,7 +340,7 @@ async fn test_get_organizations_by_user_id_excludes_soft_deleted() {
 
     // Create organizations for the test user
     for i in 1..=3 {
-        let input = CreateOrganizationInputWithId {
+        let input = CreateOrganizationRepoInputWithId {
             id: format!("soft-del-org-{}", i),
             name: format!("Organization {}", i),
             user_id: TEST_USER_ID.to_string(),
@@ -348,13 +349,13 @@ async fn test_get_organizations_by_user_id_excludes_soft_deleted() {
     }
 
     // Soft delete one organization
-    let delete_input = DeleteOrganizationInput {
+    let delete_input = DeleteOrganizationRepoInput {
         organization_id: "soft-del-org-2".to_string(),
     };
     repo.delete_organization(delete_input).await.unwrap();
 
     // Get organizations for the user - should only return 2
-    let input = GetUserOrganizationsInput {
+    let input = GetUserOrganizationsRepoInput {
         user_id: TEST_USER_ID.to_string(),
     };
     let organizations = repo.get_organizations_by_user_id(input).await.unwrap();
@@ -370,7 +371,7 @@ async fn test_get_organizations_by_user_id_multiple_users() {
 
     // Create a second user
     let user_repo = PostgresUserRepository::new(client);
-    let user_input = RegisterUserInputWithId {
+    let user_input = RegisterUserRepoInputWithId {
         id: "second-user".to_string(),
         email: "second@example.com".to_string(),
         name: "Second User".to_string(),
@@ -380,7 +381,7 @@ async fn test_get_organizations_by_user_id_multiple_users() {
 
     // Create organizations for the first user
     for i in 1..=2 {
-        let input = CreateOrganizationInputWithId {
+        let input = CreateOrganizationRepoInputWithId {
             id: format!("first-user-org-{}", i),
             name: format!("First User Org {}", i),
             user_id: TEST_USER_ID.to_string(),
@@ -390,7 +391,7 @@ async fn test_get_organizations_by_user_id_multiple_users() {
 
     // Create organizations for the second user
     for i in 1..=3 {
-        let input = CreateOrganizationInputWithId {
+        let input = CreateOrganizationRepoInputWithId {
             id: format!("second-user-org-{}", i),
             name: format!("Second User Org {}", i),
             user_id: "second-user".to_string(),
@@ -399,7 +400,7 @@ async fn test_get_organizations_by_user_id_multiple_users() {
     }
 
     // Get organizations for first user - should only see their 2 orgs
-    let input1 = GetUserOrganizationsInput {
+    let input1 = GetUserOrganizationsRepoInput {
         user_id: TEST_USER_ID.to_string(),
     };
     let orgs1 = repo.get_organizations_by_user_id(input1).await.unwrap();
@@ -407,7 +408,7 @@ async fn test_get_organizations_by_user_id_multiple_users() {
     assert!(orgs1.iter().all(|o| o.id.starts_with("first-user-org-")));
 
     // Get organizations for second user - should only see their 3 orgs
-    let input2 = GetUserOrganizationsInput {
+    let input2 = GetUserOrganizationsRepoInput {
         user_id: "second-user".to_string(),
     };
     let orgs2 = repo.get_organizations_by_user_id(input2).await.unwrap();

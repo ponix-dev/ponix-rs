@@ -1,6 +1,6 @@
 use crate::domain::PayloadConverter;
 use common::domain::{
-    DeviceRepository, DomainError, DomainResult, GetDeviceInput, GetOrganizationInput,
+    DeviceRepository, DomainError, DomainResult, GetDeviceRepoInput, GetOrganizationRepoInput,
     OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer, RawEnvelope,
 };
 use std::sync::Arc;
@@ -50,7 +50,7 @@ impl RawEnvelopeService {
         // 1. Fetch device to get CEL expression
         let device = self
             .device_repository
-            .get_device(GetDeviceInput {
+            .get_device(GetDeviceRepoInput {
                 device_id: raw.end_device_id.clone(),
                 organization_id: raw.organization_id.clone(),
             })
@@ -61,7 +61,7 @@ impl RawEnvelopeService {
         debug!(organization_id = %device.organization_id, "validating organization status");
         match self
             .organization_repository
-            .get_organization(GetOrganizationInput {
+            .get_organization(GetOrganizationRepoInput {
                 organization_id: device.organization_id.clone(),
             })
             .await?
@@ -201,7 +201,7 @@ mod tests {
 
         mock_device_repo
             .expect_get_device()
-            .withf(|input: &GetDeviceInput| {
+            .withf(|input: &GetDeviceRepoInput| {
                 input.device_id == "device-123" && input.organization_id == "org-456"
             })
             .times(1)
@@ -209,7 +209,7 @@ mod tests {
 
         mock_org_repo
             .expect_get_organization()
-            .withf(|input: &GetOrganizationInput| input.organization_id == "org-456")
+            .withf(|input: &GetOrganizationRepoInput| input.organization_id == "org-456")
             .times(1)
             .return_once(move |_| Ok(Some(org)));
 
@@ -579,7 +579,7 @@ mod tests {
 
         mock_org_repo
             .expect_get_organization()
-            .withf(|input: &GetOrganizationInput| input.organization_id == "org-deleted")
+            .withf(|input: &GetOrganizationRepoInput| input.organization_id == "org-deleted")
             .times(1)
             .return_once(move |_| Ok(Some(deleted_org)));
 
@@ -628,7 +628,7 @@ mod tests {
 
         mock_org_repo
             .expect_get_organization()
-            .withf(|input: &GetOrganizationInput| input.organization_id == "org-nonexistent")
+            .withf(|input: &GetOrganizationRepoInput| input.organization_id == "org-nonexistent")
             .times(1)
             .return_once(|_| Ok(None));
 

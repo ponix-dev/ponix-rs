@@ -2,15 +2,16 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
-use crate::domain::OrganizationService;
+use crate::domain::{
+    CreateOrganizationRequest as DomainCreateRequest,
+    DeleteOrganizationRequest as DomainDeleteRequest, GetOrganizationRequest as DomainGetRequest,
+    GetUserOrganizationsRequest as DomainGetUserOrgsRequest,
+    ListOrganizationsRequest as DomainListRequest, OrganizationService,
+};
 use common::auth::AuthTokenProvider;
 use common::domain::DomainError;
 use common::grpc::{domain_error_to_status, extract_user_context};
-use common::proto::{
-    datetime_to_timestamp, to_create_organization_input, to_delete_organization_input,
-    to_get_organization_input, to_get_user_organizations_input, to_list_organizations_input,
-    to_proto_organization,
-};
+use common::proto::{datetime_to_timestamp, to_proto_organization};
 use ponix_proto_prost::organization::v1::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
     DeleteOrganizationResponse, GetOrganizationRequest, GetOrganizationResponse,
@@ -51,17 +52,19 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
     ) -> Result<Response<CreateOrganizationResponse>, Status> {
         // Extract user_id from authorization header (mandatory)
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
-        let user_id = user_context.user_id;
 
         let req = request.into_inner();
 
-        // Convert proto → domain with mandatory user_id
-        let input = to_create_organization_input(req, user_id);
+        // Construct domain request directly
+        let service_request = DomainCreateRequest {
+            user_id: user_context.user_id,
+            name: req.name,
+        };
 
         // Call domain service
         let organization = self
             .domain_service
-            .create_organization(input)
+            .create_organization(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -93,13 +96,16 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_get_organization_input(req);
+        // Construct domain request directly
+        let service_request = DomainGetRequest {
+            user_id: user_context.user_id,
+            organization_id: req.organization_id,
+        };
 
-        // Call domain service with user_id for authorization
+        // Call domain service
         let organization = self
             .domain_service
-            .get_organization(&user_context.user_id, input)
+            .get_organization(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -124,13 +130,16 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto → domain
-        let input = to_delete_organization_input(req);
-        let organization_id = input.organization_id.clone();
+        // Construct domain request directly
+        let organization_id = req.organization_id.clone();
+        let service_request = DomainDeleteRequest {
+            user_id: user_context.user_id,
+            organization_id: req.organization_id,
+        };
 
-        // Call domain service with user_id for authorization
+        // Call domain service
         self.domain_service
-            .delete_organization(&user_context.user_id, input)
+            .delete_organization(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -142,20 +151,18 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
         }))
     }
 
-    #[instrument(name = "ListOrganizations", skip(self, request))]
+    #[instrument(name = "ListOrganizations", skip(self, _request))]
     async fn list_organizations(
         &self,
-        request: Request<ListOrganizationsRequest>,
+        _request: Request<ListOrganizationsRequest>,
     ) -> Result<Response<ListOrganizationsResponse>, Status> {
-        let req = request.into_inner();
-
-        // Convert proto → domain
-        let input = to_list_organizations_input(req);
+        // Construct domain request directly
+        let service_request = DomainListRequest {};
 
         // Call domain service
         let organizations = self
             .domain_service
-            .list_organizations(input)
+            .list_organizations(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -197,13 +204,15 @@ impl OrganizationServiceTrait for OrganizationServiceHandler {
             )));
         }
 
-        // Convert proto → domain
-        let input = to_get_user_organizations_input(req);
+        // Construct domain request directly
+        let service_request = DomainGetUserOrgsRequest {
+            user_id: req.user_id,
+        };
 
         // Call domain service
         let organizations = self
             .domain_service
-            .get_user_organizations(input)
+            .get_user_organizations(service_request)
             .await
             .map_err(domain_error_to_status)?;
 
