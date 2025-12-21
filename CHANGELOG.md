@@ -1,3 +1,9 @@
+## [1.9.2](https://github.com/ponix-dev/ponix-rs/compare/v1.9.1...v1.9.2) (2025-12-21)
+
+### Code Refactoring
+
+* adds garde for validation ([#96](https://github.com/ponix-dev/ponix-rs/issues/96)) ([d09a529](https://github.com/ponix-dev/ponix-rs/commit/d09a52965b2ee90903c18f8b7352fc676a6c6e58))
+
 ## [1.9.1](https://github.com/ponix-dev/ponix-rs/compare/v1.9.0...v1.9.1) (2025-12-21)
 
 ### Code Refactoring
