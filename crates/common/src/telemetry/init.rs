@@ -11,7 +11,7 @@ use opentelemetry_sdk::{
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use super::{TelemetryConfig, TelemetryProviders, TraceContextLogProcessor};
+use crate::telemetry::{TelemetryConfig, TelemetryProviders, TraceContextLogProcessor};
 
 /// Initialize telemetry with OpenTelemetry support
 ///

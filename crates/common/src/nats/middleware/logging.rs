@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
-use super::types::{PublishRequest, PublishResponse};
+use crate::nats::{PublishRequest, PublishResponse};
 use tower::{Layer, Service};
 use tracing::{error, info, Instrument, Span};
 

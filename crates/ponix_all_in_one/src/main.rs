@@ -4,8 +4,10 @@ use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig}
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
 use common::auth::{
-    Argon2PasswordService, CryptoRefreshTokenProvider, JwtAuthTokenProvider, JwtConfig,
+    Argon2PasswordService, CasbinAuthorizationService, CryptoRefreshTokenProvider,
+    JwtAuthTokenProvider, JwtConfig,
 };
+use common::postgres::create_postgres_authorization_adapter;
 use common::clickhouse::ClickHouseClient;
 use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
@@ -57,7 +59,7 @@ async fn main() {
     debug!("Configuration: {:?}", config);
 
     // Initialize shared dependencies
-    let (postgres_repos, clickhouse_client, nats_client) =
+    let (postgres_repos, postgres_client, clickhouse_client, nats_client) =
         match initialize_shared_dependencies(&config).await {
             Ok(deps) => deps,
             Err(e) => {
@@ -66,17 +68,38 @@ async fn main() {
             }
         };
 
+    // Initialize authorization service
+    let authorization_adapter = match create_postgres_authorization_adapter(&postgres_client).await
+    {
+        Ok(adapter) => adapter,
+        Err(e) => {
+            error!("Failed to create authorization adapter: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let authorization_service = match CasbinAuthorizationService::new(authorization_adapter).await
+    {
+        Ok(service) => Arc::new(service),
+        Err(e) => {
+            error!("Failed to initialize authorization service: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     // Initialize domain services
     let device_service = Arc::new(DeviceService::new(
         postgres_repos.device.clone(),
         postgres_repos.organization.clone(),
+        authorization_service.clone(),
     ));
     let organization_service = Arc::new(OrganizationService::new(
         postgres_repos.organization.clone(),
+        authorization_service.clone(),
     ));
     let gateway_service = Arc::new(GatewayService::new(
         postgres_repos.gateway.clone(),
         postgres_repos.organization.clone(),
+        authorization_service.clone(),
     ));
     let jwt_config = JwtConfig::new(config.jwt_secret.clone(), config.jwt_expiration_hours);
     let auth_token_provider: Arc<dyn common::auth::AuthTokenProvider> =
@@ -254,7 +277,7 @@ struct PostgresRepositories {
 
 async fn initialize_shared_dependencies(
     config: &ServiceConfig,
-) -> anyhow::Result<(PostgresRepositories, ClickHouseClient, Arc<NatsClient>)> {
+) -> anyhow::Result<(PostgresRepositories, PostgresClient, ClickHouseClient, Arc<NatsClient>)> {
     // PostgreSQL initialization
     info!("Initializing PostgreSQL...");
     run_postgres_migrations(config).await?;
@@ -264,7 +287,7 @@ async fn initialize_shared_dependencies(
         organization: Arc::new(PostgresOrganizationRepository::new(postgres_client.clone())),
         gateway: Arc::new(PostgresGatewayRepository::new(postgres_client.clone())),
         user: Arc::new(PostgresUserRepository::new(postgres_client.clone())),
-        refresh_token: Arc::new(PostgresRefreshTokenRepository::new(postgres_client)),
+        refresh_token: Arc::new(PostgresRefreshTokenRepository::new(postgres_client.clone())),
     };
 
     // ClickHouse initialization
@@ -283,7 +306,7 @@ async fn initialize_shared_dependencies(
     );
     ensure_nats_streams(&nats_client, config).await?;
 
-    Ok((postgres_repos, clickhouse_client, nats_client))
+    Ok((postgres_repos, postgres_client, clickhouse_client, nats_client))
 }
 
 async fn run_postgres_migrations(config: &ServiceConfig) -> anyhow::Result<()> {

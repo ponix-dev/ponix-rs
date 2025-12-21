@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
-use super::consumer_types::{ConsumeRequest, ConsumeResponse};
+use crate::nats::{ConsumeRequest, ConsumeResponse};
 use tower::{Layer, Service};
 use tracing::{error, info, Instrument, Span};
 

@@ -67,6 +67,7 @@ pub fn proto_to_domain_gateway(proto: &ProtoGateway) -> Result<Gateway> {
     })
 }
 
+/// Convert CreateGatewayRequest to domain CreateGatewayInput
 pub fn to_create_gateway_input(request: CreateGatewayRequest) -> CreateGatewayInput {
     let gateway_type = gateway_type_to_string(request.r#type());
 

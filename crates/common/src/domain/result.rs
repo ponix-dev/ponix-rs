@@ -91,6 +91,9 @@ pub enum DomainError {
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
 
+    #[error("Authorization error: {0}")]
+    AuthorizationError(String),
+
     #[error("Repository error: {0}")]
     RepositoryError(#[from] anyhow::Error),
 }

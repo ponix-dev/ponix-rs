@@ -39,7 +39,7 @@ use tonic_web::GrpcWebLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::debug;
 
-use super::{GrpcLoggingConfig, GrpcLoggingLayer, GrpcTracingConfig, GrpcTracingLayer};
+use crate::grpc::{GrpcLoggingConfig, GrpcLoggingLayer, GrpcTracingConfig, GrpcTracingLayer};
 
 /// CORS configuration for the gRPC server.
 #[derive(Debug, Clone)]

@@ -1,3 +1,4 @@
+use common::auth::{Action, AuthorizationProvider, OrgRole, Resource};
 use common::domain::{
     CreateOrganizationInput, CreateOrganizationInputWithId, DeleteOrganizationInput, DomainError,
     DomainResult, GetOrganizationInput, GetUserOrganizationsInput, ListOrganizationsInput,
@@ -9,11 +10,18 @@ use tracing::{debug, instrument};
 /// Domain service for organization business logic
 pub struct OrganizationService {
     repository: Arc<dyn OrganizationRepository>,
+    authorization_provider: Arc<dyn AuthorizationProvider>,
 }
 
 impl OrganizationService {
-    pub fn new(repository: Arc<dyn OrganizationRepository>) -> Self {
-        Self { repository }
+    pub fn new(
+        repository: Arc<dyn OrganizationRepository>,
+        authorization_provider: Arc<dyn AuthorizationProvider>,
+    ) -> Self {
+        Self {
+            repository,
+            authorization_provider,
+        }
     }
 
     /// Create a new organization with generated ID
@@ -41,6 +49,9 @@ impl OrganizationService {
         // Generate unique organization ID using xid
         let organization_id = xid::new().to_string();
 
+        // Save user_id before moving into repo_input
+        let user_id = input.user_id.clone();
+
         let repo_input = CreateOrganizationInputWithId {
             id: organization_id.clone(),
             name: input.name,
@@ -49,14 +60,20 @@ impl OrganizationService {
 
         let organization = self.repository.create_organization(repo_input).await?;
 
+        // Assign the creator as Admin in the authorization system
+        self.authorization_provider
+            .assign_role(&user_id, &organization.id, OrgRole::Admin)
+            .await?;
+
         debug!(organization_id = %organization.id, "organization created successfully");
         Ok(organization)
     }
 
     /// Get organization by ID (excludes soft deleted)
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
     pub async fn get_organization(
         &self,
+        user_id: &str,
         input: GetOrganizationInput,
     ) -> DomainResult<Organization> {
         debug!(organization_id = %input.organization_id, "getting organization");
@@ -66,6 +83,16 @@ impl OrganizationService {
                 "Organization ID cannot be empty".to_string(),
             ));
         }
+
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Organization,
+                Action::Read,
+            )
+            .await?;
 
         let organization = self
             .repository
@@ -77,9 +104,10 @@ impl OrganizationService {
     }
 
     /// Update organization name
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
     pub async fn update_organization(
         &self,
+        user_id: &str,
         input: UpdateOrganizationInput,
     ) -> DomainResult<Organization> {
         debug!(organization_id = %input.organization_id, "updating organization");
@@ -96,6 +124,16 @@ impl OrganizationService {
             ));
         }
 
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Organization,
+                Action::Update,
+            )
+            .await?;
+
         let organization = self.repository.update_organization(input).await?;
 
         debug!(organization_id = %organization.id, "organization updated successfully");
@@ -103,8 +141,12 @@ impl OrganizationService {
     }
 
     /// Soft delete organization
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
-    pub async fn delete_organization(&self, input: DeleteOrganizationInput) -> DomainResult<()> {
+    #[instrument(skip(self, user_id, input), fields(user_id = %user_id, organization_id = %input.organization_id))]
+    pub async fn delete_organization(
+        &self,
+        user_id: &str,
+        input: DeleteOrganizationInput,
+    ) -> DomainResult<()> {
         debug!(organization_id = %input.organization_id, "Deleting organization");
 
         if input.organization_id.is_empty() {
@@ -112,6 +154,16 @@ impl OrganizationService {
                 "Organization ID cannot be empty".to_string(),
             ));
         }
+
+        // Check authorization
+        self.authorization_provider
+            .require_permission(
+                user_id,
+                &input.organization_id,
+                Resource::Organization,
+                Action::Delete,
+            )
+            .await?;
 
         self.repository.delete_organization(input.clone()).await?;
 
@@ -157,7 +209,19 @@ impl OrganizationService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use common::auth::MockAuthorizationProvider;
     use common::domain::MockOrganizationRepository;
+
+    const TEST_USER_ID: &str = "user-123";
+
+    fn create_mock_auth_provider() -> Arc<MockAuthorizationProvider> {
+        let mut mock = MockAuthorizationProvider::new();
+        mock.expect_assign_role()
+            .returning(|_, _, _| Box::pin(async { Ok(()) }));
+        mock.expect_require_permission()
+            .returning(|_, _, _, _| Box::pin(async { Ok(()) }));
+        Arc::new(mock)
+    }
 
     #[tokio::test]
     async fn test_create_organization_success() {
@@ -179,7 +243,8 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(expected_org.clone()));
 
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
         let input = CreateOrganizationInput {
             name: "Test Org".to_string(),
             user_id: "user-123".to_string(),
@@ -193,7 +258,8 @@ mod tests {
     #[tokio::test]
     async fn test_create_organization_empty_name() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = CreateOrganizationInput {
             name: "".to_string(),
@@ -210,7 +276,8 @@ mod tests {
     #[tokio::test]
     async fn test_create_organization_empty_user_id() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = CreateOrganizationInput {
             name: "Test Org".to_string(),
@@ -230,39 +297,42 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
         let input = GetOrganizationInput {
             organization_id: "nonexistent".to_string(),
         };
 
-        let result = service.get_organization(input).await;
+        let result = service.get_organization(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::OrganizationNotFound(_))));
     }
 
     #[tokio::test]
     async fn test_get_organization_empty_id() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = GetOrganizationInput {
             organization_id: "".to_string(),
         };
 
-        let result = service.get_organization(input).await;
+        let result = service.get_organization(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
     }
 
     #[tokio::test]
     async fn test_update_organization_empty_name() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = UpdateOrganizationInput {
             organization_id: "org-123".to_string(),
             name: "".to_string(),
         };
 
-        let result = service.update_organization(input).await;
+        let result = service.update_organization(TEST_USER_ID, input).await;
         assert!(matches!(
             result,
             Err(DomainError::InvalidOrganizationName(_))
@@ -272,20 +342,22 @@ mod tests {
     #[tokio::test]
     async fn test_delete_organization_empty_id() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = DeleteOrganizationInput {
             organization_id: "".to_string(),
         };
 
-        let result = service.delete_organization(input).await;
+        let result = service.delete_organization(TEST_USER_ID, input).await;
         assert!(matches!(result, Err(DomainError::InvalidOrganizationId(_))));
     }
 
     #[tokio::test]
     async fn test_get_user_organizations_empty_user_id() {
         let mock_repo = MockOrganizationRepository::new();
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
 
         let input = GetUserOrganizationsInput {
             user_id: "".to_string(),
@@ -323,7 +395,8 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(cloned_orgs));
 
-        let service = OrganizationService::new(Arc::new(mock_repo));
+        let service =
+            OrganizationService::new(Arc::new(mock_repo), create_mock_auth_provider());
         let input = GetUserOrganizationsInput {
             user_id: "user-123".to_string(),
         };

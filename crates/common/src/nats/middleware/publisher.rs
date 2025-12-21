@@ -3,9 +3,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use super::types::{PublishRequest, PublishResponse};
-use super::{NatsPublishLoggingLayer, NatsPublishTracingLayer, NatsTracingConfig};
-use crate::nats::JetStreamPublisher;
+use crate::nats::{
+    JetStreamPublisher, NatsPublishLoggingLayer, NatsPublishTracingLayer, NatsTracingConfig,
+    PublishRequest, PublishResponse,
+};
 use anyhow::Result;
 use tower::{Service, ServiceBuilder};
 

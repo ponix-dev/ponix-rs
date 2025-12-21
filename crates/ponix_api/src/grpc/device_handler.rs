@@ -3,26 +3,33 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::DeviceService;
+use common::auth::AuthTokenProvider;
+use common::grpc::{domain_error_to_status, extract_user_context};
+use common::proto::{
+    to_create_device_input, to_get_device_input, to_list_devices_input, to_proto_device,
+};
 use ponix_proto_prost::end_device::v1::{
     CreateEndDeviceRequest, CreateEndDeviceResponse, EndDevice, GetEndDeviceRequest,
     GetEndDeviceResponse, ListEndDevicesRequest, ListEndDevicesResponse,
 };
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceService as DeviceServiceTrait;
 
-use common::grpc::domain_error_to_status;
-use common::proto::{
-    to_create_device_input, to_get_device_input, to_list_devices_input, to_proto_device,
-};
-
 /// gRPC handler for DeviceService
 /// Handles Proto → Domain mapping and error conversion
 pub struct DeviceServiceHandler {
     domain_service: Arc<DeviceService>,
+    auth_token_provider: Arc<dyn AuthTokenProvider>,
 }
 
 impl DeviceServiceHandler {
-    pub fn new(domain_service: Arc<DeviceService>) -> Self {
-        Self { domain_service }
+    pub fn new(
+        domain_service: Arc<DeviceService>,
+        auth_token_provider: Arc<dyn AuthTokenProvider>,
+    ) -> Self {
+        Self {
+            domain_service,
+            auth_token_provider,
+        }
     }
 }
 
@@ -40,15 +47,17 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         &self,
         request: Request<CreateEndDeviceRequest>,
     ) -> Result<Response<CreateEndDeviceResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
         // Convert proto → domain
         let input = to_create_device_input(req);
 
-        // Call domain service
+        // Call domain service with user_id for authorization
         let device = self
             .domain_service
-            .create_device(input)
+            .create_device(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -74,15 +83,17 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         &self,
         request: Request<GetEndDeviceRequest>,
     ) -> Result<Response<GetEndDeviceResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
         // Convert proto → domain
         let input = to_get_device_input(req);
 
-        // Call domain service
+        // Call domain service with user_id for authorization
         let device = self
             .domain_service
-            .get_device(input)
+            .get_device(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 
@@ -103,15 +114,17 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         &self,
         request: Request<ListEndDevicesRequest>,
     ) -> Result<Response<ListEndDevicesResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
         // Convert proto → domain
         let input = to_list_devices_input(req);
 
-        // Call domain service
+        // Call domain service with user_id for authorization
         let devices = self
             .domain_service
-            .list_devices(input)
+            .list_devices(&user_context.user_id, input)
             .await
             .map_err(domain_error_to_status)?;
 

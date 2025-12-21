@@ -11,6 +11,7 @@ use anyhow::Result;
 use goose::MigrationRunner;
 use tower::ServiceBuilder;
 
+use common::auth::MockAuthorizationProvider;
 use common::clickhouse::ClickHouseClient;
 use common::domain::{CreateDeviceInput, Device, RawEnvelope, RawEnvelopeProducer as _};
 use common::nats::{
@@ -233,8 +234,18 @@ async fn initialize_services(
     let device_repo = Arc::new(PostgresDeviceRepository::new(pg_client.clone()));
     let org_repo = Arc::new(PostgresOrganizationRepository::new(pg_client.clone()));
 
+    // Mock authorization provider that allows all operations (E2E test bypasses auth)
+    let mut mock_auth = MockAuthorizationProvider::new();
+    mock_auth
+        .expect_require_permission()
+        .returning(|_, _, _, _| Box::pin(async { Ok(()) }));
+
     // Device service
-    let device_service = Arc::new(DeviceService::new(device_repo.clone(), org_repo.clone()));
+    let device_service = Arc::new(DeviceService::new(
+        device_repo.clone(),
+        org_repo.clone(),
+        Arc::new(mock_auth),
+    ));
 
     // NATS client - wait a moment for NATS to fully start with JetStream
     sleep(Duration::from_secs(2)).await;
@@ -289,11 +300,14 @@ async fn create_test_device(
     }"#;
 
     let device = device_service
-        .create_device(CreateDeviceInput {
-            organization_id: "test-org-123".to_string(),
-            name: "Test Environmental Sensor".to_string(),
-            payload_conversion: cel_expression.to_string(),
-        })
+        .create_device(
+            "test-user-id",
+            CreateDeviceInput {
+                organization_id: "test-org-123".to_string(),
+                name: "Test Environmental Sensor".to_string(),
+                payload_conversion: cel_expression.to_string(),
+            },
+        )
         .await?;
 
     Ok(device)

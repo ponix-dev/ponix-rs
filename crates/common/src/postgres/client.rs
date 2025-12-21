@@ -57,4 +57,10 @@ impl PostgresClient {
     pub async fn get_connection(&self) -> Result<deadpool_postgres::Client> {
         Ok(self.pool.get().await?)
     }
+
+    /// Get a reference to the underlying connection pool
+    /// Used by casbin adapter for policy storage
+    pub fn get_pool(&self) -> Pool {
+        self.pool.clone()
+    }
 }
