@@ -1,3 +1,10 @@
+## [1.9.0](https://github.com/ponix-dev/ponix-rs/compare/v1.8.0...v1.9.0) (2025-12-21)
+
+### Features
+
+* adds org id for rpc requests ([#90](https://github.com/ponix-dev/ponix-rs/issues/90)) ([4c29615](https://github.com/ponix-dev/ponix-rs/commit/4c29615b535ad8d94b534aaf15a0225c197db3ac))
+* Implement Org-Scoped RBAC with Casbin ([#91](https://github.com/ponix-dev/ponix-rs/issues/91)) ([62e9c8e](https://github.com/ponix-dev/ponix-rs/commit/62e9c8ea05e8304e725a6b8837d20b7d71185a32))
+
 ## [1.8.0](https://github.com/ponix-dev/ponix-rs/compare/v1.7.1...v1.8.0) (2025-12-08)
 
 ### Features
