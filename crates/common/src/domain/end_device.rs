@@ -8,8 +8,23 @@ use chrono::{DateTime, Utc};
 pub struct Device {
     pub device_id: String,
     pub organization_id: String,
+    pub definition_id: String,
+    pub name: String,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// Device with its associated definition data (joined query result)
+/// Used when we need both device info and the backing definition
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceWithDefinition {
+    pub device_id: String,
+    pub organization_id: String,
+    pub definition_id: String,
+    pub definition_name: String,
     pub name: String,
     pub payload_conversion: String,
+    pub json_schema: String,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
@@ -20,8 +35,8 @@ pub struct Device {
 pub struct CreateDeviceRepoInput {
     pub device_id: String,
     pub organization_id: String,
+    pub definition_id: String,
     pub name: String,
-    pub payload_conversion: String,
 }
 
 /// Repository input for retrieving a device
@@ -34,6 +49,13 @@ pub struct GetDeviceRepoInput {
 /// Repository input for listing devices by organization
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListDevicesRepoInput {
+    pub organization_id: String,
+}
+
+/// Repository input for getting a device with its definition (joined query)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetDeviceWithDefinitionRepoInput {
+    pub device_id: String,
     pub organization_id: String,
 }
 
@@ -50,4 +72,11 @@ pub trait DeviceRepository: Send + Sync {
 
     /// List all devices for an organization
     async fn list_devices(&self, input: ListDevicesRepoInput) -> DomainResult<Vec<Device>>;
+
+    /// Get a device with its definition data in a single query (JOIN)
+    /// Returns device info plus definition's payload_conversion and json_schema
+    async fn get_device_with_definition(
+        &self,
+        input: GetDeviceWithDefinitionRepoInput,
+    ) -> DomainResult<Option<DeviceWithDefinition>>;
 }

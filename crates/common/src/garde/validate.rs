@@ -1,3 +1,5 @@
+//! Garde validation utilities.
+
 use crate::domain::DomainError;
 use garde::{Report, Validate};
 

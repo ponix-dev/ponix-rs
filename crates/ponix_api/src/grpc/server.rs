@@ -7,13 +7,17 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tonic::service::Routes;
 
-use crate::domain::{DeviceService, GatewayService, OrganizationService, UserService};
+use crate::domain::{
+    DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
+};
 use crate::grpc::{
-    DeviceServiceHandler, GatewayServiceHandler, OrganizationServiceHandler, UserServiceHandler,
+    DeviceServiceHandler, EndDeviceDefinitionServiceHandler, GatewayServiceHandler,
+    OrganizationServiceHandler, UserServiceHandler,
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_proto_prost;
+use ponix_proto_tonic::end_device::v1::tonic::end_device_definition_service_server::EndDeviceDefinitionServiceServer;
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceServiceServer;
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServiceServer;
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationServiceServer;
@@ -30,6 +34,7 @@ pub const REFLECTION_DESCRIPTORS: &[&[u8]] = &[
 /// Build Routes containing all Ponix API services.
 pub fn build_ponix_api_routes(
     device_service: Arc<DeviceService>,
+    definition_service: Arc<EndDeviceDefinitionService>,
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
@@ -39,6 +44,8 @@ pub fn build_ponix_api_routes(
 ) -> Routes {
     // Create handlers
     let device_handler = DeviceServiceHandler::new(device_service, auth_token_provider.clone());
+    let definition_handler =
+        EndDeviceDefinitionServiceHandler::new(definition_service, auth_token_provider.clone());
     let organization_handler =
         OrganizationServiceHandler::new(organization_service, auth_token_provider.clone());
     let gateway_handler = GatewayServiceHandler::new(gateway_service, auth_token_provider);
@@ -49,6 +56,7 @@ pub fn build_ponix_api_routes(
     let mut builder = Routes::builder();
     builder
         .add_service(EndDeviceServiceServer::new(device_handler))
+        .add_service(EndDeviceDefinitionServiceServer::new(definition_handler))
         .add_service(OrganizationServiceServer::new(organization_handler))
         .add_service(GatewayServiceServer::new(gateway_handler))
         .add_service(UserServiceServer::new(user_handler));
@@ -66,6 +74,7 @@ pub fn build_ponix_api_routes(
 pub async fn run_ponix_grpc_server(
     config: GrpcServerConfig,
     device_service: Arc<DeviceService>,
+    definition_service: Arc<EndDeviceDefinitionService>,
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
@@ -76,6 +85,7 @@ pub async fn run_ponix_grpc_server(
 ) -> Result<(), anyhow::Error> {
     let routes = build_ponix_api_routes(
         device_service,
+        definition_service,
         organization_service,
         gateway_service,
         user_service,

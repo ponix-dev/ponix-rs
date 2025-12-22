@@ -1,9 +1,10 @@
 pub mod auth;
 pub mod clickhouse;
 pub mod domain;
+pub mod garde;
 pub mod grpc;
+pub mod jsonschema;
 pub mod nats;
 pub mod postgres;
 pub mod proto;
 pub mod telemetry;
-pub mod validation;

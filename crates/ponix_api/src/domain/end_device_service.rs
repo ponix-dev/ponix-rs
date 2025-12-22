@@ -1,6 +1,7 @@
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
-    CreateDeviceRepoInput, Device, DeviceRepository, DomainError, DomainResult, GetDeviceRepoInput,
+    CreateDeviceRepoInput, Device, DeviceRepository, DomainError, DomainResult,
+    EndDeviceDefinitionRepository, GetDeviceRepoInput, GetEndDeviceDefinitionRepoInput,
     GetOrganizationRepoInput, ListDevicesRepoInput, OrganizationRepository,
 };
 use garde::Validate;
@@ -15,9 +16,9 @@ pub struct CreateDeviceRequest {
     #[garde(length(min = 1))]
     pub organization_id: String,
     #[garde(length(min = 1))]
+    pub definition_id: String,
+    #[garde(length(min = 1))]
     pub name: String,
-    #[garde(skip)] // payload_conversion can be empty
-    pub payload_conversion: String,
 }
 
 /// Service request for getting a device
@@ -45,6 +46,7 @@ pub struct ListDevicesRequest {
 pub struct DeviceService {
     device_repository: Arc<dyn DeviceRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
+    definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
     authorization_provider: Arc<dyn AuthorizationProvider>,
 }
 
@@ -52,11 +54,13 @@ impl DeviceService {
     pub fn new(
         device_repository: Arc<dyn DeviceRepository>,
         organization_repository: Arc<dyn OrganizationRepository>,
+        definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
         authorization_provider: Arc<dyn AuthorizationProvider>,
     ) -> Self {
         Self {
             device_repository,
             organization_repository,
+            definition_repository,
             authorization_provider,
         }
     }
@@ -64,10 +68,11 @@ impl DeviceService {
     /// Create a new device with business logic validation
     /// Generates a unique device_id using xid
     /// Validates that the organization exists and is not deleted
+    /// Validates that the definition exists and belongs to the same organization
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, device_name = %request.name))]
     pub async fn create_device(&self, request: CreateDeviceRequest) -> DomainResult<Device> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         // Check authorization
         self.authorization_provider
@@ -79,7 +84,6 @@ impl DeviceService {
             )
             .await?;
 
-        // TODO: this may be more efficient to do at the db layer with a foreign key constraint
         // Validate organization exists and is not deleted
         debug!(organization_id = %request.organization_id, "validating organization exists");
         let org_input = GetOrganizationRepoInput {
@@ -107,6 +111,20 @@ impl DeviceService {
             }
         }
 
+        // Validate definition exists and belongs to the same organization
+        debug!(definition_id = %request.definition_id, "validating definition exists");
+        let def_input = GetEndDeviceDefinitionRepoInput {
+            id: request.definition_id.clone(),
+            organization_id: request.organization_id.clone(),
+        };
+
+        self.definition_repository
+            .get_definition(def_input)
+            .await?
+            .ok_or_else(|| {
+                DomainError::EndDeviceDefinitionNotFound(request.definition_id.clone())
+            })?;
+
         // Generate unique device ID
         let device_id = xid::new().to_string();
 
@@ -116,8 +134,8 @@ impl DeviceService {
         let repo_input = CreateDeviceRepoInput {
             device_id,
             organization_id: request.organization_id,
+            definition_id: request.definition_id,
             name: request.name,
-            payload_conversion: request.payload_conversion,
         };
 
         let device = self.device_repository.create_device(repo_input).await?;
@@ -129,7 +147,7 @@ impl DeviceService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id))]
     pub async fn get_device(&self, request: GetDeviceRequest) -> DomainResult<Device> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         // Check authorization
         self.authorization_provider
@@ -161,7 +179,7 @@ impl DeviceService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
     pub async fn list_devices(&self, request: ListDevicesRequest) -> DomainResult<Vec<Device>> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         // Check authorization
         self.authorization_provider
@@ -190,7 +208,10 @@ impl DeviceService {
 mod tests {
     use super::*;
     use common::auth::MockAuthorizationProvider;
-    use common::domain::{MockDeviceRepository, MockOrganizationRepository, Organization};
+    use common::domain::{
+        EndDeviceDefinition, MockDeviceRepository, MockEndDeviceDefinitionRepository,
+        MockOrganizationRepository, Organization,
+    };
 
     const TEST_USER_ID: &str = "user-123";
 
@@ -205,6 +226,7 @@ mod tests {
     async fn test_create_device_success() {
         let mut mock_device_repo = MockDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
+        let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
 
         // Mock organization exists and is active
         let org = Organization {
@@ -221,11 +243,30 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(Some(org)));
 
+        // Mock definition exists
+        let def = EndDeviceDefinition {
+            id: "def-789".to_string(),
+            organization_id: "org-456".to_string(),
+            name: "Test Definition".to_string(),
+            json_schema: "{}".to_string(),
+            payload_conversion: "cayenne_lpp.decode(payload)".to_string(),
+            created_at: None,
+            updated_at: None,
+        };
+
+        mock_def_repo
+            .expect_get_definition()
+            .withf(|input: &GetEndDeviceDefinitionRepoInput| {
+                input.id == "def-789" && input.organization_id == "org-456"
+            })
+            .times(1)
+            .return_once(move |_| Ok(Some(def)));
+
         let expected_device = Device {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
-            payload_conversion: "test conversion".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -235,8 +276,8 @@ mod tests {
             .withf(|input: &CreateDeviceRepoInput| {
                 !input.device_id.is_empty() // ID is generated
                     && input.organization_id == "org-456"
+                    && input.definition_id == "def-789"
                     && input.name == "Test Device"
-                    && input.payload_conversion == "test conversion"
             })
             .times(1)
             .return_once(move |_| Ok(expected_device.clone()));
@@ -244,14 +285,15 @@ mod tests {
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             create_mock_auth_provider(),
         );
 
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
-            payload_conversion: "test conversion".to_string(),
         };
 
         let result = service.create_device(request).await;
@@ -260,23 +302,27 @@ mod tests {
         let device = result.unwrap();
         assert!(!device.device_id.is_empty()); // ID was generated
         assert_eq!(device.name, "Test Device");
+        assert_eq!(device.definition_id, "def-789");
     }
 
     #[tokio::test]
     async fn test_create_device_empty_name() {
         let mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
+        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             create_mock_auth_provider(),
         );
 
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
             name: "".to_string(),
-            payload_conversion: "test conversion".to_string(),
         };
 
         let result = service.create_device(request).await;
@@ -291,6 +337,7 @@ mod tests {
     async fn test_create_device_organization_not_found() {
         let mock_device_repo = MockDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
+        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
 
         // Mock organization not found
         mock_org_repo
@@ -301,14 +348,15 @@ mod tests {
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             create_mock_auth_provider(),
         );
 
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "nonexistent-org".to_string(),
+            definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
-            payload_conversion: "test conversion".to_string(),
         };
 
         let result = service.create_device(request).await;
@@ -323,6 +371,7 @@ mod tests {
     async fn test_create_device_organization_deleted() {
         let mock_device_repo = MockDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
+        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
 
         // Mock deleted organization
         let deleted_org = Organization {
@@ -341,14 +390,15 @@ mod tests {
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             create_mock_auth_provider(),
         );
 
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-deleted".to_string(),
+            definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
-            payload_conversion: "test conversion".to_string(),
         };
 
         let result = service.create_device(request).await;
@@ -360,15 +410,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_create_device_definition_not_found() {
+        let mock_device_repo = MockDeviceRepository::new();
+        let mut mock_org_repo = MockOrganizationRepository::new();
+        let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+
+        // Mock organization exists
+        let org = Organization {
+            id: "org-456".to_string(),
+            name: "Test Org".to_string(),
+            deleted_at: None,
+            created_at: None,
+            updated_at: None,
+        };
+
+        mock_org_repo
+            .expect_get_organization()
+            .times(1)
+            .return_once(move |_| Ok(Some(org)));
+
+        // Mock definition not found
+        mock_def_repo
+            .expect_get_definition()
+            .times(1)
+            .return_once(|_| Ok(None));
+
+        let service = DeviceService::new(
+            Arc::new(mock_device_repo),
+            Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
+            create_mock_auth_provider(),
+        );
+
+        let request = CreateDeviceRequest {
+            user_id: TEST_USER_ID.to_string(),
+            organization_id: "org-456".to_string(),
+            definition_id: "nonexistent-def".to_string(),
+            name: "Test Device".to_string(),
+        };
+
+        let result = service.create_device(request).await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DomainError::EndDeviceDefinitionNotFound(_)
+        ));
+    }
+
+    #[tokio::test]
     async fn test_get_device_success() {
         let mut mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
+        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
 
         let expected_device = Device {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
-            payload_conversion: "test conversion".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -384,6 +483,7 @@ mod tests {
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             create_mock_auth_provider(),
         );
 
@@ -401,6 +501,7 @@ mod tests {
     async fn test_get_device_not_found() {
         let mut mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
+        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
 
         mock_device_repo
             .expect_get_device()
@@ -410,6 +511,7 @@ mod tests {
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             create_mock_auth_provider(),
         );
 
@@ -431,9 +533,12 @@ mod tests {
     async fn test_get_device_empty_organization_id_fails() {
         let mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
+        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             create_mock_auth_provider(),
         );
 
@@ -455,21 +560,22 @@ mod tests {
     async fn test_list_devices_success() {
         let mut mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
+        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
 
         let devices = vec![
             Device {
                 device_id: "device-1".to_string(),
                 organization_id: "org-456".to_string(),
+                definition_id: "def-789".to_string(),
                 name: "Device 1".to_string(),
-                payload_conversion: "conversion 1".to_string(),
                 created_at: None,
                 updated_at: None,
             },
             Device {
                 device_id: "device-2".to_string(),
                 organization_id: "org-456".to_string(),
+                definition_id: "def-789".to_string(),
                 name: "Device 2".to_string(),
-                payload_conversion: "conversion 2".to_string(),
                 created_at: None,
                 updated_at: None,
             },
@@ -484,6 +590,7 @@ mod tests {
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             create_mock_auth_provider(),
         );
 
@@ -501,6 +608,7 @@ mod tests {
     async fn test_create_device_permission_denied() {
         let mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
+        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
 
         let mut mock_auth = MockAuthorizationProvider::new();
         mock_auth
@@ -516,14 +624,15 @@ mod tests {
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
+            Arc::new(mock_def_repo),
             Arc::new(mock_auth),
         );
 
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
-            payload_conversion: "test conversion".to_string(),
         };
 
         let result = service.create_device(request).await;

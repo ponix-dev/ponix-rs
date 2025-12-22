@@ -12,14 +12,17 @@ use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingC
 use common::nats::NatsClient;
 use common::postgres::create_postgres_authorization_adapter;
 use common::postgres::{
-    PostgresClient, PostgresDeviceRepository, PostgresGatewayRepository,
-    PostgresOrganizationRepository, PostgresRefreshTokenRepository, PostgresUserRepository,
+    PostgresClient, PostgresDeviceRepository, PostgresEndDeviceDefinitionRepository,
+    PostgresGatewayRepository, PostgresOrganizationRepository, PostgresRefreshTokenRepository,
+    PostgresUserRepository,
 };
 use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
-use ponix_api::domain::{DeviceService, GatewayService, OrganizationService, UserService};
+use ponix_api::domain::{
+    DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
+};
 use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
 use std::sync::Arc;
@@ -89,6 +92,12 @@ async fn main() {
     let device_service = Arc::new(DeviceService::new(
         postgres_repos.device.clone(),
         postgres_repos.organization.clone(),
+        postgres_repos.definition.clone(),
+        authorization_service.clone(),
+    ));
+    let definition_service = Arc::new(EndDeviceDefinitionService::new(
+        postgres_repos.definition.clone(),
+        postgres_repos.organization.clone(),
         authorization_service.clone(),
     ));
     let organization_service = Arc::new(OrganizationService::new(
@@ -146,6 +155,7 @@ async fn main() {
     // Initialize application modules
     let ponix_api = PonixApi::new(
         device_service.clone(),
+        definition_service,
         organization_service,
         gateway_service,
         user_service,
@@ -268,6 +278,7 @@ async fn main() {
 
 struct PostgresRepositories {
     device: Arc<PostgresDeviceRepository>,
+    definition: Arc<PostgresEndDeviceDefinitionRepository>,
     organization: Arc<PostgresOrganizationRepository>,
     gateway: Arc<PostgresGatewayRepository>,
     user: Arc<PostgresUserRepository>,
@@ -288,6 +299,9 @@ async fn initialize_shared_dependencies(
     let postgres_client = create_postgres_client(config)?;
     let postgres_repos = PostgresRepositories {
         device: Arc::new(PostgresDeviceRepository::new(postgres_client.clone())),
+        definition: Arc::new(PostgresEndDeviceDefinitionRepository::new(
+            postgres_client.clone(),
+        )),
         organization: Arc::new(PostgresOrganizationRepository::new(postgres_client.clone())),
         gateway: Arc::new(PostgresGatewayRepository::new(postgres_client.clone())),
         user: Arc::new(PostgresUserRepository::new(postgres_client.clone())),

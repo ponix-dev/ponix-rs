@@ -86,7 +86,7 @@ impl OrganizationService {
         request: CreateOrganizationRequest,
     ) -> DomainResult<Organization> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         debug!(name = %request.name, user_id = %request.user_id, "creating organization");
 
@@ -120,7 +120,7 @@ impl OrganizationService {
         request: GetOrganizationRequest,
     ) -> DomainResult<Organization> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         debug!(organization_id = %request.organization_id, "getting organization");
 
@@ -154,7 +154,7 @@ impl OrganizationService {
         request: UpdateOrganizationRequest,
     ) -> DomainResult<Organization> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         debug!(organization_id = %request.organization_id, "updating organization");
 
@@ -186,7 +186,7 @@ impl OrganizationService {
         request: DeleteOrganizationRequest,
     ) -> DomainResult<()> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         debug!(organization_id = %request.organization_id, "Deleting organization");
 
@@ -232,7 +232,7 @@ impl OrganizationService {
         request: GetUserOrganizationsRequest,
     ) -> DomainResult<Vec<Organization>> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         debug!(user_id = %request.user_id, "getting organizations for user");
 

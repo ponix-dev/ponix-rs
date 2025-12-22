@@ -63,7 +63,7 @@ impl UserService {
     #[instrument(skip(self, request), fields(email = %request.email))]
     pub async fn register_user(&self, request: RegisterUserRequest) -> DomainResult<User> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         debug!(email = %request.email, "registering new user");
 
@@ -92,7 +92,7 @@ impl UserService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id))]
     pub async fn get_user(&self, request: GetUserRequest) -> DomainResult<User> {
         // Validate request using garde
-        common::validation::validate(&request)?;
+        common::garde::validate(&request)?;
 
         debug!(user_id = %request.user_id, "getting user");
 

@@ -53,8 +53,8 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         let service_request = CreateDeviceRequest {
             user_id: user_context.user_id,
             organization_id: req.organization_id,
+            definition_id: req.definition_id,
             name: req.name,
-            payload_conversion: req.payload_conversion,
         };
 
         // Call domain service

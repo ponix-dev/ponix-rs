@@ -25,6 +25,18 @@ pub enum DomainError {
     #[error("Missing CEL expression for device: {0}")]
     MissingCelExpression(String),
 
+    #[error("End device definition not found: {0}")]
+    EndDeviceDefinitionNotFound(String),
+
+    #[error("End device definition already exists: {0}")]
+    EndDeviceDefinitionAlreadyExists(String),
+
+    #[error("Invalid JSON Schema: {0}")]
+    InvalidJsonSchema(String),
+
+    #[error("End device definition in use: {0}")]
+    EndDeviceDefinitionInUse(String),
+
     #[error("Organization not found: {0}")]
     OrganizationNotFound(String),
 
