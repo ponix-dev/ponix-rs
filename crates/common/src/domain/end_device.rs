@@ -1,6 +1,7 @@
 use crate::domain::result::DomainResult;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use garde::Validate;
 
 /// Domain representation of a Device
 /// Simple String types for now - can evolve to newtypes later
@@ -16,16 +17,25 @@ pub struct Device {
 
 /// Device with its associated definition data (joined query result)
 /// Used when we need both device info and the backing definition
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Validate)]
 pub struct DeviceWithDefinition {
+    #[garde(skip)]
     pub device_id: String,
+    #[garde(skip)]
     pub organization_id: String,
+    #[garde(skip)]
     pub definition_id: String,
+    #[garde(skip)]
     pub definition_name: String,
+    #[garde(skip)]
     pub name: String,
+    #[garde(length(min = 1))]
     pub payload_conversion: String,
+    #[garde(length(min = 1))]
     pub json_schema: String,
+    #[garde(skip)]
     pub created_at: Option<DateTime<Utc>>,
+    #[garde(skip)]
     pub updated_at: Option<DateTime<Utc>>,
 }
 

@@ -4,22 +4,26 @@ use common::domain::{
     GetOrganizationRepoInput, OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer,
     RawEnvelope,
 };
+use common::garde::validate_struct;
+use common::jsonschema::SchemaValidator;
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
 
 /// Domain service that orchestrates raw → processed envelope conversion
 ///
 /// Flow:
-/// 1. Fetch device to get CEL expression
+/// 1. Fetch device to get CEL expression and JSON schema
 /// 2. Validate organization is not deleted
 /// 3. Convert binary payload using CEL expression
-/// 4. Build ProcessedEnvelope from JSON + metadata
-/// 5. Publish via producer trait
+/// 4. Validate converted JSON against device's JSON Schema
+/// 5. Build ProcessedEnvelope from JSON + metadata
+/// 6. Publish via producer trait
 pub struct RawEnvelopeService {
     device_repository: Arc<dyn DeviceRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
     payload_converter: Arc<dyn PayloadConverter>,
     producer: Arc<dyn ProcessedEnvelopeProducer>,
+    schema_validator: Arc<dyn SchemaValidator>,
 }
 
 impl RawEnvelopeService {
@@ -29,12 +33,14 @@ impl RawEnvelopeService {
         organization_repository: Arc<dyn OrganizationRepository>,
         payload_converter: Arc<dyn PayloadConverter>,
         producer: Arc<dyn ProcessedEnvelopeProducer>,
+        schema_validator: Arc<dyn SchemaValidator>,
     ) -> Self {
         Self {
             device_repository,
             organization_repository,
             payload_converter,
             producer,
+            schema_validator,
         }
     }
 
@@ -93,15 +99,8 @@ impl RawEnvelopeService {
             }
         }
 
-        // 3. Validate CEL expression exists (from definition)
-        if device.payload_conversion.is_empty() {
-            error!(
-                device_id = %raw.end_device_id,
-                definition_id = %device.definition_id,
-                "definition has empty CEL expression"
-            );
-            return Err(DomainError::MissingCelExpression(raw.end_device_id.clone()));
-        }
+        // 3. Validate device with definition using garde
+        validate_struct(&device)?;
 
         debug!(
             device_id = %raw.end_device_id,
@@ -115,7 +114,29 @@ impl RawEnvelopeService {
             .payload_converter
             .convert(&device.payload_conversion, &raw.payload)?;
 
-        // 5. Convert JSON Value to Map
+        // 5. Validate converted JSON against device's JSON Schema (if schema exists)
+        // TODO: Add metrics counter for schema validation attempts
+        // TODO: Consider dead-letter queue for failed envelopes
+
+        debug!(
+            device_id = %raw.end_device_id,
+            "validating converted payload against JSON Schema"
+        );
+        if let Err(validation_error) = self
+            .schema_validator
+            .validate(&device.json_schema, &json_value)
+        {
+            // Schema validation failures are expected errors - log and skip (ACK)
+            // The data doesn't match the schema, retrying won't help
+            warn!(
+                device_id = %raw.end_device_id,
+                reason = %validation_error.message,
+                "envelope failed JSON Schema validation, skipping"
+            );
+            return Ok(()); // Return Ok so message gets ACK'd
+        }
+
+        // 6. Convert JSON Value to Map
         let data = match json_value {
             serde_json::Value::Object(map) => map,
             _ => {
@@ -129,7 +150,7 @@ impl RawEnvelopeService {
             }
         };
 
-        // 6. Build ProcessedEnvelope with current timestamp
+        // 7. Build ProcessedEnvelope with current timestamp
         let processed_envelope = ProcessedEnvelope {
             organization_id: raw.organization_id.clone(),
             end_device_id: raw.end_device_id.clone(),
@@ -144,7 +165,7 @@ impl RawEnvelopeService {
             "successfully converted payload"
         );
 
-        // 7. Publish via producer trait
+        // 8. Publish via producer trait
         self.producer
             .publish_processed_envelope(&processed_envelope)
             .await?;
@@ -167,6 +188,7 @@ mod tests {
         DeviceWithDefinition, GetDeviceWithDefinitionRepoInput, MockDeviceRepository,
         MockOrganizationRepository, MockProcessedEnvelopeProducer, Organization,
     };
+    use common::jsonschema::{MockSchemaValidator, SchemaValidationError};
 
     #[tokio::test]
     async fn test_process_raw_envelope_success() {
@@ -175,6 +197,7 @@ mod tests {
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mut mock_producer = MockProcessedEnvelopeProducer::new();
+        let mut mock_schema_validator = MockSchemaValidator::new();
 
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
@@ -229,6 +252,11 @@ mod tests {
             .times(1)
             .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
 
+        mock_schema_validator
+            .expect_validate()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
         mock_producer
             .expect_publish_processed_envelope()
             .withf(|env: &ProcessedEnvelope| {
@@ -244,6 +272,7 @@ mod tests {
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
         );
 
         // Act
@@ -260,6 +289,7 @@ mod tests {
         let mock_org_repo = MockOrganizationRepository::new();
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
+        let mock_schema_validator = MockSchemaValidator::new();
 
         mock_device_repo
             .expect_get_device_with_definition()
@@ -271,6 +301,7 @@ mod tests {
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
         );
 
         let raw_envelope = RawEnvelope {
@@ -294,6 +325,7 @@ mod tests {
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
+        let mock_schema_validator = MockSchemaValidator::new();
 
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
@@ -330,6 +362,7 @@ mod tests {
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
         );
 
         let raw_envelope = RawEnvelope {
@@ -342,8 +375,8 @@ mod tests {
         // Act
         let result = service.process_raw_envelope(raw_envelope).await;
 
-        // Assert
-        assert!(matches!(result, Err(DomainError::MissingCelExpression(_))));
+        // Assert - garde validates that payload_conversion is non-empty
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -353,6 +386,7 @@ mod tests {
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
+        let mock_schema_validator = MockSchemaValidator::new();
 
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
@@ -398,6 +432,7 @@ mod tests {
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
         );
 
         let raw_envelope = RawEnvelope {
@@ -424,6 +459,7 @@ mod tests {
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
+        let mut mock_schema_validator = MockSchemaValidator::new();
 
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
@@ -460,11 +496,18 @@ mod tests {
             .times(1)
             .return_once(|_, _| Ok(serde_json::Value::Number(42.into())));
 
+        // Schema validation is called before the object type check
+        mock_schema_validator
+            .expect_validate()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
         let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
         );
 
         let raw_envelope = RawEnvelope {
@@ -491,6 +534,7 @@ mod tests {
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mut mock_producer = MockProcessedEnvelopeProducer::new();
+        let mut mock_schema_validator = MockSchemaValidator::new();
 
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
@@ -533,6 +577,11 @@ mod tests {
             .times(1)
             .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
 
+        mock_schema_validator
+            .expect_validate()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
         mock_producer
             .expect_publish_processed_envelope()
             .times(1)
@@ -547,6 +596,7 @@ mod tests {
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
         );
 
         let raw_envelope = RawEnvelope {
@@ -570,6 +620,7 @@ mod tests {
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
+        let mock_schema_validator = MockSchemaValidator::new();
 
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
@@ -607,6 +658,7 @@ mod tests {
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
         );
 
         let raw_envelope = RawEnvelope {
@@ -630,6 +682,7 @@ mod tests {
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
+        let mock_schema_validator = MockSchemaValidator::new();
 
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
@@ -659,6 +712,7 @@ mod tests {
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
         );
 
         let raw_envelope = RawEnvelope {
@@ -673,5 +727,148 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(DomainError::OrganizationNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_process_raw_envelope_schema_validation_failed_returns_ok() {
+        // Schema validation failures should return Ok() (message gets ACK'd, not retried)
+        // Arrange
+        let mut mock_device_repo = MockDeviceRepository::new();
+        let mut mock_org_repo = MockOrganizationRepository::new();
+        let mut mock_converter = MockPayloadConverter::new();
+        let mock_producer = MockProcessedEnvelopeProducer::new();
+        let mut mock_schema_validator = MockSchemaValidator::new();
+
+        let device = DeviceWithDefinition {
+            device_id: "device-123".to_string(),
+            organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
+            name: "Test Device".to_string(),
+            payload_conversion: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: r#"{"type": "object", "required": ["temperature"]}"#.to_string(),
+            created_at: None,
+            updated_at: None,
+        };
+
+        let org = Organization {
+            id: "org-456".to_string(),
+            name: "Test Org".to_string(),
+            deleted_at: None,
+            created_at: None,
+            updated_at: None,
+        };
+
+        mock_device_repo
+            .expect_get_device_with_definition()
+            .times(1)
+            .return_once(move |_| Ok(Some(device)));
+
+        mock_org_repo
+            .expect_get_organization()
+            .times(1)
+            .return_once(move |_| Ok(Some(org)));
+
+        // CEL conversion succeeds but returns data missing required field
+        let mut json_data = serde_json::Map::new();
+        json_data.insert("humidity".to_string(), serde_json::Value::Number(60.into()));
+
+        mock_converter
+            .expect_convert()
+            .times(1)
+            .return_once(move |_, _| Ok(serde_json::Value::Object(json_data)));
+
+        // Schema validation fails
+        mock_schema_validator
+            .expect_validate()
+            .times(1)
+            .return_once(|_, _| {
+                Err(SchemaValidationError {
+                    message: "Missing required field: temperature".to_string(),
+                })
+            });
+
+        let service = RawEnvelopeService::new(
+            Arc::new(mock_device_repo),
+            Arc::new(mock_org_repo),
+            Arc::new(mock_converter),
+            Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
+        );
+
+        let raw_envelope = RawEnvelope {
+            organization_id: "org-456".to_string(),
+            end_device_id: "device-123".to_string(),
+            occurred_at: chrono::Utc::now(),
+            payload: vec![0x01, 0x68, 0x3C], // Some payload
+        };
+
+        // Act
+        let result = service.process_raw_envelope(raw_envelope).await;
+
+        // Assert - should return Ok because schema validation failures are logged and skipped
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_process_raw_envelope_empty_schema_returns_validation_error() {
+        // Empty schema "" fails garde validation and should return Err
+        // Arrange
+        let mut mock_device_repo = MockDeviceRepository::new();
+        let mut mock_org_repo = MockOrganizationRepository::new();
+        let mock_converter = MockPayloadConverter::new(); // Should not be called
+        let mock_producer = MockProcessedEnvelopeProducer::new(); // Should not be called
+        let mock_schema_validator = MockSchemaValidator::new(); // Should not be called
+
+        let device = DeviceWithDefinition {
+            device_id: "device-123".to_string(),
+            organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
+            name: "Test Device".to_string(),
+            payload_conversion: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: "".to_string(), // Empty schema - fails garde validation
+            created_at: None,
+            updated_at: None,
+        };
+
+        let org = Organization {
+            id: "org-456".to_string(),
+            name: "Test Org".to_string(),
+            deleted_at: None,
+            created_at: None,
+            updated_at: None,
+        };
+
+        mock_device_repo
+            .expect_get_device_with_definition()
+            .times(1)
+            .return_once(move |_| Ok(Some(device)));
+
+        mock_org_repo
+            .expect_get_organization()
+            .times(1)
+            .return_once(move |_| Ok(Some(org)));
+
+        let service = RawEnvelopeService::new(
+            Arc::new(mock_device_repo),
+            Arc::new(mock_org_repo),
+            Arc::new(mock_converter),
+            Arc::new(mock_producer),
+            Arc::new(mock_schema_validator),
+        );
+
+        let raw_envelope = RawEnvelope {
+            organization_id: "org-456".to_string(),
+            end_device_id: "device-123".to_string(),
+            occurred_at: chrono::Utc::now(),
+            payload: vec![0x01, 0x67, 0x01, 0x10],
+        };
+
+        // Act
+        let result = service.process_raw_envelope(raw_envelope).await;
+
+        // Assert - garde validates that json_schema is non-empty
+        assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 }

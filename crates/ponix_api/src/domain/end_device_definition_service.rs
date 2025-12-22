@@ -2,9 +2,8 @@ use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
     CreateEndDeviceDefinitionRepoInput, DeleteEndDeviceDefinitionRepoInput, DomainError,
     DomainResult, EndDeviceDefinition, EndDeviceDefinitionRepository,
-    GetEndDeviceDefinitionRepoInput, GetOrganizationRepoInput,
-    ListEndDeviceDefinitionsRepoInput, OrganizationRepository,
-    UpdateEndDeviceDefinitionRepoInput,
+    GetEndDeviceDefinitionRepoInput, GetOrganizationRepoInput, ListEndDeviceDefinitionsRepoInput,
+    OrganizationRepository, UpdateEndDeviceDefinitionRepoInput,
 };
 use common::jsonschema::validate_json_schema;
 use garde::Validate;
@@ -99,7 +98,7 @@ impl EndDeviceDefinitionService {
         &self,
         request: CreateEndDeviceDefinitionRequest,
     ) -> DomainResult<EndDeviceDefinition> {
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         // Validate JSON Schema syntax
         validate_json_schema(&request.json_schema)?;
@@ -140,7 +139,7 @@ impl EndDeviceDefinitionService {
         &self,
         request: GetEndDeviceDefinitionRequest,
     ) -> DomainResult<EndDeviceDefinition> {
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         self.authorization_provider
             .require_permission(
@@ -167,7 +166,7 @@ impl EndDeviceDefinitionService {
         &self,
         request: UpdateEndDeviceDefinitionRequest,
     ) -> DomainResult<EndDeviceDefinition> {
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         // Validate JSON Schema if provided
         if let Some(ref schema) = request.json_schema {
@@ -201,7 +200,7 @@ impl EndDeviceDefinitionService {
         &self,
         request: DeleteEndDeviceDefinitionRequest,
     ) -> DomainResult<()> {
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         self.authorization_provider
             .require_permission(
@@ -227,7 +226,7 @@ impl EndDeviceDefinitionService {
         &self,
         request: ListEndDeviceDefinitionsRequest,
     ) -> DomainResult<Vec<EndDeviceDefinition>> {
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         self.authorization_provider
             .require_permission(
@@ -278,7 +277,9 @@ impl EndDeviceDefinitionService {
 mod tests {
     use super::*;
     use common::auth::MockAuthorizationProvider;
-    use common::domain::{MockEndDeviceDefinitionRepository, MockOrganizationRepository, Organization};
+    use common::domain::{
+        MockEndDeviceDefinitionRepository, MockOrganizationRepository, Organization,
+    };
 
     const TEST_USER_ID: &str = "user-123";
 

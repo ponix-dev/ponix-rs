@@ -3,6 +3,7 @@
 use analytics_worker::domain::CelPayloadConverter;
 use analytics_worker::domain::RawEnvelopeService;
 use common::domain::{DomainError, RawEnvelope};
+use common::jsonschema::JsonSchemaValidator;
 use std::sync::Arc;
 
 // Mock implementations for integration testing
@@ -189,12 +190,14 @@ async fn test_full_conversion_flow_cayenne_lpp() {
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
+    let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
+        Arc::new(schema_validator),
     );
 
     // Cayenne LPP payload: channel 1, temperature 27.2°C
@@ -260,12 +263,14 @@ async fn test_full_conversion_flow_custom_transformation() {
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
+    let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
+        Arc::new(schema_validator),
     );
 
     // Cayenne LPP payload: temperature + humidity
@@ -303,12 +308,14 @@ async fn test_device_not_found() {
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
+    let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
+        Arc::new(schema_validator),
     );
 
     let raw_envelope = RawEnvelope {
@@ -361,12 +368,14 @@ async fn test_invalid_cel_expression() {
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
+    let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
+        Arc::new(schema_validator),
     );
 
     let raw_envelope = RawEnvelope {
@@ -419,12 +428,14 @@ async fn test_empty_cel_expression() {
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
+    let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
+        Arc::new(schema_validator),
     );
 
     let raw_envelope = RawEnvelope {
@@ -437,11 +448,11 @@ async fn test_empty_cel_expression() {
     // Act
     let result = service.process_raw_envelope(raw_envelope).await;
 
-    // Assert
+    // Assert - garde validates that payload_conversion is non-empty
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        DomainError::MissingCelExpression(_)
+        DomainError::ValidationError(_)
     ));
     assert_eq!(producer.get_published().len(), 0);
 }
@@ -477,12 +488,14 @@ async fn test_cel_expression_returns_non_object() {
 
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
+    let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
         Arc::new(device_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
+        Arc::new(schema_validator),
     );
 
     let raw_envelope = RawEnvelope {

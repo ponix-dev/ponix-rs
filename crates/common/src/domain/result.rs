@@ -22,9 +22,6 @@ pub enum DomainError {
     #[error("Payload conversion error: {0}")]
     PayloadConversionError(String),
 
-    #[error("Missing CEL expression for device: {0}")]
-    MissingCelExpression(String),
-
     #[error("End device definition not found: {0}")]
     EndDeviceDefinitionNotFound(String),
 
@@ -33,6 +30,9 @@ pub enum DomainError {
 
     #[error("Invalid JSON Schema: {0}")]
     InvalidJsonSchema(String),
+
+    #[error("Schema validation failed for device {0}: {1}")]
+    SchemaValidationFailed(String, String),
 
     #[error("End device definition in use: {0}")]
     EndDeviceDefinitionInUse(String),

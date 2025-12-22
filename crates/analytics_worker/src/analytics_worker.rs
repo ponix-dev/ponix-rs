@@ -1,5 +1,6 @@
 use crate::clickhouse::{ClickHouseInserterRepository, InserterCommitHandle, InserterConfig};
 use crate::domain::{CelPayloadConverter, RawEnvelopeService};
+use common::jsonschema::JsonSchemaValidator;
 use crate::nats::{
     ProcessedEnvelopeConsumerService, ProcessedEnvelopeProducer, RawEnvelopeConsumerService,
 };
@@ -114,11 +115,15 @@ impl AnalyticsWorker {
             config.processed_envelopes_stream.clone(),
         ));
 
+        // Initialize schema validator
+        let schema_validator = Arc::new(JsonSchemaValidator::new());
+
         let raw_envelope_domain_service = Arc::new(RawEnvelopeService::new(
             device_repository,
             organization_repository,
             payload_converter,
             processed_envelope_producer,
+            schema_validator,
         ));
 
         // Build RawEnvelope Tower service with middleware layers

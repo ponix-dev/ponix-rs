@@ -4,7 +4,7 @@ use crate::domain::DomainError;
 use garde::{Report, Validate};
 
 /// Convert garde validation report to DomainError
-pub fn validate<T>(value: &T) -> Result<(), DomainError>
+pub fn validate_struct<T>(value: &T) -> Result<(), DomainError>
 where
     T: Validate,
     T::Context: Default,
@@ -45,7 +45,7 @@ mod tests {
         let request = TestRequest {
             field: "value".to_string(),
         };
-        assert!(validate(&request).is_ok());
+        assert!(validate_struct(&request).is_ok());
     }
 
     #[test]
@@ -53,7 +53,7 @@ mod tests {
         let request = TestRequest {
             field: "".to_string(),
         };
-        let result = validate(&request);
+        let result = validate_struct(&request);
         assert!(matches!(result, Err(DomainError::ValidationError(_))));
     }
 
@@ -62,7 +62,7 @@ mod tests {
         let request = TestRequest {
             field: "".to_string(),
         };
-        let result = validate(&request);
+        let result = validate_struct(&request);
         if let Err(DomainError::ValidationError(msg)) = result {
             // Garde generates a message like "field: length is lower than 1"
             assert!(msg.contains("field"));
