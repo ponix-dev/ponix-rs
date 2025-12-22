@@ -1,3 +1,9 @@
+## [1.10.0](https://github.com/ponix-dev/ponix-rs/compare/v1.9.2...v1.10.0) (2025-12-22)
+
+### Features
+
+* adds end device definition ([#100](https://github.com/ponix-dev/ponix-rs/issues/100)) ([f8e747b](https://github.com/ponix-dev/ponix-rs/commit/f8e747b51fae62b1d06c1cb197df2af4bf3b6e26))
+
 ## [1.9.2](https://github.com/ponix-dev/ponix-rs/compare/v1.9.1...v1.9.2) (2025-12-21)
 
 ### Code Refactoring
