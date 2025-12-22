@@ -227,7 +227,3 @@ PONIX_GRPC_PORT=50051
 PONIX_CDC_PUBLICATION_NAME=ponix_cdc_publication
 PONIX_CDC_SLOT_NAME=ponix_cdc_slot
 ```
-
-## License
-
-MIT
