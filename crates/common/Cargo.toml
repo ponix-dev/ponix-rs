@@ -58,6 +58,7 @@ casbin = { workspace = true }
 
 # Validation
 garde = { workspace = true }
+jsonschema = { workspace = true }
 
 [dependencies.tokio-postgres-adapter]
 git = "https://github.com/ponix-dev/casbin-tokio-postgres-adapter.git"

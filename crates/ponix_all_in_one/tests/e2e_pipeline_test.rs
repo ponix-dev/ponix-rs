@@ -13,12 +13,18 @@ use tower::ServiceBuilder;
 
 use common::auth::MockAuthorizationProvider;
 use common::clickhouse::ClickHouseClient;
-use common::domain::{Device, RawEnvelope, RawEnvelopeProducer as _};
+use common::domain::{
+    CreateEndDeviceDefinitionRepoInput, Device, EndDeviceDefinitionRepository, RawEnvelope,
+    RawEnvelopeProducer as _,
+};
 use common::nats::{
     NatsClient, NatsConsumeLoggingLayer, NatsConsumeTracingConfig, NatsConsumeTracingLayer,
     TowerConsumer,
 };
-use common::postgres::{PostgresClient, PostgresDeviceRepository, PostgresOrganizationRepository};
+use common::postgres::{
+    PostgresClient, PostgresDeviceRepository, PostgresEndDeviceDefinitionRepository,
+    PostgresOrganizationRepository,
+};
 
 use gateway_orchestrator::nats::RawEnvelopeProducer;
 
@@ -220,6 +226,7 @@ async fn initialize_services(
     Arc<RawEnvelopeService>,
     Arc<NatsClient>,
     PostgresClient,
+    Arc<PostgresEndDeviceDefinitionRepository>,
 )> {
     // PostgreSQL client and repository
     // Parse postgres URL to extract connection details
@@ -233,6 +240,7 @@ async fn initialize_services(
     let pg_client = PostgresClient::new(host, port, "postgres", "postgres", "postgres", 5)?;
     let device_repo = Arc::new(PostgresDeviceRepository::new(pg_client.clone()));
     let org_repo = Arc::new(PostgresOrganizationRepository::new(pg_client.clone()));
+    let definition_repo = Arc::new(PostgresEndDeviceDefinitionRepository::new(pg_client.clone()));
 
     // Mock authorization provider that allows all operations (E2E test bypasses auth)
     let mut mock_auth = MockAuthorizationProvider::new();
@@ -244,6 +252,7 @@ async fn initialize_services(
     let device_service = Arc::new(DeviceService::new(
         device_repo.clone(),
         org_repo.clone(),
+        definition_repo.clone(),
         Arc::new(mock_auth),
     ));
 
@@ -273,12 +282,19 @@ async fn initialize_services(
         processed_producer,
     ));
 
-    Ok((device_service, raw_envelope_service, nats_client, pg_client))
+    Ok((
+        device_service,
+        raw_envelope_service,
+        nats_client,
+        pg_client,
+        definition_repo,
+    ))
 }
 
 /// Create a test organization and device with CEL expression for Cayenne LPP transformation
 async fn create_test_device(
     device_service: &DeviceService,
+    definition_repo: &PostgresEndDeviceDefinitionRepository,
     pg_client: &PostgresClient,
 ) -> Result<Device> {
     // First, create the test organization directly in the database
@@ -299,12 +315,27 @@ async fn create_test_device(
         'reading_pressure_hpa': cayenne_lpp_decode(input).barometer_2
     }"#;
 
+    // Create the end device definition first
+    let definition_id = format!(
+        "def-test-{}",
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
+    definition_repo
+        .create_definition(CreateEndDeviceDefinitionRepoInput {
+            id: definition_id.clone(),
+            organization_id: "test-org-123".to_string(),
+            name: "Environmental Sensor Definition".to_string(),
+            json_schema: "{}".to_string(),
+            payload_conversion: cel_expression.to_string(),
+        })
+        .await?;
+
     let device = device_service
         .create_device(CreateDeviceRequest {
             user_id: "test-user-id".to_string(),
             organization_id: "test-org-123".to_string(),
+            definition_id,
             name: "Test Environmental Sensor".to_string(),
-            payload_conversion: cel_expression.to_string(),
         })
         .await?;
 
@@ -573,10 +604,10 @@ async fn test_end_to_end_raw_to_processed_pipeline() -> Result<()> {
     println!("   - NATS: {}", nats_url);
 
     // Phase 3: Initialize services and create device
-    let (device_service, raw_envelope_service, nats_client, pg_client) =
+    let (device_service, raw_envelope_service, nats_client, pg_client, definition_repo) =
         initialize_services(&postgres_url, &nats_url).await?;
 
-    let device = create_test_device(&device_service, &pg_client).await?;
+    let device = create_test_device(&device_service, &definition_repo, &pg_client).await?;
 
     println!("✅ Phase 3 completed: Services initialized and device created");
     println!("   - Device ID: {}", device.device_id);

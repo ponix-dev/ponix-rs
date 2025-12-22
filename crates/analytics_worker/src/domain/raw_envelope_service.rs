@@ -1,7 +1,8 @@
 use crate::domain::PayloadConverter;
 use common::domain::{
-    DeviceRepository, DomainError, DomainResult, GetDeviceRepoInput, GetOrganizationRepoInput,
-    OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer, RawEnvelope,
+    DeviceRepository, DomainError, DomainResult, GetDeviceWithDefinitionRepoInput,
+    GetOrganizationRepoInput, OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer,
+    RawEnvelope,
 };
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
@@ -47,10 +48,9 @@ impl RawEnvelopeService {
             "processing raw envelope"
         );
 
-        // 1. Fetch device to get CEL expression
         let device = self
             .device_repository
-            .get_device(GetDeviceRepoInput {
+            .get_device_with_definition(GetDeviceWithDefinitionRepoInput {
                 device_id: raw.end_device_id.clone(),
                 organization_id: raw.organization_id.clone(),
             })
@@ -93,22 +93,24 @@ impl RawEnvelopeService {
             }
         }
 
-        // 3. Validate CEL expression exists
+        // 3. Validate CEL expression exists (from definition)
         if device.payload_conversion.is_empty() {
             error!(
                 device_id = %raw.end_device_id,
-                "device has empty CEL expression"
+                definition_id = %device.definition_id,
+                "definition has empty CEL expression"
             );
             return Err(DomainError::MissingCelExpression(raw.end_device_id.clone()));
         }
 
         debug!(
             device_id = %raw.end_device_id,
+            definition_id = %device.definition_id,
             expression = %device.payload_conversion,
             "converting payload with CEL expression"
         );
 
-        // 4. Convert binary payload using CEL expression
+        // 4. Convert binary payload using CEL expression from definition
         let json_value = self
             .payload_converter
             .convert(&device.payload_conversion, &raw.payload)?;
@@ -162,10 +164,9 @@ mod tests {
     use super::*;
     use crate::domain::MockPayloadConverter;
     use common::domain::{
-        Device, MockDeviceRepository, MockOrganizationRepository, MockProcessedEnvelopeProducer,
-        Organization,
+        DeviceWithDefinition, GetDeviceWithDefinitionRepoInput, MockDeviceRepository,
+        MockOrganizationRepository, MockProcessedEnvelopeProducer, Organization,
     };
-    // Device already imported via use super::*;
 
     #[tokio::test]
     async fn test_process_raw_envelope_success() {
@@ -175,11 +176,14 @@ mod tests {
         let mut mock_converter = MockPayloadConverter::new();
         let mut mock_producer = MockProcessedEnvelopeProducer::new();
 
-        let device = Device {
+        let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: "{}".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -200,8 +204,8 @@ mod tests {
         };
 
         mock_device_repo
-            .expect_get_device()
-            .withf(|input: &GetDeviceRepoInput| {
+            .expect_get_device_with_definition()
+            .withf(|input: &GetDeviceWithDefinitionRepoInput| {
                 input.device_id == "device-123" && input.organization_id == "org-456"
             })
             .times(1)
@@ -258,7 +262,7 @@ mod tests {
         let mock_producer = MockProcessedEnvelopeProducer::new();
 
         mock_device_repo
-            .expect_get_device()
+            .expect_get_device_with_definition()
             .times(1)
             .return_once(|_| Ok(None));
 
@@ -291,11 +295,14 @@ mod tests {
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
 
-        let device = Device {
+        let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "".to_string(), // Empty expression
+            json_schema: "{}".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -309,7 +316,7 @@ mod tests {
         };
 
         mock_device_repo
-            .expect_get_device()
+            .expect_get_device_with_definition()
             .times(1)
             .return_once(move |_| Ok(Some(device)));
 
@@ -347,11 +354,14 @@ mod tests {
         let mut mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
 
-        let device = Device {
+        let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "invalid_expression".to_string(),
+            json_schema: "{}".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -365,7 +375,7 @@ mod tests {
         };
 
         mock_device_repo
-            .expect_get_device()
+            .expect_get_device_with_definition()
             .times(1)
             .return_once(move |_| Ok(Some(device)));
 
@@ -415,11 +425,14 @@ mod tests {
         let mut mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
 
-        let device = Device {
+        let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "42".to_string(), // Returns number, not object
+            json_schema: "{}".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -433,7 +446,7 @@ mod tests {
         };
 
         mock_device_repo
-            .expect_get_device()
+            .expect_get_device_with_definition()
             .times(1)
             .return_once(move |_| Ok(Some(device)));
 
@@ -479,11 +492,14 @@ mod tests {
         let mut mock_converter = MockPayloadConverter::new();
         let mut mock_producer = MockProcessedEnvelopeProducer::new();
 
-        let device = Device {
+        let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: "{}".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -497,7 +513,7 @@ mod tests {
         };
 
         mock_device_repo
-            .expect_get_device()
+            .expect_get_device_with_definition()
             .times(1)
             .return_once(move |_| Ok(Some(device)));
 
@@ -555,11 +571,14 @@ mod tests {
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
 
-        let device = Device {
+        let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-deleted".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: "{}".to_string(),
             created_at: None,
             updated_at: None,
         };
@@ -573,7 +592,7 @@ mod tests {
         };
 
         mock_device_repo
-            .expect_get_device()
+            .expect_get_device_with_definition()
             .times(1)
             .return_once(move |_| Ok(Some(device)));
 
@@ -612,17 +631,20 @@ mod tests {
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
 
-        let device = Device {
+        let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-nonexistent".to_string(),
+            definition_id: "def-789".to_string(),
+            definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
             payload_conversion: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: "{}".to_string(),
             created_at: None,
             updated_at: None,
         };
 
         mock_device_repo
-            .expect_get_device()
+            .expect_get_device_with_definition()
             .times(1)
             .return_once(move |_| Ok(Some(device)));
 

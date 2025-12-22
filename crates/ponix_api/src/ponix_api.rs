@@ -1,4 +1,6 @@
-use crate::domain::{DeviceService, GatewayService, OrganizationService, UserService};
+use crate::domain::{
+    DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
+};
 use crate::grpc::run_ponix_grpc_server;
 use common::auth::AuthTokenProvider;
 use common::grpc::GrpcServerConfig;
@@ -8,6 +10,7 @@ use tracing::debug;
 
 pub struct PonixApi {
     device_service: Arc<DeviceService>,
+    definition_service: Arc<EndDeviceDefinitionService>,
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
@@ -20,6 +23,7 @@ pub struct PonixApi {
 impl PonixApi {
     pub fn new(
         device_service: Arc<DeviceService>,
+        definition_service: Arc<EndDeviceDefinitionService>,
         organization_service: Arc<OrganizationService>,
         gateway_service: Arc<GatewayService>,
         user_service: Arc<UserService>,
@@ -31,6 +35,7 @@ impl PonixApi {
         debug!("Initializing Ponix API module");
         Self {
             device_service,
+            definition_service,
             organization_service,
             gateway_service,
             user_service,
@@ -53,6 +58,7 @@ impl PonixApi {
                 run_ponix_grpc_server(
                     self.config,
                     self.device_service,
+                    self.definition_service,
                     self.organization_service,
                     self.gateway_service,
                     self.user_service,

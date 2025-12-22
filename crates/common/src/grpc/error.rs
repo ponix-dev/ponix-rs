@@ -17,6 +17,14 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::MissingCelExpression(msg) => Status::failed_precondition(msg),
 
+        DomainError::EndDeviceDefinitionNotFound(msg) => Status::not_found(msg),
+
+        DomainError::EndDeviceDefinitionAlreadyExists(msg) => Status::already_exists(msg),
+
+        DomainError::InvalidJsonSchema(msg) => Status::invalid_argument(msg),
+
+        DomainError::EndDeviceDefinitionInUse(msg) => Status::failed_precondition(msg),
+
         DomainError::OrganizationNotFound(msg) => Status::not_found(msg),
 
         DomainError::OrganizationAlreadyExists(msg) => Status::already_exists(msg),
