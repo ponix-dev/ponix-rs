@@ -1,3 +1,9 @@
+## [1.11.0](https://github.com/ponix-dev/ponix-rs/compare/v1.10.0...v1.11.0) (2025-12-23)
+
+### Features
+
+* adds json schema validation for processed envelopes ([#101](https://github.com/ponix-dev/ponix-rs/issues/101)) ([d7bbe46](https://github.com/ponix-dev/ponix-rs/commit/d7bbe46e9e3e5f2949257a0d438f950ac5c2c829))
+
 ## [1.10.0](https://github.com/ponix-dev/ponix-rs/compare/v1.9.2...v1.10.0) (2025-12-22)
 
 ### Features
