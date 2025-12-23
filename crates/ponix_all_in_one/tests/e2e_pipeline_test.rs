@@ -17,6 +17,7 @@ use common::domain::{
     CreateEndDeviceDefinitionRepoInput, Device, EndDeviceDefinitionRepository, RawEnvelope,
     RawEnvelopeProducer as _,
 };
+use common::jsonschema::JsonSchemaValidator;
 use common::nats::{
     NatsClient, NatsConsumeLoggingLayer, NatsConsumeTracingConfig, NatsConsumeTracingLayer,
     TowerConsumer,
@@ -274,12 +275,16 @@ async fn initialize_services(
     // Payload converter
     let payload_converter = Arc::new(CelPayloadConverter::new());
 
+    // Schema validator
+    let schema_validator = Arc::new(JsonSchemaValidator::new());
+
     // Raw envelope service
     let raw_envelope_service = Arc::new(RawEnvelopeService::new(
         device_repo,
         org_repo,
         payload_converter,
         processed_producer,
+        schema_validator,
     ));
 
     Ok((

@@ -91,7 +91,7 @@ impl GatewayService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, gateway_type = %request.gateway_type))]
     pub async fn create_gateway(&self, request: CreateGatewayRequest) -> DomainResult<Gateway> {
         // Validate request using garde
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         debug!(organization_id = %request.organization_id, gateway_type = %request.gateway_type, "Creating gateway");
 
@@ -151,7 +151,7 @@ impl GatewayService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
     pub async fn get_gateway(&self, request: GetGatewayRequest) -> DomainResult<Gateway> {
         // Validate request using garde
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Getting gateway");
 
@@ -183,7 +183,7 @@ impl GatewayService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
     pub async fn update_gateway(&self, request: UpdateGatewayRequest) -> DomainResult<Gateway> {
         // Validate request using garde
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Updating gateway");
 
@@ -214,7 +214,7 @@ impl GatewayService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
     pub async fn delete_gateway(&self, request: DeleteGatewayRequest) -> DomainResult<()> {
         // Validate request using garde
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Deleting gateway");
 
@@ -243,7 +243,7 @@ impl GatewayService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
     pub async fn list_gateways(&self, request: ListGatewaysRequest) -> DomainResult<Vec<Gateway>> {
         // Validate request using garde
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         debug!(organization_id = %request.organization_id, "Listing gateways");
 

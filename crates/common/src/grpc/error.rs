@@ -15,13 +15,16 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::PayloadConversionError(msg) => Status::invalid_argument(msg),
 
-        DomainError::MissingCelExpression(msg) => Status::failed_precondition(msg),
-
         DomainError::EndDeviceDefinitionNotFound(msg) => Status::not_found(msg),
 
         DomainError::EndDeviceDefinitionAlreadyExists(msg) => Status::already_exists(msg),
 
         DomainError::InvalidJsonSchema(msg) => Status::invalid_argument(msg),
+
+        DomainError::SchemaValidationFailed(device_id, reason) => Status::invalid_argument(format!(
+            "Schema validation failed for device {}: {}",
+            device_id, reason
+        )),
 
         DomainError::EndDeviceDefinitionInUse(msg) => Status::failed_precondition(msg),
 

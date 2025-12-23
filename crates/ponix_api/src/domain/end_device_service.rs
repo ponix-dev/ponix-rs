@@ -72,7 +72,7 @@ impl DeviceService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, device_name = %request.name))]
     pub async fn create_device(&self, request: CreateDeviceRequest) -> DomainResult<Device> {
         // Validate request using garde
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         // Check authorization
         self.authorization_provider
@@ -147,7 +147,7 @@ impl DeviceService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id))]
     pub async fn get_device(&self, request: GetDeviceRequest) -> DomainResult<Device> {
         // Validate request using garde
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         // Check authorization
         self.authorization_provider
@@ -179,7 +179,7 @@ impl DeviceService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
     pub async fn list_devices(&self, request: ListDevicesRequest) -> DomainResult<Vec<Device>> {
         // Validate request using garde
-        common::garde::validate(&request)?;
+        common::garde::validate_struct(&request)?;
 
         // Check authorization
         self.authorization_provider
