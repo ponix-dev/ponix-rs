@@ -1,5 +1,6 @@
 use crate::domain::{
     DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
+    WorkspaceService,
 };
 use crate::grpc::run_ponix_grpc_server;
 use common::auth::AuthTokenProvider;
@@ -14,6 +15,7 @@ pub struct PonixApi {
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
+    workspace_service: Arc<WorkspaceService>,
     auth_token_provider: Arc<dyn AuthTokenProvider>,
     config: GrpcServerConfig,
     refresh_token_expiration_days: u64,
@@ -27,6 +29,7 @@ impl PonixApi {
         organization_service: Arc<OrganizationService>,
         gateway_service: Arc<GatewayService>,
         user_service: Arc<UserService>,
+        workspace_service: Arc<WorkspaceService>,
         auth_token_provider: Arc<dyn AuthTokenProvider>,
         config: GrpcServerConfig,
         refresh_token_expiration_days: u64,
@@ -39,6 +42,7 @@ impl PonixApi {
             organization_service,
             gateway_service,
             user_service,
+            workspace_service,
             auth_token_provider,
             config,
             refresh_token_expiration_days,
@@ -62,6 +66,7 @@ impl PonixApi {
                     self.organization_service,
                     self.gateway_service,
                     self.user_service,
+                    self.workspace_service,
                     self.auth_token_provider,
                     self.refresh_token_expiration_days,
                     self.secure_cookies,

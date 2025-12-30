@@ -5,6 +5,7 @@ mod gateway;
 mod organization;
 mod result;
 mod user;
+mod workspace;
 
 pub use end_device::*;
 pub use end_device_definition::*;
@@ -13,3 +14,4 @@ pub use gateway::*;
 pub use organization::*;
 pub use result::*;
 pub use user::*;
+pub use workspace::*;

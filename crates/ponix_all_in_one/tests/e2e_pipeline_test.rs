@@ -311,6 +311,17 @@ async fn create_test_device(
     )
     .await?;
 
+    // Create a workspace for the organization
+    let workspace_id = format!(
+        "ws-test-{}",
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
+    conn.execute(
+        "INSERT INTO workspaces (id, name, organization_id) VALUES ($1, $2, $3)",
+        &[&workspace_id, &"Test Workspace", &"test-org-123"],
+    )
+    .await?;
+
     // CEL expression that decodes Cayenne LPP and renames fields
     let cel_expression = r#"{
         'sensor_data': cayenne_lpp_decode(input),
@@ -339,6 +350,7 @@ async fn create_test_device(
         .create_device(CreateDeviceRequest {
             user_id: "test-user-id".to_string(),
             organization_id: "test-org-123".to_string(),
+            workspace_id,
             definition_id,
             name: "Test Environmental Sensor".to_string(),
         })

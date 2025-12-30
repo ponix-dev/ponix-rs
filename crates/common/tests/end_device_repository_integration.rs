@@ -63,12 +63,7 @@ async fn setup_test_db() -> (
     (postgres, device_repo, definition_repo, client)
 }
 
-async fn create_test_definition(
-    definition_repo: &PostgresEndDeviceDefinitionRepository,
-    client: &PostgresClient,
-    org_id: &str,
-) -> String {
-    // Create organization first
+async fn create_test_organization(client: &PostgresClient, org_id: &str) {
     let conn = client.get_connection().await.unwrap();
     conn.execute(
         "INSERT INTO organizations (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
@@ -76,6 +71,31 @@ async fn create_test_definition(
     )
     .await
     .unwrap();
+}
+
+async fn create_test_workspace(client: &PostgresClient, org_id: &str) -> String {
+    // Ensure organization exists first
+    create_test_organization(client, org_id).await;
+
+    // Create workspace with unique ID
+    let workspace_id = format!("ws-{}-{}", org_id, chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let conn = client.get_connection().await.unwrap();
+    conn.execute(
+        "INSERT INTO workspaces (id, name, organization_id) VALUES ($1, $2, $3)",
+        &[&workspace_id, &"Test Workspace", &org_id],
+    )
+    .await
+    .unwrap();
+    workspace_id
+}
+
+async fn create_test_definition(
+    definition_repo: &PostgresEndDeviceDefinitionRepository,
+    client: &PostgresClient,
+    org_id: &str,
+) -> String {
+    // Create organization first
+    create_test_organization(client, org_id).await;
 
     // Create definition with unique ID based on org and timestamp
     let def_id = format!("def-{}-{}", org_id, chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
@@ -95,12 +115,14 @@ async fn create_test_definition(
 async fn test_create_and_get_device() {
     let (_container, device_repo, definition_repo, client) = setup_test_db().await;
 
+    let workspace_id = create_test_workspace(&client, "test-org-456").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org-456").await;
 
     let input = CreateDeviceRepoInput {
         device_id: "test-device-123".to_string(),
         organization_id: "test-org-456".to_string(),
         definition_id: definition_id.clone(),
+        workspace_id: workspace_id.clone(),
         name: "Test Device".to_string(),
     };
 
@@ -109,6 +131,7 @@ async fn test_create_and_get_device() {
     assert_eq!(created.device_id, "test-device-123");
     assert_eq!(created.name, "Test Device");
     assert_eq!(created.definition_id, definition_id);
+    assert_eq!(created.workspace_id, workspace_id);
     assert!(created.created_at.is_some());
 
     // Get device
@@ -123,6 +146,7 @@ async fn test_create_and_get_device() {
     assert_eq!(device.device_id, "test-device-123");
     assert_eq!(device.name, "Test Device");
     assert_eq!(device.definition_id, definition_id);
+    assert_eq!(device.workspace_id, workspace_id);
 }
 
 #[tokio::test]
@@ -130,12 +154,14 @@ async fn test_create_and_get_device() {
 async fn test_get_device_with_definition() {
     let (_container, device_repo, definition_repo, client) = setup_test_db().await;
 
+    let workspace_id = create_test_workspace(&client, "test-org-789").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org-789").await;
 
     let input = CreateDeviceRepoInput {
         device_id: "test-device-with-def".to_string(),
         organization_id: "test-org-789".to_string(),
         definition_id: definition_id.clone(),
+        workspace_id,
         name: "Test Device With Def".to_string(),
     };
 
@@ -182,6 +208,7 @@ async fn test_get_nonexistent_device() {
 async fn test_list_devices_by_organization() {
     let (_container, device_repo, definition_repo, client) = setup_test_db().await;
 
+    let workspace_id = create_test_workspace(&client, "test-org").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org").await;
 
     // Create multiple devices
@@ -190,6 +217,7 @@ async fn test_list_devices_by_organization() {
             device_id: format!("device-{}", i),
             organization_id: "test-org".to_string(),
             definition_id: definition_id.clone(),
+            workspace_id: workspace_id.clone(),
             name: format!("Device {}", i),
         };
         device_repo.create_device(input).await.unwrap();
@@ -223,12 +251,14 @@ async fn test_list_devices_for_empty_organization() {
 async fn test_create_duplicate_device() {
     let (_container, device_repo, definition_repo, client) = setup_test_db().await;
 
+    let workspace_id = create_test_workspace(&client, "test-org").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org").await;
 
     let input = CreateDeviceRepoInput {
         device_id: "duplicate-device".to_string(),
         organization_id: "test-org".to_string(),
         definition_id: definition_id.clone(),
+        workspace_id,
         name: "Original Device".to_string(),
     };
 
@@ -264,6 +294,15 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     .await
     .unwrap();
 
+    // Create workspace for org-1
+    let workspace_id = format!("ws-org1-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    conn.execute(
+        "INSERT INTO workspaces (id, name, organization_id) VALUES ($1, $2, $3)",
+        &[&workspace_id, &"Workspace for Org 1", &"org-1"],
+    )
+    .await
+    .unwrap();
+
     // Create definition for org-1
     let def_id = format!("def-org1-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
     let def_input = CreateEndDeviceDefinitionRepoInput {
@@ -280,6 +319,7 @@ async fn test_get_device_with_wrong_organization_returns_none() {
         device_id: "device-in-org-1".to_string(),
         organization_id: "org-1".to_string(),
         definition_id: def_id,
+        workspace_id,
         name: "Device in Org 1".to_string(),
     };
     device_repo.create_device(input).await.unwrap();

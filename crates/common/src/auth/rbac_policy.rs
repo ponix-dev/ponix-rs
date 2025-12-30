@@ -4,6 +4,7 @@ pub enum Resource {
     Device,
     Gateway,
     Organization,
+    Workspace,
 }
 
 impl Resource {
@@ -12,6 +13,7 @@ impl Resource {
             Resource::Device => "device",
             Resource::Gateway => "gateway",
             Resource::Organization => "organization",
+            Resource::Workspace => "workspace",
         }
     }
 }
@@ -100,6 +102,30 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "organization".into(),
             "delete".into(),
         ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "workspace".into(),
+            "create".into(),
+        ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "workspace".into(),
+            "read".into(),
+        ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "workspace".into(),
+            "update".into(),
+        ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "workspace".into(),
+            "delete".into(),
+        ],
         // Member policies (same as admin for now, designed for future differentiation)
         vec![
             "member".into(),
@@ -144,6 +170,30 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "*".into(),
             "organization".into(),
             "read".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "workspace".into(),
+            "create".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "workspace".into(),
+            "read".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "workspace".into(),
+            "update".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "workspace".into(),
+            "delete".into(),
         ],
     ]
 }

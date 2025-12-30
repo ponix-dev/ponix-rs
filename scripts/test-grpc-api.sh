@@ -131,6 +131,23 @@ ORG_ID=$(echo "$ORG_RESPONSE" | jq -r '.organizationId')
 echo -e "${GREEN}✓ Organization created with ID: $ORG_ID${NC}"
 echo ""
 
+# Step 5b: Create Workspace
+print_step "Step 5b: Creating workspace..."
+WORKSPACE_RESPONSE=$(grpcurl -plaintext \
+    -H "authorization: Bearer $AUTH_TOKEN" \
+    -d "{
+        \"organization_id\": \"$ORG_ID\",
+        \"name\": \"Default Workspace\"
+    }" \
+    "$GRPC_HOST" workspace.v1.WorkspaceService/CreateWorkspace)
+
+print_result "$WORKSPACE_RESPONSE"
+
+# Extract workspace ID
+WORKSPACE_ID=$(echo "$WORKSPACE_RESPONSE" | jq -r '.workspace.id')
+echo -e "${GREEN}✓ Workspace created with ID: $WORKSPACE_ID${NC}"
+echo ""
+
 # Step 6: Verify user-organization link and RBAC role assignment
 print_step "Step 6: Verifying user-organization link and RBAC role..."
 echo -e "${YELLOW}To verify the link in the database, run:${NC}"
@@ -166,6 +183,7 @@ DEVICE_RESPONSE=$(grpcurl -plaintext \
     -H "authorization: Bearer $AUTH_TOKEN" \
     -d "{
         \"organization_id\": \"$ORG_ID\",
+        \"workspace_id\": \"$WORKSPACE_ID\",
         \"definition_id\": \"$DEFINITION_ID\",
         \"name\": \"Temperature Sensor Alpha\"
     }" \
@@ -295,6 +313,7 @@ echo -e "${BLUE}Test Summary${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo -e "${GREEN}✓ User ID:${NC} $USER_ID"
 echo -e "${GREEN}✓ Organization ID:${NC} $ORG_ID"
+echo -e "${GREEN}✓ Workspace ID:${NC} $WORKSPACE_ID"
 echo -e "${GREEN}✓ End Device Definition ID:${NC} $DEFINITION_ID"
 echo -e "${GREEN}✓ End Device ID:${NC} $DEVICE_ID"
 echo -e "${GREEN}✓ Gateway ID:${NC} $GATEWAY_ID"

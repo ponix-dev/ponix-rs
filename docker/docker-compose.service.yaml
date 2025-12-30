@@ -68,6 +68,9 @@ services:
       # CDC configuration
       PONIX_CDC_GATEWAY_ENTITY_NAME: "gateways"
       PONIX_CDC_GATEWAY_TABLE_NAME: "gateways"
+      PONIX_CDC_WORKSPACE_ENTITY_NAME: "workspaces"
+      PONIX_CDC_WORKSPACE_TABLE_NAME: "workspaces"
+      PONIX_NATS_WORKSPACE_STREAM: "workspaces"
       PONIX_CDC_PUBLICATION_NAME: "ponix_cdc_publication"
       PONIX_CDC_SLOT_NAME: "ponix_cdc_slot"
       PONIX_CDC_BATCH_SIZE: "100"

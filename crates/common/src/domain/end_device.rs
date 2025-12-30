@@ -9,6 +9,7 @@ use garde::Validate;
 pub struct Device {
     pub device_id: String,
     pub organization_id: String,
+    pub workspace_id: String,
     pub definition_id: String,
     pub name: String,
     pub created_at: Option<DateTime<Utc>>,
@@ -23,6 +24,8 @@ pub struct DeviceWithDefinition {
     pub device_id: String,
     #[garde(skip)]
     pub organization_id: String,
+    #[garde(skip)]
+    pub workspace_id: String,
     #[garde(skip)]
     pub definition_id: String,
     #[garde(skip)]
@@ -45,6 +48,7 @@ pub struct DeviceWithDefinition {
 pub struct CreateDeviceRepoInput {
     pub device_id: String,
     pub organization_id: String,
+    pub workspace_id: String,
     pub definition_id: String,
     pub name: String,
 }

@@ -9,10 +9,11 @@ use tonic::service::Routes;
 
 use crate::domain::{
     DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
+    WorkspaceService,
 };
 use crate::grpc::{
     DeviceServiceHandler, EndDeviceDefinitionServiceHandler, GatewayServiceHandler,
-    OrganizationServiceHandler, UserServiceHandler,
+    OrganizationServiceHandler, UserServiceHandler, WorkspaceServiceHandler,
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{run_grpc_server, GrpcServerConfig};
@@ -22,6 +23,7 @@ use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDevi
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServiceServer;
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationServiceServer;
 use ponix_proto_tonic::user::v1::tonic::user_service_server::UserServiceServer;
+use ponix_proto_tonic::workspace::v1::tonic::workspace_service_server::WorkspaceServiceServer;
 
 /// File descriptor sets for gRPC reflection service.
 pub const REFLECTION_DESCRIPTORS: &[&[u8]] = &[
@@ -29,6 +31,7 @@ pub const REFLECTION_DESCRIPTORS: &[&[u8]] = &[
     ponix_proto_prost::organization::v1::FILE_DESCRIPTOR_SET,
     ponix_proto_prost::gateway::v1::FILE_DESCRIPTOR_SET,
     ponix_proto_prost::user::v1::FILE_DESCRIPTOR_SET,
+    ponix_proto_prost::workspace::v1::FILE_DESCRIPTOR_SET,
 ];
 
 /// Build Routes containing all Ponix API services.
@@ -38,6 +41,7 @@ pub fn build_ponix_api_routes(
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
+    workspace_service: Arc<WorkspaceService>,
     auth_token_provider: Arc<dyn AuthTokenProvider>,
     refresh_token_expiration_days: u64,
     secure_cookies: bool,
@@ -48,7 +52,10 @@ pub fn build_ponix_api_routes(
         EndDeviceDefinitionServiceHandler::new(definition_service, auth_token_provider.clone());
     let organization_handler =
         OrganizationServiceHandler::new(organization_service, auth_token_provider.clone());
-    let gateway_handler = GatewayServiceHandler::new(gateway_service, auth_token_provider);
+    let gateway_handler =
+        GatewayServiceHandler::new(gateway_service, auth_token_provider.clone());
+    let workspace_handler =
+        WorkspaceServiceHandler::new(workspace_service, auth_token_provider.clone());
     let user_handler =
         UserServiceHandler::new(user_service, refresh_token_expiration_days, secure_cookies);
 
@@ -59,6 +66,7 @@ pub fn build_ponix_api_routes(
         .add_service(EndDeviceDefinitionServiceServer::new(definition_handler))
         .add_service(OrganizationServiceServer::new(organization_handler))
         .add_service(GatewayServiceServer::new(gateway_handler))
+        .add_service(WorkspaceServiceServer::new(workspace_handler))
         .add_service(UserServiceServer::new(user_handler));
     builder.routes()
 }
@@ -78,6 +86,7 @@ pub async fn run_ponix_grpc_server(
     organization_service: Arc<OrganizationService>,
     gateway_service: Arc<GatewayService>,
     user_service: Arc<UserService>,
+    workspace_service: Arc<WorkspaceService>,
     auth_token_provider: Arc<dyn AuthTokenProvider>,
     refresh_token_expiration_days: u64,
     secure_cookies: bool,
@@ -89,6 +98,7 @@ pub async fn run_ponix_grpc_server(
         organization_service,
         gateway_service,
         user_service,
+        workspace_service,
         auth_token_provider,
         refresh_token_expiration_days,
         secure_cookies,

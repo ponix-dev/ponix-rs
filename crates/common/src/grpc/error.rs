@@ -34,6 +34,12 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::OrganizationDeleted(msg) => Status::failed_precondition(msg),
 
+        DomainError::WorkspaceNotFound(msg) => Status::not_found(msg),
+
+        DomainError::WorkspaceAlreadyExists(msg) => Status::already_exists(msg),
+
+        DomainError::WorkspaceDeleted(msg) => Status::failed_precondition(msg),
+
         DomainError::GatewayNotFound(msg) => Status::not_found(msg),
 
         DomainError::GatewayAlreadyExists(msg) => Status::already_exists(msg),
