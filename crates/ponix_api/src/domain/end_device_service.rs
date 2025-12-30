@@ -32,6 +32,8 @@ pub struct GetDeviceRequest {
     pub device_id: String,
     #[garde(length(min = 1))]
     pub organization_id: String,
+    #[garde(length(min = 1))]
+    pub workspace_id: String,
 }
 
 /// Service request for listing devices in a workspace
@@ -148,8 +150,8 @@ impl DeviceService {
         Ok(device)
     }
 
-    /// Get a device by ID and organization
-    #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id))]
+    /// Get a device by ID, organization, and workspace
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id))]
     pub async fn get_device(&self, request: GetDeviceRequest) -> DomainResult<Device> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
@@ -164,11 +166,12 @@ impl DeviceService {
             )
             .await?;
 
-        debug!(device_id = %request.device_id, organization_id = %request.organization_id, "getting device");
+        debug!(device_id = %request.device_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id, "getting device");
 
         let repo_input = GetDeviceRepoInput {
             device_id: request.device_id,
             organization_id: request.organization_id,
+            workspace_id: request.workspace_id,
         };
 
         let device = self
@@ -489,7 +492,9 @@ mod tests {
         mock_device_repo
             .expect_get_device()
             .withf(|input: &GetDeviceRepoInput| {
-                input.device_id == "device-123" && input.organization_id == "org-456"
+                input.device_id == "device-123"
+                    && input.organization_id == "org-456"
+                    && input.workspace_id == "ws-123"
             })
             .times(1)
             .return_once(move |_| Ok(Some(expected_device)));
@@ -505,6 +510,7 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
         };
 
         let result = service.get_device(request).await;
@@ -533,6 +539,7 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             device_id: "nonexistent".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
         };
 
         let result = service.get_device(request).await;
@@ -560,6 +567,7 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             device_id: "device-123".to_string(),
             organization_id: "".to_string(),
+            workspace_id: "ws-123".to_string(),
         };
 
         let result = service.get_device(request).await;

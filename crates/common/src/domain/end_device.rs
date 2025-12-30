@@ -58,6 +58,7 @@ pub struct CreateDeviceRepoInput {
 pub struct GetDeviceRepoInput {
     pub device_id: String,
     pub organization_id: String,
+    pub workspace_id: String,
 }
 
 /// Repository input for listing devices by workspace

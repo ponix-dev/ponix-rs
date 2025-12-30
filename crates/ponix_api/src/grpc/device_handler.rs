@@ -80,7 +80,8 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         skip(self, request),
         fields(
             device_id = %request.get_ref().device_id,
-            organization_id = %request.get_ref().organization_id
+            organization_id = %request.get_ref().organization_id,
+            workspace_id = %request.get_ref().workspace_id
         )
     )]
     async fn get_end_device(
@@ -96,6 +97,7 @@ impl DeviceServiceTrait for DeviceServiceHandler {
             user_id: user_context.user_id,
             device_id: req.device_id,
             organization_id: req.organization_id,
+            workspace_id: req.workspace_id,
         };
 
         // Call domain service

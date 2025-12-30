@@ -1216,7 +1216,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1954,7 +1954,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -3146,9 +3146,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-prost"
-version = "0.5.0-20251230184655-f5f7e3770824.2"
+version = "0.5.0-20251230185725-552bdf3167ff.2"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "c859693335f2fadc8b463ef3689e515456074c3b8bc9a166f19e400946e0876a"
+checksum = "1a2f5af6a936b7aeebd1772164a3fb2a9d6dd73632afaa99ff2c6a816968f970"
 dependencies = [
  "prost 0.14.1",
  "prost-types",
@@ -3156,9 +3156,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-tonic"
-version = "0.5.0-20251230184655-f5f7e3770824.4"
+version = "0.5.0-20251230185725-552bdf3167ff.4"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "5cc2a8c8b95773a3e0c17439e6bfc0c48ce7f84b78e04dac268b082dba2fb1fa"
+checksum = "82e6c8d3b671f87ca48d46f15577391408353c7274880af855d3b2d887c94d0e"
 dependencies = [
  "ponix_ponix_community_neoeinstein-prost",
  "tonic 0.14.2",
@@ -3397,7 +3397,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.35",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -3434,9 +3434,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3783,7 +3783,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

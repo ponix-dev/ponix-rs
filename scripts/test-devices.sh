@@ -151,7 +151,7 @@ print_step "Testing GetEndDevice (happy path)..."
 
 GET_DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "end_device.v1.EndDeviceService/GetEndDevice" \
-    "{\"device_id\": \"$DEVICE_ID\", \"organization_id\": \"$ORG_ID\"}")
+    "{\"device_id\": \"$DEVICE_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}")
 
 RETURNED_DEVICE_NAME=$(echo "$GET_DEVICE_RESPONSE" | jq -r '.endDevice.name // .name // empty')
 if [ "$RETURNED_DEVICE_NAME" = "Temperature Sensor Alpha" ]; then
@@ -265,7 +265,7 @@ test_unauthenticated \
 print_step "Testing GetEndDevice without auth..."
 test_unauthenticated \
     "end_device.v1.EndDeviceService/GetEndDevice" \
-    "{\"device_id\": \"$DEVICE_ID\", \"organization_id\": \"$ORG_ID\"}"
+    "{\"device_id\": \"$DEVICE_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}"
 
 print_step "Testing GetWorkspaceEndDevices without auth..."
 test_unauthenticated \

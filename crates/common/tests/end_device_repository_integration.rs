@@ -138,6 +138,7 @@ async fn test_create_and_get_device() {
     let get_input = GetDeviceRepoInput {
         device_id: "test-device-123".to_string(),
         organization_id: "test-org-456".to_string(),
+        workspace_id: workspace_id.clone(),
     };
     let retrieved = device_repo.get_device(get_input).await.unwrap();
     assert!(retrieved.is_some());
@@ -198,6 +199,7 @@ async fn test_get_nonexistent_device() {
     let get_input = GetDeviceRepoInput {
         device_id: "nonexistent-device".to_string(),
         organization_id: "some-org".to_string(),
+        workspace_id: "some-workspace".to_string(),
     };
     let result = device_repo.get_device(get_input).await.unwrap();
     assert!(result.is_none());
@@ -322,7 +324,7 @@ async fn test_get_device_with_wrong_organization_returns_none() {
         device_id: "device-in-org-1".to_string(),
         organization_id: "org-1".to_string(),
         definition_id: def_id,
-        workspace_id,
+        workspace_id: workspace_id.clone(),
         name: "Device in Org 1".to_string(),
     };
     device_repo.create_device(input).await.unwrap();
@@ -331,6 +333,7 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     let correct_input = GetDeviceRepoInput {
         device_id: "device-in-org-1".to_string(),
         organization_id: "org-1".to_string(),
+        workspace_id: workspace_id.clone(),
     };
     let result = device_repo.get_device(correct_input).await.unwrap();
     assert!(result.is_some());
@@ -339,6 +342,7 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     let wrong_input = GetDeviceRepoInput {
         device_id: "device-in-org-1".to_string(),
         organization_id: "org-2".to_string(),
+        workspace_id: workspace_id.clone(),
     };
     let result = device_repo.get_device(wrong_input).await.unwrap();
     assert!(
