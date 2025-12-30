@@ -25,6 +25,6 @@ Thumbs.db
 # Docker secrets (temporary files)
 .bsr_token_secret
 
-/scripts
+
 /.thoughts
 /temp
