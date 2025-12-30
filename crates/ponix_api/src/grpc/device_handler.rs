@@ -8,7 +8,7 @@ use common::grpc::{domain_error_to_status, extract_user_context};
 use common::proto::to_proto_device;
 use ponix_proto_prost::end_device::v1::{
     CreateEndDeviceRequest, CreateEndDeviceResponse, EndDevice, GetEndDeviceRequest,
-    GetEndDeviceResponse, ListEndDevicesRequest, ListEndDevicesResponse,
+    GetEndDeviceResponse, GetWorkspaceEndDevicesRequest, GetWorkspaceEndDevicesResponse,
 };
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceService as DeviceServiceTrait;
 
@@ -114,14 +114,17 @@ impl DeviceServiceTrait for DeviceServiceHandler {
     }
 
     #[instrument(
-        name = "ListEndDevices",
+        name = "GetWorkspaceEndDevices",
         skip(self, request),
-        fields(organization_id = %request.get_ref().organization_id)
+        fields(
+            organization_id = %request.get_ref().organization_id,
+            workspace_id = %request.get_ref().workspace_id
+        )
     )]
-    async fn list_end_devices(
+    async fn get_workspace_end_devices(
         &self,
-        request: Request<ListEndDevicesRequest>,
-    ) -> Result<Response<ListEndDevicesResponse>, Status> {
+        request: Request<GetWorkspaceEndDevicesRequest>,
+    ) -> Result<Response<GetWorkspaceEndDevicesResponse>, Status> {
         // Extract user context from JWT
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
@@ -130,6 +133,7 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         let service_request = ListDevicesRequest {
             user_id: user_context.user_id,
             organization_id: req.organization_id,
+            workspace_id: req.workspace_id,
         };
 
         // Call domain service
@@ -139,12 +143,12 @@ impl DeviceServiceTrait for DeviceServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        debug!(count = devices.len(), "Listed devices");
+        debug!(count = devices.len(), "Listed devices for workspace");
 
         // Convert domain → proto
         let proto_devices: Vec<EndDevice> = devices.into_iter().map(to_proto_device).collect();
 
-        Ok(Response::new(ListEndDevicesResponse {
+        Ok(Response::new(GetWorkspaceEndDevicesResponse {
             end_devices: proto_devices,
         }))
     }

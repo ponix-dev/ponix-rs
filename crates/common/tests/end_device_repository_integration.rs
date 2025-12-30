@@ -205,13 +205,13 @@ async fn test_get_nonexistent_device() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_list_devices_by_organization() {
+async fn test_list_devices_by_workspace() {
     let (_container, device_repo, definition_repo, client) = setup_test_db().await;
 
     let workspace_id = create_test_workspace(&client, "test-org").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org").await;
 
-    // Create multiple devices
+    // Create multiple devices in the same workspace
     for i in 1..=3 {
         let input = CreateDeviceRepoInput {
             device_id: format!("device-{}", i),
@@ -223,23 +223,26 @@ async fn test_list_devices_by_organization() {
         device_repo.create_device(input).await.unwrap();
     }
 
-    // List devices
+    // List devices by workspace
     let list_input = ListDevicesRepoInput {
         organization_id: "test-org".to_string(),
+        workspace_id: workspace_id.clone(),
     };
     let devices = device_repo.list_devices(list_input).await.unwrap();
 
     assert_eq!(devices.len(), 3);
     assert!(devices.iter().all(|d| d.organization_id == "test-org"));
+    assert!(devices.iter().all(|d| d.workspace_id == workspace_id));
 }
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_list_devices_for_empty_organization() {
+async fn test_list_devices_for_empty_workspace() {
     let (_container, device_repo, _definition_repo, _client) = setup_test_db().await;
 
     let list_input = ListDevicesRepoInput {
         organization_id: "empty-org".to_string(),
+        workspace_id: "empty-workspace".to_string(),
     };
     let devices = device_repo.list_devices(list_input).await.unwrap();
 

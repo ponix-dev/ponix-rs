@@ -170,7 +170,7 @@ impl DeviceRepository for PostgresDeviceRepository {
         }
     }
 
-    #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
+    #[instrument(skip(self, input), fields(organization_id = %input.organization_id, workspace_id = %input.workspace_id))]
     async fn list_devices(&self, input: ListDevicesRepoInput) -> DomainResult<Vec<Device>> {
         let conn = self
             .client
@@ -182,9 +182,9 @@ impl DeviceRepository for PostgresDeviceRepository {
             .query(
                 "SELECT device_id, organization_id, workspace_id, definition_id, device_name, created_at, updated_at
                  FROM devices
-                 WHERE organization_id = $1
+                 WHERE organization_id = $1 AND workspace_id = $2
                  ORDER BY created_at DESC",
-                &[&input.organization_id],
+                &[&input.organization_id, &input.workspace_id],
             )
             .await
             .map_err(|e| DomainError::RepositoryError(e.into()))?;
@@ -206,8 +206,9 @@ impl DeviceRepository for PostgresDeviceRepository {
             .collect();
 
         debug!(
-            "found {} devices for organization: {}",
+            "found {} devices for workspace: {} in organization: {}",
             rows.len(),
+            input.workspace_id,
             input.organization_id
         );
 

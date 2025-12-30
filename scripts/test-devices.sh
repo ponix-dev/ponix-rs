@@ -162,18 +162,18 @@ else
     exit 1
 fi
 
-# ListEndDevices
-print_step "Testing ListEndDevices (happy path)..."
+# GetWorkspaceEndDevices
+print_step "Testing GetWorkspaceEndDevices (happy path)..."
 
 LIST_DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "end_device.v1.EndDeviceService/ListEndDevices" \
-    "{\"organization_id\": \"$ORG_ID\"}")
+    "end_device.v1.EndDeviceService/GetWorkspaceEndDevices" \
+    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}")
 
 DEVICE_COUNT=$(echo "$LIST_DEVICE_RESPONSE" | jq '.endDevices | length')
 if [ "$DEVICE_COUNT" -ge 1 ]; then
-    print_success "ListEndDevices returned $DEVICE_COUNT device(s)"
+    print_success "GetWorkspaceEndDevices returned $DEVICE_COUNT device(s)"
 else
-    print_error "ListEndDevices returned no devices"
+    print_error "GetWorkspaceEndDevices returned no devices"
     echo "$LIST_DEVICE_RESPONSE"
     exit 1
 fi
@@ -267,10 +267,10 @@ test_unauthenticated \
     "end_device.v1.EndDeviceService/GetEndDevice" \
     "{\"device_id\": \"$DEVICE_ID\", \"organization_id\": \"$ORG_ID\"}"
 
-print_step "Testing ListEndDevices without auth..."
+print_step "Testing GetWorkspaceEndDevices without auth..."
 test_unauthenticated \
-    "end_device.v1.EndDeviceService/ListEndDevices" \
-    "{\"organization_id\": \"$ORG_ID\"}"
+    "end_device.v1.EndDeviceService/GetWorkspaceEndDevices" \
+    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}"
 
 # ============================================
 # INVALID TOKEN TESTS
