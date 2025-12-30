@@ -1,5 +1,13 @@
 # Test Scripts
 
+This directory contains test scripts for the Ponix gRPC API and MQTT gateway.
+
+| Script | Purpose |
+|--------|---------|
+| `test-grpc-api.sh` | Comprehensive gRPC API test (CRUD operations, auth) |
+| `test_mqtt_gateway.sh` | End-to-end MQTT pipeline test (MQTT → NATS → ClickHouse) |
+| `test-login.sh` | Authentication flow test (login, refresh, logout) |
+
 ## test-grpc-api.sh
 
 A comprehensive test script for the Ponix gRPC API that creates an organization, end device, and gateway.
@@ -13,12 +21,14 @@ A comprehensive test script for the Ponix gRPC API that creates an organization,
 ### What It Does
 
 1. **Creates an Organization** with test metadata
-2. **Creates an End Device** with Cayenne LPP payload converter
+2. **Creates a Workspace** within the organization (required for devices)
+3. **Creates an End Device Definition** with Cayenne LPP payload converter
    - Payload converter: `cayenne_lpp.decode(payload)`
    - Automatically decodes Cayenne LPP binary payloads to JSON
-3. **Creates a Gateway** (EMQX type) with connection configuration
-4. **Verifies** all created resources by listing and getting details
-5. **Tests Updates** by updating the gateway configuration (triggers CDC event)
+4. **Creates an End Device** referencing the definition and workspace
+5. **Creates a Gateway** (EMQX type) with connection configuration
+6. **Verifies** all created resources by listing and getting details
+7. **Tests Updates** by updating the gateway configuration (triggers CDC event)
 
 ### Usage
 
@@ -38,7 +48,7 @@ cd scripts
 
 The script will output:
 - Colored, formatted JSON responses for each operation
-- All created resource IDs (Organization, Device, Gateway)
+- All created resource IDs (Organization, Workspace, Definition, Device, Gateway)
 - Next steps for testing CDC and payload processing
 
 ### Testing CDC Events
@@ -111,24 +121,64 @@ echo "Token: $AUTH_TOKEN"
 Creating an organization automatically assigns the creator as Admin (RBAC role).
 
 ```bash
-grpcurl -plaintext \
+ORG_RESPONSE=$(grpcurl -plaintext \
     -H "authorization: Bearer $AUTH_TOKEN" \
     -d '{
         "name": "My Test Org"
     }' \
-    localhost:50051 organization.v1.OrganizationService/CreateOrganization
+    localhost:50051 organization.v1.OrganizationService/CreateOrganization)
+
+ORG_ID=$(echo "$ORG_RESPONSE" | jq -r '.organizationId')
+echo "Organization ID: $ORG_ID"
 ```
 
-### Create End Device with Cayenne LPP
+### Create Workspace
+
+Workspaces are required to group devices within an organization.
+
+```bash
+WORKSPACE_RESPONSE=$(grpcurl -plaintext \
+    -H "authorization: Bearer $AUTH_TOKEN" \
+    -d "{
+        \"organization_id\": \"$ORG_ID\",
+        \"name\": \"Default Workspace\"
+    }" \
+    localhost:50051 workspace.v1.WorkspaceService/CreateWorkspace)
+
+WORKSPACE_ID=$(echo "$WORKSPACE_RESPONSE" | jq -r '.workspace.id')
+echo "Workspace ID: $WORKSPACE_ID"
+```
+
+### Create End Device Definition
+
+```bash
+DEFINITION_RESPONSE=$(grpcurl -plaintext \
+    -H "authorization: Bearer $AUTH_TOKEN" \
+    -d "{
+        \"organization_id\": \"$ORG_ID\",
+        \"name\": \"Cayenne LPP Sensor\",
+        \"json_schema\": \"{}\",
+        \"payload_conversion\": \"cayenne_lpp_decode(input)\"
+    }" \
+    localhost:50051 end_device.v1.EndDeviceDefinitionService/CreateEndDeviceDefinition)
+
+DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.id')
+echo "Definition ID: $DEFINITION_ID"
+```
+
+### Create End Device
+
+Devices require a workspace_id and definition_id.
 
 ```bash
 grpcurl -plaintext \
     -H "authorization: Bearer $AUTH_TOKEN" \
-    -d '{
-        "organization_id": "org-xxx",
-        "name": "Temperature Sensor",
-        "payload_conversion": "cayenne_lpp.decode(payload)"
-    }' \
+    -d "{
+        \"organization_id\": \"$ORG_ID\",
+        \"workspace_id\": \"$WORKSPACE_ID\",
+        \"definition_id\": \"$DEFINITION_ID\",
+        \"name\": \"Temperature Sensor\"
+    }" \
     localhost:50051 end_device.v1.EndDeviceService/CreateEndDevice
 ```
 

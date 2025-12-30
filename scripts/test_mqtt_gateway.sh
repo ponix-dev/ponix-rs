@@ -52,8 +52,8 @@ echo ""
 
 # Step 0: Register and login user to get JWT token
 echo "Step 0: Setting up authentication..."
-TEST_EMAIL="mqtt-test-$(date +%s)@example.com"
-TEST_PASSWORD="password123"
+TEST_EMAIL="${TEST_EMAIL:-mqtt-test-$(date +%s)@example.com}"
+TEST_PASSWORD="${TEST_PASSWORD:-password123}"
 
 REGISTER_RESPONSE=$(mise exec -- grpcurl -plaintext -d "{
     \"email\": \"${TEST_EMAIL}\",
@@ -104,6 +104,29 @@ if [ -z "${ORG_ID}" ]; then
 fi
 
 echo "  Organization created: ${ORG_ID}"
+echo ""
+
+# Step 1b: Create Workspace
+echo "Step 1b: Creating Workspace..."
+WORKSPACE_RESPONSE=$(mise exec -- grpcurl -plaintext \
+    -H "authorization: Bearer ${AUTH_TOKEN}" \
+    -d "{
+    \"organization_id\": \"${ORG_ID}\",
+    \"name\": \"Default Workspace\"
+}" "${GRPC_HOST}:${GRPC_PORT}" workspace.v1.WorkspaceService/CreateWorkspace 2>&1) || {
+    echo "Failed to create workspace."
+    echo "Response: ${WORKSPACE_RESPONSE}"
+    exit 1
+}
+
+WORKSPACE_ID=$(echo "${WORKSPACE_RESPONSE}" | mise exec -- jq -r '.workspace.id // .id // empty')
+if [ -z "${WORKSPACE_ID}" ]; then
+    echo "Failed to parse workspace ID from response:"
+    echo "${WORKSPACE_RESPONSE}"
+    exit 1
+fi
+
+echo "  Workspace created: ${WORKSPACE_ID}"
 echo ""
 
 # Step 2: Create Gateway (will trigger CDC event and start MQTT subscriber)
@@ -166,6 +189,7 @@ DEVICE_RESPONSE=$(mise exec -- grpcurl -plaintext \
     -H "authorization: Bearer ${AUTH_TOKEN}" \
     -d "{
     \"organization_id\": \"${ORG_ID}\",
+    \"workspace_id\": \"${WORKSPACE_ID}\",
     \"definition_id\": \"${DEFINITION_ID}\",
     \"name\": \"${DEVICE_NAME}\"
 }" "${GRPC_HOST}:${GRPC_PORT}" end_device.v1.EndDeviceService/CreateEndDevice 2>&1) || {
@@ -224,6 +248,7 @@ echo "=== Test Complete ==="
 echo ""
 echo "Summary:"
 echo "  Organization ID: ${ORG_ID}"
+echo "  Workspace ID:    ${WORKSPACE_ID}"
 echo "  Gateway ID:      ${GATEWAY_ID}"
 echo "  Definition ID:   ${DEFINITION_ID}"
 echo "  Device ID:       ${DEVICE_ID}"
