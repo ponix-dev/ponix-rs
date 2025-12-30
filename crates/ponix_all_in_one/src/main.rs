@@ -2,7 +2,7 @@ mod config;
 
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
-use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter};
+use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter, WorkspaceConverter};
 use common::auth::{
     Argon2PasswordService, CasbinAuthorizationService, CryptoRefreshTokenProvider,
     JwtAuthTokenProvider, JwtConfig,
@@ -14,7 +14,7 @@ use common::postgres::create_postgres_authorization_adapter;
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresEndDeviceDefinitionRepository,
     PostgresGatewayRepository, PostgresOrganizationRepository, PostgresRefreshTokenRepository,
-    PostgresUserRepository,
+    PostgresUserRepository, PostgresWorkspaceRepository,
 };
 use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
@@ -22,6 +22,7 @@ use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrc
 use goose::MigrationRunner;
 use ponix_api::domain::{
     DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
+    WorkspaceService,
 };
 use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
@@ -125,6 +126,11 @@ async fn main() {
         password_service,
         config.refresh_token_expiration_days,
     ));
+    let workspace_service = Arc::new(WorkspaceService::new(
+        postgres_repos.workspace.clone(),
+        postgres_repos.organization.clone(),
+        authorization_service.clone(),
+    ));
 
     // Parse ignored paths from config (comma-separated)
     let ignored_paths: Vec<String> = config
@@ -159,6 +165,7 @@ async fn main() {
         organization_service,
         gateway_service,
         user_service,
+        workspace_service,
         auth_token_provider,
         grpc_config,
         config.refresh_token_expiration_days,
@@ -194,11 +201,16 @@ async fn main() {
         table_name: config.cdc_gateway_table_name.clone(),
         converter: Box::new(GatewayConverter::new()),
     };
+    let workspace_entity_config = EntityConfig {
+        entity_name: config.cdc_workspace_entity_name.clone(),
+        table_name: config.cdc_workspace_table_name.clone(),
+        converter: Box::new(WorkspaceConverter::new()),
+    };
     let cdc_worker = CdcWorker::new(
         nats_client.clone(),
         CdcWorkerConfig {
             cdc_config: build_cdc_config(&config),
-            entity_configs: vec![gateway_entity_config],
+            entity_configs: vec![gateway_entity_config, workspace_entity_config],
         },
     );
 
@@ -283,6 +295,7 @@ struct PostgresRepositories {
     gateway: Arc<PostgresGatewayRepository>,
     user: Arc<PostgresUserRepository>,
     refresh_token: Arc<PostgresRefreshTokenRepository>,
+    workspace: Arc<PostgresWorkspaceRepository>,
 }
 
 async fn initialize_shared_dependencies(
@@ -306,6 +319,7 @@ async fn initialize_shared_dependencies(
         gateway: Arc::new(PostgresGatewayRepository::new(postgres_client.clone())),
         user: Arc::new(PostgresUserRepository::new(postgres_client.clone())),
         refresh_token: Arc::new(PostgresRefreshTokenRepository::new(postgres_client.clone())),
+        workspace: Arc::new(PostgresWorkspaceRepository::new(postgres_client.clone())),
     };
 
     // ClickHouse initialization
@@ -395,6 +409,7 @@ async fn ensure_nats_streams(client: &NatsClient, config: &ServiceConfig) -> any
         .await?;
     client.ensure_stream(&config.nats_raw_stream).await?;
     client.ensure_stream(&config.nats_gateway_stream).await?;
+    client.ensure_stream(&config.nats_workspace_stream).await?;
     Ok(())
 }
 

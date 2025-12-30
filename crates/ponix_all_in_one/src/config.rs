@@ -36,6 +36,10 @@ pub struct ServiceConfig {
     #[serde(default = "default_nats_gateway_subject")]
     pub nats_gateway_subject: String,
 
+    /// NATS JetStream stream name for workspace CDC events
+    #[serde(default = "default_nats_workspace_stream")]
+    pub nats_workspace_stream: String,
+
     /// Batch size for consumer
     #[serde(default = "default_nats_batch_size")]
     pub nats_batch_size: usize,
@@ -149,6 +153,14 @@ pub struct ServiceConfig {
     #[serde(default = "default_cdc_gateway_table_name")]
     pub cdc_gateway_table_name: String,
 
+    /// CDC entity name for workspace events
+    #[serde(default = "default_cdc_workspace_entity_name")]
+    pub cdc_workspace_entity_name: String,
+
+    /// CDC table name for workspace events
+    #[serde(default = "default_cdc_workspace_table_name")]
+    pub cdc_workspace_table_name: String,
+
     /// CDC publication name
     #[serde(default = "default_cdc_publication_name")]
     pub cdc_publication_name: String,
@@ -232,6 +244,10 @@ fn default_nats_gateway_stream() -> String {
 
 fn default_nats_gateway_subject() -> String {
     "gateways.>".to_string()
+}
+
+fn default_nats_workspace_stream() -> String {
+    "workspaces".to_string()
 }
 
 fn default_nats_batch_size() -> usize {
@@ -345,6 +361,14 @@ fn default_cdc_gateway_entity_name() -> String {
 
 fn default_cdc_gateway_table_name() -> String {
     "gateways".to_string()
+}
+
+fn default_cdc_workspace_entity_name() -> String {
+    "workspaces".to_string()
+}
+
+fn default_cdc_workspace_table_name() -> String {
+    "workspaces".to_string()
 }
 
 fn default_cdc_publication_name() -> String {
