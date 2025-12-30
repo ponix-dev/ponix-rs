@@ -1,3 +1,9 @@
+## [1.12.0](https://github.com/ponix-dev/ponix-rs/compare/v1.11.0...v1.12.0) (2025-12-30)
+
+### Features
+
+* add Workspace entity for grouping end devices ([#113](https://github.com/ponix-dev/ponix-rs/issues/113)) ([2b01b19](https://github.com/ponix-dev/ponix-rs/commit/2b01b1944145766d5a70ea1e8073893c7de0634e))
+
 ## [1.11.0](https://github.com/ponix-dev/ponix-rs/compare/v1.10.0...v1.11.0) (2025-12-23)
 
 ### Features
