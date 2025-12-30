@@ -50,7 +50,7 @@ jobs:
         run: |
           # Run tilt ci which builds and starts all services, waiting for them to be ready
           # Timeout after 10 minutes
-          timeout 600 tilt ci -- --port 0 || {
+          timeout 600 tilt ci || {
             echo "Tilt CI failed or timed out"
             tilt down
             exit 1
