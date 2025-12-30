@@ -1,6 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
-ALTER TABLE devices ADD COLUMN workspace_id TEXT REFERENCES workspaces(id) ON DELETE RESTRICT;
+ALTER TABLE devices ADD COLUMN workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
