@@ -49,6 +49,15 @@ pub enum DomainError {
     #[error("Organization is deleted: {0}")]
     OrganizationDeleted(String),
 
+    #[error("Workspace not found: {0}")]
+    WorkspaceNotFound(String),
+
+    #[error("Workspace already exists: {0}")]
+    WorkspaceAlreadyExists(String),
+
+    #[error("Workspace is deleted: {0}")]
+    WorkspaceDeleted(String),
+
     #[error("Gateway not found: {0}")]
     GatewayNotFound(String),
 
