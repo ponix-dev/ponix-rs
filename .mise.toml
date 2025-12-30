@@ -36,3 +36,7 @@ run = "cargo watch -x 'test --workspace --lib --bins'"
 [tasks."test:integration:watch"]
 description = "Watch and run integration tests on file changes"
 run = "cargo watch -x 'test --workspace --features integration-tests -- --test-threads=1'"
+
+[tasks."test:e2e"]
+description = "Run end-to-end tests (requires running service)"
+run = "./scripts/test-all.sh"
