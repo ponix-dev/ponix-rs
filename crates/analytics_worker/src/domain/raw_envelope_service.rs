@@ -202,6 +202,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
@@ -330,6 +331,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
@@ -391,6 +393,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
@@ -464,6 +467,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
@@ -539,6 +543,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
@@ -625,6 +630,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-deleted".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
@@ -687,6 +693,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-nonexistent".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
@@ -742,6 +749,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
@@ -823,6 +831,7 @@ mod tests {
         let device = DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
