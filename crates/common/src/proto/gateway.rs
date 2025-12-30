@@ -55,6 +55,7 @@ pub fn proto_to_domain_gateway(proto: &ProtoGateway) -> Result<Gateway> {
     Ok(Gateway {
         gateway_id: proto.gateway_id.clone(),
         organization_id: proto.organization_id.clone(),
+        name: proto.name.clone(),
         gateway_type,
         gateway_config,
         created_at,
@@ -109,21 +110,18 @@ pub fn proto_update_config_to_domain(config: Option<UpdateConfig>) -> Option<Gat
 
 /// Convert domain Gateway to protobuf Gateway
 pub fn to_proto_gateway(gateway: Gateway) -> ProtoGateway {
-    // Convert domain config enum to protobuf config enum and extract name
-    let (config, name) = match &gateway.gateway_config {
-        GatewayConfig::Emqx(emqx) => (
-            Some(ProtoGatewayConfig::EmqxConfig(ProtoEmqxConfig {
-                broker_url: emqx.broker_url.clone(),
-                subscription_group: emqx.subscription_group.clone(),
-            })),
-            emqx.broker_url.clone(), // For backwards compatibility, use broker_url as name
-        ),
+    // Convert domain config enum to protobuf config enum
+    let config = match &gateway.gateway_config {
+        GatewayConfig::Emqx(emqx) => Some(ProtoGatewayConfig::EmqxConfig(ProtoEmqxConfig {
+            broker_url: emqx.broker_url.clone(),
+            subscription_group: emqx.subscription_group.clone(),
+        })),
     };
 
     ProtoGateway {
         gateway_id: gateway.gateway_id,
         organization_id: gateway.organization_id,
-        name,
+        name: gateway.name,
         config,
         status: 1, // GATEWAY_STATUS_ACTIVE - we don't track status in domain yet
         r#type: string_to_gateway_type(&gateway.gateway_type) as i32,

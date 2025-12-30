@@ -14,6 +14,7 @@ use tracing::{debug, instrument};
 pub struct GatewayRow {
     pub gateway_id: String,
     pub organization_id: String,
+    pub name: String,
     pub gateway_type: String,
     pub gateway_config: serde_json::Value,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -30,6 +31,7 @@ impl From<GatewayRow> for Gateway {
         Gateway {
             gateway_id: row.gateway_id,
             organization_id: row.organization_id,
+            name: row.name,
             gateway_type: row.gateway_type,
             gateway_config,
             deleted_at: row.deleted_at,
@@ -101,11 +103,12 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let result = conn
             .execute(
-                "INSERT INTO gateways (gateway_id, organization_id, gateway_type, gateway_config, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6)",
+                "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
                 &[
                     &input.gateway_id,
                     &input.organization_id,
+                    &input.name,
                     &input.gateway_type,
                     &gateway_config_json,
                     &now,
@@ -128,6 +131,7 @@ impl GatewayRepository for PostgresGatewayRepository {
         Ok(Gateway {
             gateway_id: input.gateway_id,
             organization_id: input.organization_id,
+            name: input.name,
             gateway_type: input.gateway_type,
             gateway_config: input.gateway_config,
             deleted_at: None,
@@ -148,7 +152,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let row = conn
             .query_opt(
-                "SELECT gateway_id, organization_id, gateway_type, gateway_config, deleted_at, created_at, updated_at
+                "SELECT gateway_id, organization_id, name, gateway_type, gateway_config, deleted_at, created_at, updated_at
                  FROM gateways
                  WHERE gateway_id = $1 AND organization_id = $2 AND deleted_at IS NULL",
                 &[&input.gateway_id, &input.organization_id],
@@ -160,11 +164,12 @@ impl GatewayRepository for PostgresGatewayRepository {
             let gateway_row = GatewayRow {
                 gateway_id: row.get(0),
                 organization_id: row.get(1),
-                gateway_type: row.get(2),
-                gateway_config: row.get(3),
-                deleted_at: row.get(4),
-                created_at: row.get(5),
-                updated_at: row.get(6),
+                name: row.get(2),
+                gateway_type: row.get(3),
+                gateway_config: row.get(4),
+                deleted_at: row.get(5),
+                created_at: row.get(6),
+                updated_at: row.get(7),
             };
             gateway_row.into()
         });
@@ -192,6 +197,12 @@ impl GatewayRepository for PostgresGatewayRepository {
         let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![&now];
         let mut param_idx = 2;
 
+        if let Some(ref name) = input.name {
+            query.push_str(&format!(", name = ${}", param_idx));
+            params.push(name);
+            param_idx += 1;
+        }
+
         if let Some(ref gateway_type) = input.gateway_type {
             query.push_str(&format!(", gateway_type = ${}", param_idx));
             params.push(gateway_type);
@@ -206,7 +217,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         query.push_str(&format!(
             " WHERE gateway_id = ${} AND organization_id = ${} AND deleted_at IS NULL
-             RETURNING gateway_id, organization_id, gateway_type, gateway_config, deleted_at, created_at, updated_at",
+             RETURNING gateway_id, organization_id, name, gateway_type, gateway_config, deleted_at, created_at, updated_at",
             param_idx,
             param_idx + 1
         ));
@@ -223,11 +234,12 @@ impl GatewayRepository for PostgresGatewayRepository {
                 let gateway_row = GatewayRow {
                     gateway_id: row.get(0),
                     organization_id: row.get(1),
-                    gateway_type: row.get(2),
-                    gateway_config: row.get(3),
-                    deleted_at: row.get(4),
-                    created_at: row.get(5),
-                    updated_at: row.get(6),
+                    name: row.get(2),
+                    gateway_type: row.get(3),
+                    gateway_config: row.get(4),
+                    deleted_at: row.get(5),
+                    created_at: row.get(6),
+                    updated_at: row.get(7),
                 };
                 debug!(gateway_id = %gateway_row.gateway_id, "gateway updated in database");
                 Ok(gateway_row.into())
@@ -278,7 +290,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let rows = conn
             .query(
-                "SELECT gateway_id, organization_id, gateway_type, gateway_config, deleted_at, created_at, updated_at
+                "SELECT gateway_id, organization_id, name, gateway_type, gateway_config, deleted_at, created_at, updated_at
                  FROM gateways
                  WHERE organization_id = $1 AND deleted_at IS NULL
                  ORDER BY created_at DESC",
@@ -293,11 +305,12 @@ impl GatewayRepository for PostgresGatewayRepository {
                 let gateway_row = GatewayRow {
                     gateway_id: row.get(0),
                     organization_id: row.get(1),
-                    gateway_type: row.get(2),
-                    gateway_config: row.get(3),
-                    deleted_at: row.get(4),
-                    created_at: row.get(5),
-                    updated_at: row.get(6),
+                    name: row.get(2),
+                    gateway_type: row.get(3),
+                    gateway_config: row.get(4),
+                    deleted_at: row.get(5),
+                    created_at: row.get(6),
+                    updated_at: row.get(7),
                 };
                 gateway_row.into()
             })
@@ -319,7 +332,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let rows = conn
             .query(
-                "SELECT gateway_id, organization_id, gateway_type, gateway_config, deleted_at, created_at, updated_at
+                "SELECT gateway_id, organization_id, name, gateway_type, gateway_config, deleted_at, created_at, updated_at
                  FROM gateways
                  WHERE deleted_at IS NULL
                  ORDER BY created_at DESC",
@@ -334,11 +347,12 @@ impl GatewayRepository for PostgresGatewayRepository {
                 let gateway_row = GatewayRow {
                     gateway_id: row.get(0),
                     organization_id: row.get(1),
-                    gateway_type: row.get(2),
-                    gateway_config: row.get(3),
-                    deleted_at: row.get(4),
-                    created_at: row.get(5),
-                    updated_at: row.get(6),
+                    name: row.get(2),
+                    gateway_type: row.get(3),
+                    gateway_config: row.get(4),
+                    deleted_at: row.get(5),
+                    created_at: row.get(6),
+                    updated_at: row.get(7),
                 };
                 gateway_row.into()
             })

@@ -16,6 +16,8 @@ pub struct CreateGatewayRequest {
     #[garde(length(min = 1))]
     pub organization_id: String,
     #[garde(length(min = 1))]
+    pub name: String,
+    #[garde(length(min = 1))]
     pub gateway_type: String,
     #[garde(dive)]
     pub gateway_config: GatewayConfig,
@@ -41,6 +43,8 @@ pub struct UpdateGatewayRequest {
     pub gateway_id: String,
     #[garde(length(min = 1))]
     pub organization_id: String,
+    #[garde(inner(length(min = 1)))]
+    pub name: Option<String>,
     #[garde(inner(length(min = 1)))]
     pub gateway_type: Option<String>,
     #[garde(dive)]
@@ -137,6 +141,7 @@ impl GatewayService {
         let repo_input = CreateGatewayRepoInput {
             gateway_id: gateway_id.clone(),
             organization_id: request.organization_id,
+            name: request.name,
             gateway_type: request.gateway_type,
             gateway_config: request.gateway_config,
         };
@@ -200,6 +205,7 @@ impl GatewayService {
         let repo_input = UpdateGatewayRepoInput {
             gateway_id: request.gateway_id,
             organization_id: request.organization_id,
+            name: request.name,
             gateway_type: request.gateway_type,
             gateway_config: request.gateway_config,
         };
@@ -317,12 +323,14 @@ mod tests {
                 input.organization_id == "org-001"
                     && input.gateway_type == "emqx"
                     && !input.gateway_id.is_empty()
+                    && input.name == "Test Gateway"
             })
             .times(1)
             .return_once(|input| {
                 Ok(Gateway {
                     gateway_id: input.gateway_id,
                     organization_id: input.organization_id,
+                    name: input.name,
                     gateway_type: input.gateway_type,
                     gateway_config: input.gateway_config,
                     deleted_at: None,
@@ -340,6 +348,7 @@ mod tests {
         let request = CreateGatewayRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
+            name: "Test Gateway".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: test_config,
         };
@@ -349,6 +358,7 @@ mod tests {
         let gateway = result.unwrap();
         assert_eq!(gateway.organization_id, "org-001");
         assert_eq!(gateway.gateway_type, "emqx");
+        assert_eq!(gateway.name, "Test Gateway");
     }
 
     #[tokio::test]
@@ -370,6 +380,7 @@ mod tests {
         let request = CreateGatewayRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-999".to_string(),
+            name: "Test Gateway".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://localhost:1883".to_string(),
@@ -408,6 +419,7 @@ mod tests {
         let request = CreateGatewayRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
+            name: "Test Gateway".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://localhost:1883".to_string(),
@@ -433,6 +445,7 @@ mod tests {
         let request = CreateGatewayRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
+            name: "Test Gateway".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "".to_string(),
@@ -461,6 +474,7 @@ mod tests {
         let request = CreateGatewayRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
+            name: "Test Gateway".to_string(),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://localhost:1883".to_string(),
@@ -513,6 +527,7 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             gateway_id: "gw-123".to_string(),
             organization_id: "".to_string(),
+            name: None,
             gateway_type: None,
             gateway_config: None,
         };

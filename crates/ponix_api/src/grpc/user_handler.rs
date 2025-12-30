@@ -6,9 +6,10 @@ use crate::domain::{
     GetUserRequest as DomainGetUserRequest, RegisterUserRequest as DomainRegisterUserRequest,
     UserService,
 };
-use common::auth::{LoginUserInput, LogoutInput, RefreshTokenInput};
+use common::auth::{AuthTokenProvider, LoginUserInput, LogoutInput, RefreshTokenInput};
 use common::grpc::{
-    domain_error_to_status, extract_refresh_token_from_cookies, RefreshTokenCookie,
+    domain_error_to_status, extract_refresh_token_from_cookies, extract_user_context,
+    RefreshTokenCookie,
 };
 use common::proto::to_proto_user;
 use ponix_proto_prost::user::v1::{
@@ -20,6 +21,7 @@ use ponix_proto_tonic::user::v1::tonic::user_service_server::UserService as User
 /// gRPC handler for UserService
 pub struct UserServiceHandler {
     domain_service: Arc<UserService>,
+    auth_token_provider: Arc<dyn AuthTokenProvider>,
     refresh_token_expiration_days: u64,
     secure_cookies: bool,
 }
@@ -27,11 +29,13 @@ pub struct UserServiceHandler {
 impl UserServiceHandler {
     pub fn new(
         domain_service: Arc<UserService>,
+        auth_token_provider: Arc<dyn AuthTokenProvider>,
         refresh_token_expiration_days: u64,
         secure_cookies: bool,
     ) -> Self {
         Self {
             domain_service,
+            auth_token_provider,
             refresh_token_expiration_days,
             secure_cookies,
         }
@@ -84,14 +88,17 @@ impl UserServiceTrait for UserServiceHandler {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
+        // Extract authenticated user from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Construct domain request directly
+        // Construct domain request with requesting user for authorization
         let service_request = DomainGetUserRequest {
+            requesting_user_id: user_context.user_id,
             user_id: req.user_id,
         };
 
-        // Call domain service
+        // Call domain service (authorization check happens in domain layer)
         let user = self
             .domain_service
             .get_user(service_request)

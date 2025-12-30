@@ -65,6 +65,7 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         let service_request = DomainCreateRequest {
             user_id: user_context.user_id,
             organization_id: req.organization_id,
+            name: req.name,
             gateway_type,
             gateway_config,
         };
@@ -179,11 +180,19 @@ impl GatewayServiceTrait for GatewayServiceHandler {
             None
         };
 
+        // Convert name (only if not empty)
+        let name = if req.name.is_empty() {
+            None
+        } else {
+            Some(req.name)
+        };
+
         // Construct domain request directly
         let service_request = DomainUpdateRequest {
             user_id: user_context.user_id,
             gateway_id: req.gateway_id,
             organization_id: req.organization_id,
+            name,
             gateway_type,
             gateway_config: proto_update_config_to_domain(req.config),
         };

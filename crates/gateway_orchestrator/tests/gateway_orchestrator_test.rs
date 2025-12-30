@@ -128,6 +128,7 @@ fn create_test_gateway(id: &str, org_id: &str, broker_url: &str) -> Gateway {
     Gateway {
         gateway_id: id.to_string(),
         organization_id: org_id.to_string(),
+        name: format!("Test Gateway {}", id),
         gateway_type: "EMQX".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: broker_url.to_string(),

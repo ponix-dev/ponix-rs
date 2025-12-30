@@ -8,6 +8,7 @@ use garde::Validate;
 pub struct Gateway {
     pub gateway_id: String,
     pub organization_id: String,
+    pub name: String,
     pub gateway_type: String,
     pub gateway_config: GatewayConfig,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -20,6 +21,7 @@ pub struct Gateway {
 pub struct CreateGatewayRepoInput {
     pub gateway_id: String,
     pub organization_id: String,
+    pub name: String,
     pub gateway_type: String,
     pub gateway_config: GatewayConfig,
 }
@@ -36,6 +38,7 @@ pub struct GetGatewayRepoInput {
 pub struct UpdateGatewayRepoInput {
     pub gateway_id: String,
     pub organization_id: String,
+    pub name: Option<String>,
     pub gateway_type: Option<String>,
     pub gateway_config: Option<GatewayConfig>,
 }
