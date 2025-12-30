@@ -7,6 +7,7 @@ mod gateway_repository;
 mod organization_repository;
 mod refresh_token_repository;
 mod user_repository;
+mod workspace_repository;
 
 pub use authorization_adapter::*;
 pub use client::*;
@@ -17,3 +18,4 @@ pub use gateway_repository::*;
 pub use organization_repository::*;
 pub use refresh_token_repository::*;
 pub use user_repository::*;
+pub use workspace_repository::*;
