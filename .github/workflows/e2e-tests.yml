@@ -47,7 +47,7 @@ jobs:
       - name: Start services with Tilt CI
         env:
           BSR_TOKEN: ${{ secrets.BSR_TOKEN }}
-        run: tilt ci
+        run: tilt ci --timeout 15m
 
       - name: Wait for services to be healthy
         run: |
