@@ -1,255 +1,172 @@
 # Test Scripts
 
-This directory contains test scripts for the Ponix gRPC API and MQTT gateway.
+This directory contains test scripts for the Ponix gRPC API, organized by domain area.
 
-| Script | Purpose |
-|--------|---------|
-| `test-grpc-api.sh` | Comprehensive gRPC API test (CRUD operations, auth) |
-| `test_mqtt_gateway.sh` | End-to-end MQTT pipeline test (MQTT → NATS → ClickHouse) |
-| `test-login.sh` | Authentication flow test (login, refresh, logout) |
-
-## test-grpc-api.sh
-
-A comprehensive test script for the Ponix gRPC API that creates an organization, end device, and gateway.
-
-### Prerequisites
-
-- `grpcurl` CLI tool: `brew install grpcurl`
-- `jq` for JSON formatting: `brew install jq`
-- Running Ponix service with gRPC server on `localhost:50051`
-
-### What It Does
-
-1. **Creates an Organization** with test metadata
-2. **Creates a Workspace** within the organization (required for devices)
-3. **Creates an End Device Definition** with Cayenne LPP payload converter
-   - Payload converter: `cayenne_lpp.decode(payload)`
-   - Automatically decodes Cayenne LPP binary payloads to JSON
-4. **Creates an End Device** referencing the definition and workspace
-5. **Creates a Gateway** (EMQX type) with connection configuration
-6. **Verifies** all created resources by listing and getting details
-7. **Tests Updates** by updating the gateway configuration (triggers CDC event)
-
-### Usage
+## Quick Start
 
 ```bash
-# Start infrastructure
-docker-compose -f docker/docker-compose.deps.yaml up -d
+# Run all tests
+./scripts/test-all.sh
 
-# Start the service
-cargo run -p ponix-all-in-one
-
-# In another terminal, run the test script
-cd scripts
-./test-grpc-api.sh
+# Run individual test suites
+./scripts/test-auth.sh
+./scripts/test-organizations.sh
+./scripts/test-workspaces.sh
+./scripts/test-devices.sh
+./scripts/test-gateways.sh
+./scripts/test-mqtt-pipeline.sh
 ```
 
-### Output
+## Prerequisites
 
-The script will output:
-- Colored, formatted JSON responses for each operation
-- All created resource IDs (Organization, Workspace, Definition, Device, Gateway)
-- Next steps for testing CDC and payload processing
+- `mise run install-tools`
+- `tilt up`
 
-### Testing CDC Events
+## Test Scripts
 
-After running the script, you can verify CDC events are being published to NATS:
+| Script | Service(s) | Description |
+|--------|------------|-------------|
+| `test-all.sh` | All | Runner script - executes all tests in sequence |
+| `test-auth.sh` | UserService | Authentication flow (register, login, refresh, logout, GetUser) |
+| `test-organizations.sh` | OrganizationService | Organization CRUD operations |
+| `test-workspaces.sh` | WorkspaceService | Workspace CRUD operations |
+| `test-devices.sh` | EndDeviceService, EndDeviceDefinitionService | Device and definition CRUD |
+| `test-gateways.sh` | GatewayService | Gateway CRUD operations |
+| `test-mqtt-pipeline.sh` | E2E | MQTT -> NATS -> ClickHouse pipeline test |
+
+## Directory Structure
+
+```
+scripts/
+├── README.md              # This file
+├── lib/
+│   └── common.sh          # Shared utilities (colors, auth helpers, test functions)
+├── test-all.sh            # Runner script
+├── test-auth.sh           # UserService tests
+├── test-organizations.sh  # OrganizationService tests
+├── test-workspaces.sh     # WorkspaceService tests
+├── test-devices.sh        # EndDevice + Definition tests
+├── test-gateways.sh       # GatewayService tests
+└── test-mqtt-pipeline.sh  # E2E MQTT pipeline test
+```
+
+## Test Coverage
+
+Each domain test script includes:
+- **Happy path tests**: CRUD operations with valid authentication
+- **UNAUTHENTICATED tests**: Verify all protected endpoints reject requests without tokens
+- **Invalid token tests**: Verify endpoints reject invalid JWT tokens
+
+### API Coverage (28 RPC methods)
+
+| Service | Methods | Script |
+|---------|---------|--------|
+| UserService | RegisterUser, Login, Refresh, Logout, GetUser | test-auth.sh |
+| OrganizationService | Create, Get, Delete, List, UserOrganizations | test-organizations.sh |
+| WorkspaceService | Create, Get, Update, Delete, List | test-workspaces.sh |
+| EndDeviceDefinitionService | Create, Get, Update, Delete, List | test-devices.sh |
+| EndDeviceService | Create, Get, List | test-devices.sh |
+| GatewayService | Create, Get, Update, Delete, List | test-gateways.sh |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GRPC_HOST` | `localhost:50051` | gRPC server address |
+| `PONIX_MQTT_HOST` | `localhost` | MQTT broker host |
+| `PONIX_MQTT_PORT` | `1883` | MQTT broker port |
+| `PONIX_GATEWAY_BROKER_URL` | `mqtt://ponix-emqx:1883` | Gateway broker URL (Docker network) |
+
+Example:
+```bash
+GRPC_HOST=192.168.1.100:50051 ./scripts/test-all.sh
+```
+
+## Writing New Tests
+
+Source the common library and follow the established pattern:
 
 ```bash
-# Subscribe to all gateway CDC events
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+
+init_test_script "My Service Tests"
+
+# Setup
+print_step "Setup: Authenticating..."
+AUTH_TOKEN=$(register_and_login)
+print_success "Authenticated as $TEST_EMAIL"
+
+# Happy path tests
+print_step "Testing MyMethod (happy path)..."
+RESPONSE=$(grpc_call "$AUTH_TOKEN" "my.v1.MyService/MyMethod" '{"field": "value"}')
+# ... validate response ...
+print_success "MyMethod works correctly"
+
+# Unauthenticated tests
+print_step "Testing MyMethod without auth..."
+test_unauthenticated "my.v1.MyService/MyMethod" '{"field": "value"}'
+
+# Summary
+print_summary "My Service Tests"
+```
+
+### Available Helper Functions
+
+From `lib/common.sh`:
+
+| Function | Description |
+|----------|-------------|
+| `init_test_script "Name"` | Initialize script with header and prerequisites check |
+| `print_step "message"` | Print step header (green) |
+| `print_success "message"` | Print success message |
+| `print_error "message"` | Print error message |
+| `print_warning "message"` | Print warning message |
+| `print_info "message"` | Print info message |
+| `register_and_login` | Register new user and return JWT token |
+| `grpc_call "$token" "method" "$payload"` | Make authenticated gRPC call |
+| `test_unauthenticated "method" "$payload"` | Verify endpoint rejects unauthenticated requests |
+| `test_invalid_token "method" "$payload"` | Verify endpoint rejects invalid tokens |
+| `print_summary "Name"` | Print test summary footer |
+
+## Verifying Test Results
+
+### Check Service Logs
+```bash
+docker logs ponix-all-in-one 2>&1 | grep <device_id>
+```
+
+### Query ClickHouse
+```bash
+docker exec -it ponix-clickhouse clickhouse-client -u ponix --password ponix \
+  -q "SELECT * FROM ponix.processed_envelopes ORDER BY received_at DESC LIMIT 10;"
+```
+
+### Verify RBAC Assignments
+```bash
+docker exec -it ponix-postgres psql -U ponix -d ponix -c \
+  "SELECT * FROM casbin_rule WHERE ptype = 'g';"
+```
+
+### Subscribe to CDC Events
+```bash
 nats sub 'gateway.>'
-
-# Then update a gateway (either through the script or manually)
-# You should see gateway.update events published with protobuf payloads
 ```
 
-### Verifying gRPC Reflection
+## gRPC Reflection
 
-gRPC reflection is enabled on the server, allowing grpcurl to discover services automatically:
+gRPC reflection is enabled, allowing grpcurl to discover services:
 
 ```bash
 # List all services
 grpcurl -plaintext localhost:50051 list
 
-# List methods for a specific service
-grpcurl -plaintext localhost:50051 list ponix.gateway.v1.GatewayService
+# List methods for a service
+grpcurl -plaintext localhost:50051 list organization.v1.OrganizationService
 
-# Describe a specific method
-grpcurl -plaintext localhost:50051 describe ponix.gateway.v1.GatewayService.CreateGateway
+# Describe a method
+grpcurl -plaintext localhost:50051 describe organization.v1.OrganizationService.CreateOrganization
 ```
-
-### Environment Variables
-
-- `GRPC_HOST`: Override the default gRPC server address (default: `localhost:50051`)
-
-Example:
-```bash
-GRPC_HOST=192.168.1.100:50051 ./test-grpc-api.sh
-```
-
-## Manual Testing Examples
-
-### Authentication Setup
-
-First, register and login to get a JWT token:
-
-```bash
-# Register user
-grpcurl -plaintext \
-    -d '{
-        "email": "test@example.com",
-        "password": "password123",
-        "name": "Test User"
-    }' \
-    localhost:50051 user.v1.UserService/RegisterUser
-
-# Login to get JWT token
-LOGIN_RESPONSE=$(grpcurl -plaintext \
-    -d '{
-        "email": "test@example.com",
-        "password": "password123"
-    }' \
-    localhost:50051 user.v1.UserService/Login)
-
-# Extract token
-AUTH_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.token')
-echo "Token: $AUTH_TOKEN"
-```
-
-### Create Organization
-
-Creating an organization automatically assigns the creator as Admin (RBAC role).
-
-```bash
-ORG_RESPONSE=$(grpcurl -plaintext \
-    -H "authorization: Bearer $AUTH_TOKEN" \
-    -d '{
-        "name": "My Test Org"
-    }' \
-    localhost:50051 organization.v1.OrganizationService/CreateOrganization)
-
-ORG_ID=$(echo "$ORG_RESPONSE" | jq -r '.organizationId')
-echo "Organization ID: $ORG_ID"
-```
-
-### Create Workspace
-
-Workspaces are required to group devices within an organization.
-
-```bash
-WORKSPACE_RESPONSE=$(grpcurl -plaintext \
-    -H "authorization: Bearer $AUTH_TOKEN" \
-    -d "{
-        \"organization_id\": \"$ORG_ID\",
-        \"name\": \"Default Workspace\"
-    }" \
-    localhost:50051 workspace.v1.WorkspaceService/CreateWorkspace)
-
-WORKSPACE_ID=$(echo "$WORKSPACE_RESPONSE" | jq -r '.workspace.id')
-echo "Workspace ID: $WORKSPACE_ID"
-```
-
-### Create End Device Definition
-
-```bash
-DEFINITION_RESPONSE=$(grpcurl -plaintext \
-    -H "authorization: Bearer $AUTH_TOKEN" \
-    -d "{
-        \"organization_id\": \"$ORG_ID\",
-        \"name\": \"Cayenne LPP Sensor\",
-        \"json_schema\": \"{}\",
-        \"payload_conversion\": \"cayenne_lpp_decode(input)\"
-    }" \
-    localhost:50051 end_device.v1.EndDeviceDefinitionService/CreateEndDeviceDefinition)
-
-DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.id')
-echo "Definition ID: $DEFINITION_ID"
-```
-
-### Create End Device
-
-Devices require a workspace_id and definition_id.
-
-```bash
-grpcurl -plaintext \
-    -H "authorization: Bearer $AUTH_TOKEN" \
-    -d "{
-        \"organization_id\": \"$ORG_ID\",
-        \"workspace_id\": \"$WORKSPACE_ID\",
-        \"definition_id\": \"$DEFINITION_ID\",
-        \"name\": \"Temperature Sensor\"
-    }" \
-    localhost:50051 end_device.v1.EndDeviceService/CreateEndDevice
-```
-
-### Create Gateway
-
-```bash
-grpcurl -plaintext \
-    -H "authorization: Bearer $AUTH_TOKEN" \
-    -d '{
-        "organization_id": "org-xxx",
-        "name": "EMQX Gateway",
-        "type": "GATEWAY_TYPE_EMQX",
-        "emqx_config": {
-            "broker_url": "mqtt://mqtt.example.com:1883",
-            "subscription_group": "ponix"
-        }
-    }' \
-    localhost:50051 gateway.v1.GatewayService/CreateGateway
-```
-
-### Update Gateway (Triggers CDC Event)
-
-```bash
-grpcurl -plaintext \
-    -H "authorization: Bearer $AUTH_TOKEN" \
-    -d '{
-        "gateway_id": "gw-xxx",
-        "organization_id": "org-xxx",
-        "name": "EMQX Gateway - Updated"
-    }' \
-    localhost:50051 gateway.v1.GatewayService/UpdateGateway
-```
-
-### Verify RBAC Role Assignment
-
-After creating an organization, verify the creator was assigned the Admin role:
-
-```bash
-docker exec -it ponix-postgres psql -U ponix -d ponix -c \
-    "SELECT * FROM casbin_rule WHERE ptype = 'g';"
-```
-
-This should show a row with:
-- `ptype = 'g'` (grouping policy)
-- `v0 = <user_id>` (user who created the org)
-- `v1 = 'admin'` (role)
-- `v2 = <org_id>` (organization domain)
-
-## Next Steps
-
-After creating resources:
-
-1. **Subscribe to NATS for CDC events**:
-   ```bash
-   nats sub 'gateway.>'
-   ```
-
-2. **Send a raw envelope** (if you created a device with Cayenne converter):
-   ```bash
-   # The device will decode the Cayenne LPP payload to JSON
-   # and publish to processed_envelopes stream
-   ```
-
-3. **Query ClickHouse** for processed envelopes:
-   ```bash
-   docker exec -it ponix-clickhouse clickhouse-client -u ponix --password ponix
-   SELECT * FROM ponix.processed_envelopes ORDER BY received_at DESC LIMIT 10;
-   ```
-
-4. **Check CDC replication slot status**:
-   ```bash
-   docker exec -it ponix-postgres psql -U ponix -d ponix -c \
-     "SELECT * FROM pg_replication_slots WHERE slot_name = 'ponix_cdc_slot';"
-   ```
