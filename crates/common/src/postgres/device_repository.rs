@@ -13,6 +13,7 @@ use tracing::{debug, instrument};
 pub struct DeviceRow {
     pub device_id: String,
     pub organization_id: String,
+    pub workspace_id: String,
     pub definition_id: String,
     pub device_name: String,
     pub created_at: DateTime<Utc>,
@@ -25,6 +26,7 @@ impl From<DeviceRow> for Device {
         Device {
             device_id: row.device_id,
             organization_id: row.organization_id,
+            workspace_id: row.workspace_id,
             definition_id: row.definition_id,
             name: row.device_name, // Map device_name -> name
             created_at: Some(row.created_at),
@@ -38,6 +40,7 @@ impl From<DeviceRow> for Device {
 pub struct DeviceWithDefinitionRow {
     pub device_id: String,
     pub organization_id: String,
+    pub workspace_id: String,
     pub definition_id: String,
     pub definition_name: String,
     pub device_name: String,
@@ -53,6 +56,7 @@ impl From<DeviceWithDefinitionRow> for DeviceWithDefinition {
         DeviceWithDefinition {
             device_id: row.device_id,
             organization_id: row.organization_id,
+            workspace_id: row.workspace_id,
             definition_id: row.definition_id,
             definition_name: row.definition_name,
             name: row.device_name,
@@ -91,11 +95,12 @@ impl DeviceRepository for PostgresDeviceRepository {
         // Execute insert
         let result = conn
             .execute(
-                "INSERT INTO devices (device_id, organization_id, definition_id, device_name, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+                "INSERT INTO devices (device_id, organization_id, workspace_id, definition_id, device_name, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
                 &[
                     &input.device_id,
                     &input.organization_id,
+                    &input.workspace_id,
                     &input.definition_id,
                     &input.name, // Map name -> device_name
                     &now,
@@ -122,6 +127,7 @@ impl DeviceRepository for PostgresDeviceRepository {
         Ok(Device {
             device_id: input.device_id,
             organization_id: input.organization_id,
+            workspace_id: input.workspace_id,
             definition_id: input.definition_id,
             name: input.name,
             created_at: Some(now),
@@ -139,7 +145,7 @@ impl DeviceRepository for PostgresDeviceRepository {
 
         let row = conn
             .query_opt(
-                "SELECT device_id, organization_id, definition_id, device_name, created_at, updated_at
+                "SELECT device_id, organization_id, workspace_id, definition_id, device_name, created_at, updated_at
                  FROM devices
                  WHERE device_id = $1 AND organization_id = $2",
                 &[&input.device_id, &input.organization_id],
@@ -152,10 +158,11 @@ impl DeviceRepository for PostgresDeviceRepository {
                 let device_row = DeviceRow {
                     device_id: row.get(0),
                     organization_id: row.get(1),
-                    definition_id: row.get(2),
-                    device_name: row.get(3),
-                    created_at: row.get(4),
-                    updated_at: row.get(5),
+                    workspace_id: row.get(2),
+                    definition_id: row.get(3),
+                    device_name: row.get(4),
+                    created_at: row.get(5),
+                    updated_at: row.get(6),
                 };
                 Ok(Some(device_row.into()))
             }
@@ -173,7 +180,7 @@ impl DeviceRepository for PostgresDeviceRepository {
 
         let rows = conn
             .query(
-                "SELECT device_id, organization_id, definition_id, device_name, created_at, updated_at
+                "SELECT device_id, organization_id, workspace_id, definition_id, device_name, created_at, updated_at
                  FROM devices
                  WHERE organization_id = $1
                  ORDER BY created_at DESC",
@@ -188,10 +195,11 @@ impl DeviceRepository for PostgresDeviceRepository {
                 let device_row = DeviceRow {
                     device_id: row.get(0),
                     organization_id: row.get(1),
-                    definition_id: row.get(2),
-                    device_name: row.get(3),
-                    created_at: row.get(4),
-                    updated_at: row.get(5),
+                    workspace_id: row.get(2),
+                    definition_id: row.get(3),
+                    device_name: row.get(4),
+                    created_at: row.get(5),
+                    updated_at: row.get(6),
                 };
                 device_row.into()
             })
@@ -219,7 +227,7 @@ impl DeviceRepository for PostgresDeviceRepository {
 
         let row = conn
             .query_opt(
-                "SELECT d.device_id, d.organization_id, d.definition_id,
+                "SELECT d.device_id, d.organization_id, d.workspace_id, d.definition_id,
                         def.name as definition_name, d.device_name,
                         def.payload_conversion, def.json_schema,
                         d.created_at, d.updated_at
@@ -236,13 +244,14 @@ impl DeviceRepository for PostgresDeviceRepository {
                 let joined_row = DeviceWithDefinitionRow {
                     device_id: row.get(0),
                     organization_id: row.get(1),
-                    definition_id: row.get(2),
-                    definition_name: row.get(3),
-                    device_name: row.get(4),
-                    payload_conversion: row.get(5),
-                    json_schema: row.get(6),
-                    created_at: row.get(7),
-                    updated_at: row.get(8),
+                    workspace_id: row.get(2),
+                    definition_id: row.get(3),
+                    definition_name: row.get(4),
+                    device_name: row.get(5),
+                    payload_conversion: row.get(6),
+                    json_schema: row.get(7),
+                    created_at: row.get(8),
+                    updated_at: row.get(9),
                 };
                 debug!(
                     "found device with definition: {}",

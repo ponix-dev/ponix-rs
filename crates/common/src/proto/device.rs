@@ -18,6 +18,7 @@ pub fn to_proto_device(device: Device) -> EndDevice {
     EndDevice {
         device_id: device.device_id,
         organization_id: device.organization_id,
+        workspace_id: device.workspace_id,
         definition_id: device.definition_id,
         name: device.name,
         created_at: datetime_to_timestamp(device.created_at),
@@ -49,6 +50,7 @@ mod tests {
         let device = Device {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-abc".to_string(),
             definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
             created_at: Some(now),
@@ -59,6 +61,7 @@ mod tests {
 
         assert_eq!(proto.device_id, "device-123");
         assert_eq!(proto.organization_id, "org-456");
+        assert_eq!(proto.workspace_id, "ws-abc");
         assert_eq!(proto.definition_id, "def-789");
         assert_eq!(proto.name, "Test Device");
         assert!(proto.created_at.is_some());
