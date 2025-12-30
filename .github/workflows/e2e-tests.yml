@@ -1,0 +1,96 @@
+name: E2E Tests
+
+on:
+  workflow_call:
+    secrets:
+      BSR_TOKEN:
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup mise
+        uses: jdx/mise-action@v2
+        with:
+          install: true
+          cache: true
+
+      - name: Install goose
+        run: |
+          curl -fsSL https://github.com/pressly/goose/releases/download/v3.22.1/goose_linux_x86_64 \
+            -o /usr/local/bin/goose
+          chmod +x /usr/local/bin/goose
+
+      - name: Install mosquitto-clients
+        run: sudo apt-get update && sudo apt-get install -y mosquitto-clients
+
+      - name: Configure BSR authentication
+        run: cargo login --registry buf "Bearer ${{ secrets.BSR_TOKEN }}"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "rust-cache"
+          cache-on-failure: true
+
+      - name: Create Docker network
+        run: docker network create ponix || true
+
+      - name: Start services with Tilt CI
+        env:
+          BSR_TOKEN: ${{ secrets.BSR_TOKEN }}
+        run: |
+          # Run tilt ci which builds and starts all services, waiting for them to be ready
+          # Timeout after 10 minutes
+          timeout 600 tilt ci -- --port 0 || {
+            echo "Tilt CI failed or timed out"
+            tilt down
+            exit 1
+          }
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for gRPC server to be ready..."
+          for i in {1..60}; do
+            if grpcurl -plaintext localhost:50051 list >/dev/null 2>&1; then
+              echo "gRPC server is ready!"
+              break
+            fi
+            echo "Attempt $i/60: gRPC server not ready, waiting..."
+            sleep 5
+          done
+
+          # Verify the server is actually responding
+          grpcurl -plaintext localhost:50051 list || {
+            echo "gRPC server failed to respond"
+            docker-compose -f docker/docker-compose.service.yaml logs
+            exit 1
+          }
+
+      - name: Run E2E tests
+        run: |
+          chmod +x scripts/test-all.sh
+          ./scripts/test-all.sh
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== Docker Compose Logs ==="
+          docker-compose -f docker/docker-compose.service.yaml logs --tail=100
+          echo "=== Tilt Logs ==="
+          tilt logs || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          tilt down || true
+          docker-compose -f docker/docker-compose.service.yaml down -v || true
+          docker network rm ponix || true
