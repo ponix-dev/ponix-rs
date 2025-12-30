@@ -16,6 +16,8 @@ pub struct CreateDeviceRequest {
     #[garde(length(min = 1))]
     pub organization_id: String,
     #[garde(length(min = 1))]
+    pub workspace_id: String,
+    #[garde(length(min = 1))]
     pub definition_id: String,
     #[garde(length(min = 1))]
     pub name: String,
@@ -134,6 +136,7 @@ impl DeviceService {
         let repo_input = CreateDeviceRepoInput {
             device_id,
             organization_id: request.organization_id,
+            workspace_id: request.workspace_id,
             definition_id: request.definition_id,
             name: request.name,
         };
@@ -265,6 +268,7 @@ mod tests {
         let expected_device = Device {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
             created_at: None,
@@ -276,6 +280,7 @@ mod tests {
             .withf(|input: &CreateDeviceRepoInput| {
                 !input.device_id.is_empty() // ID is generated
                     && input.organization_id == "org-456"
+                    && input.workspace_id == "ws-123"
                     && input.definition_id == "def-789"
                     && input.name == "Test Device"
             })
@@ -292,6 +297,7 @@ mod tests {
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
         };
@@ -321,6 +327,7 @@ mod tests {
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             name: "".to_string(),
         };
@@ -355,6 +362,7 @@ mod tests {
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "nonexistent-org".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
         };
@@ -397,6 +405,7 @@ mod tests {
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-deleted".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
         };
@@ -445,6 +454,7 @@ mod tests {
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "nonexistent-def".to_string(),
             name: "Test Device".to_string(),
         };
@@ -466,6 +476,7 @@ mod tests {
         let expected_device = Device {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
             created_at: None,
@@ -566,6 +577,7 @@ mod tests {
             Device {
                 device_id: "device-1".to_string(),
                 organization_id: "org-456".to_string(),
+                workspace_id: "ws-123".to_string(),
                 definition_id: "def-789".to_string(),
                 name: "Device 1".to_string(),
                 created_at: None,
@@ -574,6 +586,7 @@ mod tests {
             Device {
                 device_id: "device-2".to_string(),
                 organization_id: "org-456".to_string(),
+                workspace_id: "ws-123".to_string(),
                 definition_id: "def-789".to_string(),
                 name: "Device 2".to_string(),
                 created_at: None,
@@ -631,6 +644,7 @@ mod tests {
         let request = CreateDeviceRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             name: "Test Device".to_string(),
         };
