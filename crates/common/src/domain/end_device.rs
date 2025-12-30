@@ -58,12 +58,14 @@ pub struct CreateDeviceRepoInput {
 pub struct GetDeviceRepoInput {
     pub device_id: String,
     pub organization_id: String,
+    pub workspace_id: String,
 }
 
-/// Repository input for listing devices by organization
+/// Repository input for listing devices by workspace
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListDevicesRepoInput {
     pub organization_id: String,
+    pub workspace_id: String,
 }
 
 /// Repository input for getting a device with its definition (joined query)
@@ -84,7 +86,7 @@ pub trait DeviceRepository: Send + Sync {
     /// Get a device by ID
     async fn get_device(&self, input: GetDeviceRepoInput) -> DomainResult<Option<Device>>;
 
-    /// List all devices for an organization
+    /// List all devices for a workspace
     async fn list_devices(&self, input: ListDevicesRepoInput) -> DomainResult<Vec<Device>>;
 
     /// Get a device with its definition data in a single query (JOIN)

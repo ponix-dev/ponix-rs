@@ -3146,9 +3146,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-prost"
-version = "0.5.0-20251230034614-58a5eabd7420.2"
+version = "0.5.0-20251230185725-552bdf3167ff.2"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "86cce3f0310916314b48ce4508fb3061df6a87cd253a0a1595f4bdab90ecced3"
+checksum = "1a2f5af6a936b7aeebd1772164a3fb2a9d6dd73632afaa99ff2c6a816968f970"
 dependencies = [
  "prost 0.14.1",
  "prost-types",
@@ -3156,9 +3156,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-tonic"
-version = "0.5.0-20251230034614-58a5eabd7420.4"
+version = "0.5.0-20251230185725-552bdf3167ff.4"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "e41f8486aae79c642baeeaf8491c7c3709606f634ed3d8041113ec2b0723760c"
+checksum = "82e6c8d3b671f87ca48d46f15577391408353c7274880af855d3b2d887c94d0e"
 dependencies = [
  "ponix_ponix_community_neoeinstein-prost",
  "tonic 0.14.2",

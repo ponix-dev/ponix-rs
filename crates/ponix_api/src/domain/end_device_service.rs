@@ -32,15 +32,19 @@ pub struct GetDeviceRequest {
     pub device_id: String,
     #[garde(length(min = 1))]
     pub organization_id: String,
+    #[garde(length(min = 1))]
+    pub workspace_id: String,
 }
 
-/// Service request for listing devices
+/// Service request for listing devices in a workspace
 #[derive(Debug, Clone, Validate)]
 pub struct ListDevicesRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
     pub organization_id: String,
+    #[garde(length(min = 1))]
+    pub workspace_id: String,
 }
 
 /// Domain service for device management business logic
@@ -146,8 +150,8 @@ impl DeviceService {
         Ok(device)
     }
 
-    /// Get a device by ID and organization
-    #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id))]
+    /// Get a device by ID, organization, and workspace
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id))]
     pub async fn get_device(&self, request: GetDeviceRequest) -> DomainResult<Device> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
@@ -162,11 +166,12 @@ impl DeviceService {
             )
             .await?;
 
-        debug!(device_id = %request.device_id, organization_id = %request.organization_id, "getting device");
+        debug!(device_id = %request.device_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id, "getting device");
 
         let repo_input = GetDeviceRepoInput {
             device_id: request.device_id,
             organization_id: request.organization_id,
+            workspace_id: request.workspace_id,
         };
 
         let device = self
@@ -178,13 +183,13 @@ impl DeviceService {
         Ok(device)
     }
 
-    /// List devices for an organization
-    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
+    /// List devices for a workspace
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id))]
     pub async fn list_devices(&self, request: ListDevicesRequest) -> DomainResult<Vec<Device>> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
 
-        // Check authorization
+        // Check authorization (at org level)
         self.authorization_provider
             .require_permission(
                 &request.user_id,
@@ -194,15 +199,16 @@ impl DeviceService {
             )
             .await?;
 
-        debug!(organization_id = %request.organization_id, "listing devices");
+        debug!(organization_id = %request.organization_id, workspace_id = %request.workspace_id, "listing devices for workspace");
 
         let repo_input = ListDevicesRepoInput {
             organization_id: request.organization_id,
+            workspace_id: request.workspace_id,
         };
 
         let devices = self.device_repository.list_devices(repo_input).await?;
 
-        debug!(count = devices.len(), "listed devices");
+        debug!(count = devices.len(), "listed devices for workspace");
         Ok(devices)
     }
 }
@@ -486,7 +492,9 @@ mod tests {
         mock_device_repo
             .expect_get_device()
             .withf(|input: &GetDeviceRepoInput| {
-                input.device_id == "device-123" && input.organization_id == "org-456"
+                input.device_id == "device-123"
+                    && input.organization_id == "org-456"
+                    && input.workspace_id == "ws-123"
             })
             .times(1)
             .return_once(move |_| Ok(Some(expected_device)));
@@ -502,6 +510,7 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
         };
 
         let result = service.get_device(request).await;
@@ -530,6 +539,7 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             device_id: "nonexistent".to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
         };
 
         let result = service.get_device(request).await;
@@ -557,6 +567,7 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             device_id: "device-123".to_string(),
             organization_id: "".to_string(),
+            workspace_id: "ws-123".to_string(),
         };
 
         let result = service.get_device(request).await;
@@ -596,7 +607,9 @@ mod tests {
 
         mock_device_repo
             .expect_list_devices()
-            .withf(|input: &ListDevicesRepoInput| input.organization_id == "org-456")
+            .withf(|input: &ListDevicesRepoInput| {
+                input.organization_id == "org-456" && input.workspace_id == "ws-123"
+            })
             .times(1)
             .return_once(move |_| Ok(devices));
 
@@ -610,6 +623,7 @@ mod tests {
         let request = ListDevicesRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
+            workspace_id: "ws-123".to_string(),
         };
 
         let result = service.list_devices(request).await;
