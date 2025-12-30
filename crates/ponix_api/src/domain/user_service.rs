@@ -26,6 +26,10 @@ pub struct RegisterUserRequest {
 
 #[derive(Debug, Clone, Validate)]
 pub struct GetUserRequest {
+    /// The ID of the user making the request (from JWT)
+    #[garde(length(min = 1))]
+    pub requesting_user_id: String,
+    /// The ID of the user to fetch
     #[garde(length(min = 1))]
     pub user_id: String,
 }
@@ -89,12 +93,19 @@ impl UserService {
     }
 
     /// Get user by ID
-    #[instrument(skip(self, request), fields(user_id = %request.user_id))]
+    #[instrument(skip(self, request), fields(requesting_user_id = %request.requesting_user_id, user_id = %request.user_id))]
     pub async fn get_user(&self, request: GetUserRequest) -> DomainResult<User> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
 
-        debug!(user_id = %request.user_id, "getting user");
+        debug!(requesting_user_id = %request.requesting_user_id, user_id = %request.user_id, "getting user");
+
+        // Users can only access their own profile
+        if request.requesting_user_id != request.user_id {
+            return Err(DomainError::PermissionDenied(
+                "You can only access your own user profile".to_string(),
+            ));
+        }
 
         let repo_input = GetUserRepoInput {
             user_id: request.user_id.clone(),
@@ -456,6 +467,7 @@ mod tests {
         );
 
         let request = GetUserRequest {
+            requesting_user_id: "user-123".to_string(),
             user_id: "".to_string(),
         };
 
@@ -484,11 +496,36 @@ mod tests {
             mock_password,
         );
         let request = GetUserRequest {
+            requesting_user_id: "nonexistent".to_string(),
             user_id: "nonexistent".to_string(),
         };
 
         let result = service.get_user(request).await;
         assert!(matches!(result, Err(DomainError::UserNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_user_permission_denied() {
+        let mock_repo = MockUserRepository::new();
+        let mock_refresh_repo = MockRefreshTokenRepository::new();
+        let mock_password = MockPasswordService::new();
+        let mock_auth = MockAuthTokenProvider::new();
+        let mock_refresh_provider = MockRefreshTokenProvider::new();
+
+        let service = create_test_service(
+            mock_repo,
+            mock_refresh_repo,
+            mock_auth,
+            mock_refresh_provider,
+            mock_password,
+        );
+        let request = GetUserRequest {
+            requesting_user_id: "user-123".to_string(),
+            user_id: "different-user".to_string(),
+        };
+
+        let result = service.get_user(request).await;
+        assert!(matches!(result, Err(DomainError::PermissionDenied(_))));
     }
 
     #[tokio::test]

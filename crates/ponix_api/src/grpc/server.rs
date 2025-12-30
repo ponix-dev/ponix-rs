@@ -56,8 +56,12 @@ pub fn build_ponix_api_routes(
         GatewayServiceHandler::new(gateway_service, auth_token_provider.clone());
     let workspace_handler =
         WorkspaceServiceHandler::new(workspace_service, auth_token_provider.clone());
-    let user_handler =
-        UserServiceHandler::new(user_service, refresh_token_expiration_days, secure_cookies);
+    let user_handler = UserServiceHandler::new(
+        user_service,
+        auth_token_provider.clone(),
+        refresh_token_expiration_days,
+        secure_cookies,
+    );
 
     // Build routes with all services
     let mut builder = Routes::builder();
