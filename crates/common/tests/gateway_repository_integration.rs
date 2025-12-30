@@ -94,6 +94,7 @@ async fn test_gateway_crud_operations() {
     let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-test-001".to_string(),
         organization_id: "org-test-001".to_string(),
+        name: "Test Gateway 001".to_string(),
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
@@ -127,6 +128,7 @@ async fn test_gateway_crud_operations() {
     let update_input = UpdateGatewayRepoInput {
         gateway_id: "gw-test-001".to_string(),
         organization_id: "org-test-001".to_string(),
+        name: None,
         gateway_type: None,
         gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt2.example.com:8883".to_string(),
@@ -180,6 +182,7 @@ async fn test_gateway_unique_constraint() {
     let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-test-002".to_string(),
         organization_id: "org-test-002".to_string(),
+        name: "Test Gateway 002".to_string(),
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: String::new(),
@@ -219,6 +222,7 @@ async fn test_list_excludes_soft_deleted() {
         let create_input = CreateGatewayRepoInput {
             gateway_id: format!("gw-test-{}", i),
             organization_id: "org-test-003".to_string(),
+            name: format!("Test Gateway {}", i),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: format!("mqtt://mqtt{}.example.com:1883", i),
@@ -268,6 +272,7 @@ async fn test_get_gateway_with_wrong_organization_returns_none() {
     let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-cross-test".to_string(),
         organization_id: "org-cross-1".to_string(),
+        name: "Cross Org Test Gateway".to_string(),
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
@@ -320,6 +325,7 @@ async fn test_update_gateway_with_wrong_organization_returns_not_found() {
     let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-update-test".to_string(),
         organization_id: "org-update-1".to_string(),
+        name: "Update Test Gateway".to_string(),
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
@@ -332,6 +338,7 @@ async fn test_update_gateway_with_wrong_organization_returns_not_found() {
     let wrong_update = UpdateGatewayRepoInput {
         gateway_id: "gw-update-test".to_string(),
         organization_id: "org-update-2".to_string(),
+        name: None,
         gateway_type: Some("changed".to_string()),
         gateway_config: None,
     };
@@ -367,6 +374,7 @@ async fn test_delete_gateway_with_wrong_organization_returns_not_found() {
     let create_input = CreateGatewayRepoInput {
         gateway_id: "gw-delete-test".to_string(),
         organization_id: "org-delete-1".to_string(),
+        name: "Delete Test Gateway".to_string(),
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),

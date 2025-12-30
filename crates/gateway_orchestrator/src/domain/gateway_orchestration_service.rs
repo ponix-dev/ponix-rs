@@ -284,6 +284,7 @@ mod tests {
         Gateway {
             gateway_id: gateway_id.to_string(),
             organization_id: org_id.to_string(),
+            name: format!("Test Gateway {}", gateway_id),
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://mqtt.example.com:1883".to_string(),

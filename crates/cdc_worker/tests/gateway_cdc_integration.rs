@@ -293,6 +293,7 @@ async fn test_gateway_create_cdc_event() {
     let input = CreateGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-001".to_string(),
+        name: "Test Gateway Create 001".to_string(),
         gateway_type: "EMQX".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://test.example.com:1883".to_string(),
@@ -348,6 +349,7 @@ async fn test_gateway_update_cdc_event() {
     let create_input = CreateGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-002".to_string(),
+        name: "Test Gateway Update 001".to_string(),
         gateway_type: "EMQX".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://original.example.com:1883".to_string(),
@@ -372,6 +374,7 @@ async fn test_gateway_update_cdc_event() {
     let update_input = UpdateGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-002".to_string(),
+        name: None,
         gateway_type: None,
         gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://updated.example.com:8883".to_string(),
@@ -425,6 +428,7 @@ async fn test_gateway_delete_cdc_event() {
     let create_input = CreateGatewayRepoInput {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-003".to_string(),
+        name: "Test Gateway Delete 001".to_string(),
         gateway_type: "EMQX".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://delete-test.example.com:1883".to_string(),
