@@ -1,3 +1,9 @@
+## [1.12.1](https://github.com/ponix-dev/ponix-rs/compare/v1.12.0...v1.12.1) (2025-12-30)
+
+### Code Refactoring
+
+* scope device queries by workspace ([#115](https://github.com/ponix-dev/ponix-rs/issues/115)) ([be63e8e](https://github.com/ponix-dev/ponix-rs/commit/be63e8e6beacd57f3d5a5c9f7839dd2db865665d))
+
 ## [1.12.0](https://github.com/ponix-dev/ponix-rs/compare/v1.11.0...v1.12.0) (2025-12-30)
 
 ### Features
