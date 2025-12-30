@@ -47,6 +47,7 @@ mod mocks {
                 device_id: d.device_id.clone(),
                 organization_id: d.organization_id.clone(),
                 definition_id: d.definition_id.clone(),
+                workspace_id: d.workspace_id.clone(),
                 name: d.name.clone(),
                 created_at: d.created_at,
                 updated_at: d.updated_at,
@@ -165,6 +166,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
     let device = common::domain::DeviceWithDefinition {
         device_id: "sensor-001".to_string(),
         organization_id: "org-123".to_string(),
+        workspace_id: "ws-123".to_string(),
         definition_id: "def-001".to_string(),
         definition_name: "Temperature Sensor Def".to_string(),
         name: "Temperature Sensor".to_string(),
@@ -230,6 +232,7 @@ async fn test_full_conversion_flow_custom_transformation() {
     let device = common::domain::DeviceWithDefinition {
         device_id: "sensor-002".to_string(),
         organization_id: "org-456".to_string(),
+        workspace_id: "ws-456".to_string(),
         definition_id: "def-002".to_string(),
         definition_name: "Multi Sensor Def".to_string(),
         name: "Multi Sensor".to_string(),
@@ -343,6 +346,7 @@ async fn test_invalid_cel_expression() {
     let device = common::domain::DeviceWithDefinition {
         device_id: "sensor-bad".to_string(),
         organization_id: "org-789".to_string(),
+        workspace_id: "ws-789".to_string(),
         definition_id: "def-bad".to_string(),
         definition_name: "Broken Definition".to_string(),
         name: "Broken Sensor".to_string(),
@@ -403,6 +407,7 @@ async fn test_empty_cel_expression() {
     let device = common::domain::DeviceWithDefinition {
         device_id: "sensor-empty".to_string(),
         organization_id: "org-000".to_string(),
+        workspace_id: "ws-000".to_string(),
         definition_id: "def-empty".to_string(),
         definition_name: "Unconfigured Definition".to_string(),
         name: "Unconfigured Sensor".to_string(),
@@ -463,6 +468,7 @@ async fn test_cel_expression_returns_non_object() {
     let device = common::domain::DeviceWithDefinition {
         device_id: "sensor-scalar".to_string(),
         organization_id: "org-scalar".to_string(),
+        workspace_id: "ws-scalar".to_string(),
         definition_id: "def-scalar".to_string(),
         definition_name: "Scalar Definition".to_string(),
         name: "Scalar Sensor".to_string(),
