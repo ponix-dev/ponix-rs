@@ -11,6 +11,7 @@ pub struct Device {
     pub organization_id: String,
     pub workspace_id: String,
     pub definition_id: String,
+    pub gateway_id: String,
     pub name: String,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -28,6 +29,8 @@ pub struct DeviceWithDefinition {
     pub workspace_id: String,
     #[garde(skip)]
     pub definition_id: String,
+    #[garde(skip)]
+    pub gateway_id: String,
     #[garde(skip)]
     pub definition_name: String,
     #[garde(skip)]
@@ -50,6 +53,7 @@ pub struct CreateDeviceRepoInput {
     pub organization_id: String,
     pub workspace_id: String,
     pub definition_id: String,
+    pub gateway_id: String,
     pub name: String,
 }
 
@@ -75,6 +79,13 @@ pub struct GetDeviceWithDefinitionRepoInput {
     pub organization_id: String,
 }
 
+/// Repository input for listing devices by gateway
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListDevicesByGatewayRepoInput {
+    pub organization_id: String,
+    pub gateway_id: String,
+}
+
 /// Repository trait for device storage operations
 /// Infrastructure layer (e.g., ponix-postgres) implements this trait
 #[cfg_attr(any(test, feature = "testing"), mockall::automock)]
@@ -95,4 +106,10 @@ pub trait DeviceRepository: Send + Sync {
         &self,
         input: GetDeviceWithDefinitionRepoInput,
     ) -> DomainResult<Option<DeviceWithDefinition>>;
+
+    /// List all devices for a gateway
+    async fn list_devices_by_gateway(
+        &self,
+        input: ListDevicesByGatewayRepoInput,
+    ) -> DomainResult<Vec<Device>>;
 }
