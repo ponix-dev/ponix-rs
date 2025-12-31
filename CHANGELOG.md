@@ -1,3 +1,9 @@
+## [1.13.0](https://github.com/ponix-dev/ponix-rs/compare/v1.12.1...v1.13.0) (2025-12-31)
+
+### Features
+
+* add gateway_id to end devices ([#116](https://github.com/ponix-dev/ponix-rs/issues/116)) ([d5c57ee](https://github.com/ponix-dev/ponix-rs/commit/d5c57ee8fb622001ab9ae0f4abb8edb671116fd4))
+
 ## [1.12.1](https://github.com/ponix-dev/ponix-rs/compare/v1.12.0...v1.12.1) (2025-12-30)
 
 ### Code Refactoring
