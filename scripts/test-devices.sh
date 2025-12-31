@@ -42,6 +42,26 @@ if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
 fi
 print_success "Workspace created: $WORKSPACE_ID"
 
+print_step "Setup: Creating gateway..."
+GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "gateway.v1.GatewayService/CreateGateway" \
+    "{
+        \"organization_id\": \"$ORG_ID\",
+        \"name\": \"Device Test Gateway\",
+        \"type\": \"GATEWAY_TYPE_EMQX\",
+        \"emqx_config\": {
+            \"broker_url\": \"mqtt://localhost:1883\",
+            \"subscription_group\": \"ponix\"
+        }
+    }")
+
+GATEWAY_ID=$(echo "$GATEWAY_RESPONSE" | jq -r '.gateway.gatewayId // .gatewayId // empty')
+if [ -z "$GATEWAY_ID" ] || [ "$GATEWAY_ID" = "null" ]; then
+    print_error "Failed to create gateway"
+    exit 1
+fi
+print_success "Gateway created: $GATEWAY_ID"
+
 # ============================================
 # END DEVICE DEFINITION HAPPY PATH TESTS
 # ============================================
@@ -134,6 +154,7 @@ DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"organization_id\": \"$ORG_ID\",
         \"workspace_id\": \"$WORKSPACE_ID\",
         \"definition_id\": \"$DEFINITION_ID\",
+        \"gateway_id\": \"$GATEWAY_ID\",
         \"name\": \"Temperature Sensor Alpha\"
     }")
 
@@ -175,6 +196,31 @@ if [ "$DEVICE_COUNT" -ge 1 ]; then
 else
     print_error "GetWorkspaceEndDevices returned no devices"
     echo "$LIST_DEVICE_RESPONSE"
+    exit 1
+fi
+
+# GetGatewayEndDevices
+print_step "Testing GetGatewayEndDevices (happy path)..."
+
+LIST_GATEWAY_DEVICES_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "end_device.v1.EndDeviceService/GetGatewayEndDevices" \
+    "{\"organization_id\": \"$ORG_ID\", \"gateway_id\": \"$GATEWAY_ID\"}")
+
+GATEWAY_DEVICE_COUNT=$(echo "$LIST_GATEWAY_DEVICES_RESPONSE" | jq '.endDevices | length')
+if [ "$GATEWAY_DEVICE_COUNT" -ge 1 ]; then
+    print_success "GetGatewayEndDevices returned $GATEWAY_DEVICE_COUNT device(s)"
+else
+    print_error "GetGatewayEndDevices returned no devices"
+    echo "$LIST_GATEWAY_DEVICES_RESPONSE"
+    exit 1
+fi
+
+# Verify gateway_id in returned device
+RETURNED_GATEWAY_ID=$(echo "$LIST_GATEWAY_DEVICES_RESPONSE" | jq -r '.endDevices[0].gatewayId // empty')
+if [ "$RETURNED_GATEWAY_ID" = "$GATEWAY_ID" ]; then
+    print_success "Device has correct gateway_id"
+else
+    print_error "Device gateway_id mismatch: expected $GATEWAY_ID, got $RETURNED_GATEWAY_ID"
     exit 1
 fi
 
@@ -260,7 +306,7 @@ test_unauthenticated \
 print_step "Testing CreateEndDevice without auth..."
 test_unauthenticated \
     "end_device.v1.EndDeviceService/CreateEndDevice" \
-    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"definition_id\": \"$DEFINITION_ID\", \"name\": \"Unauthorized\"}"
+    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"definition_id\": \"$DEFINITION_ID\", \"gateway_id\": \"$GATEWAY_ID\", \"name\": \"Unauthorized\"}"
 
 print_step "Testing GetEndDevice without auth..."
 test_unauthenticated \
@@ -284,7 +330,7 @@ test_invalid_token \
 print_step "Testing CreateEndDevice with invalid token..."
 test_invalid_token \
     "end_device.v1.EndDeviceService/CreateEndDevice" \
-    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"definition_id\": \"$DEFINITION_ID\", \"name\": \"Invalid Token\"}"
+    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"definition_id\": \"$DEFINITION_ID\", \"gateway_id\": \"$GATEWAY_ID\", \"name\": \"Invalid Token\"}"
 
 # ============================================
 # SUMMARY
@@ -293,8 +339,9 @@ print_summary "Device Tests"
 echo ""
 echo -e "${YELLOW}Test Organization ID:${NC} $ORG_ID"
 echo -e "${YELLOW}Test Workspace ID:${NC} $WORKSPACE_ID"
+echo -e "${YELLOW}Test Gateway ID:${NC} $GATEWAY_ID"
 echo -e "${YELLOW}Test Definition ID:${NC} $DEFINITION_ID"
 echo -e "${YELLOW}Test Device ID:${NC} $DEVICE_ID"
 
 # Export for dependent tests
-export ORG_ID WORKSPACE_ID DEFINITION_ID DEVICE_ID AUTH_TOKEN
+export ORG_ID WORKSPACE_ID GATEWAY_ID DEFINITION_ID DEVICE_ID AUTH_TOKEN

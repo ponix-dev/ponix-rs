@@ -13,8 +13,9 @@ mod mocks {
         CreateDeviceRepoInput, CreateOrganizationRepoInputWithId, DeleteOrganizationRepoInput,
         Device, DeviceRepository, DeviceWithDefinition, DomainResult, GetDeviceRepoInput,
         GetDeviceWithDefinitionRepoInput, GetOrganizationRepoInput, GetUserOrganizationsRepoInput,
-        ListDevicesRepoInput, ListOrganizationsRepoInput, Organization, OrganizationRepository,
-        ProcessedEnvelope, ProcessedEnvelopeProducer, UpdateOrganizationRepoInput,
+        ListDevicesByGatewayRepoInput, ListDevicesRepoInput, ListOrganizationsRepoInput,
+        Organization, OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer,
+        UpdateOrganizationRepoInput,
     };
     use std::sync::{Arc, Mutex};
 
@@ -48,6 +49,7 @@ mod mocks {
                 organization_id: d.organization_id.clone(),
                 definition_id: d.definition_id.clone(),
                 workspace_id: d.workspace_id.clone(),
+                gateway_id: d.gateway_id.clone(),
                 name: d.name.clone(),
                 created_at: d.created_at,
                 updated_at: d.updated_at,
@@ -55,6 +57,13 @@ mod mocks {
         }
 
         async fn list_devices(&self, _input: ListDevicesRepoInput) -> DomainResult<Vec<Device>> {
+            unimplemented!("Not needed for envelope tests")
+        }
+
+        async fn list_devices_by_gateway(
+            &self,
+            _input: ListDevicesByGatewayRepoInput,
+        ) -> DomainResult<Vec<Device>> {
             unimplemented!("Not needed for envelope tests")
         }
 
@@ -168,6 +177,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
         organization_id: "org-123".to_string(),
         workspace_id: "ws-123".to_string(),
         definition_id: "def-001".to_string(),
+        gateway_id: "gw-001".to_string(),
         definition_name: "Temperature Sensor Def".to_string(),
         name: "Temperature Sensor".to_string(),
         payload_conversion: "cayenne_lpp_decode(input)".to_string(),
@@ -234,6 +244,7 @@ async fn test_full_conversion_flow_custom_transformation() {
         organization_id: "org-456".to_string(),
         workspace_id: "ws-456".to_string(),
         definition_id: "def-002".to_string(),
+        gateway_id: "gw-001".to_string(),
         definition_name: "Multi Sensor Def".to_string(),
         name: "Multi Sensor".to_string(),
         payload_conversion: r#"
@@ -348,6 +359,7 @@ async fn test_invalid_cel_expression() {
         organization_id: "org-789".to_string(),
         workspace_id: "ws-789".to_string(),
         definition_id: "def-bad".to_string(),
+        gateway_id: "gw-001".to_string(),
         definition_name: "Broken Definition".to_string(),
         name: "Broken Sensor".to_string(),
         payload_conversion: "invalid{[syntax".to_string(),
@@ -409,6 +421,7 @@ async fn test_empty_cel_expression() {
         organization_id: "org-000".to_string(),
         workspace_id: "ws-000".to_string(),
         definition_id: "def-empty".to_string(),
+        gateway_id: "gw-001".to_string(),
         definition_name: "Unconfigured Definition".to_string(),
         name: "Unconfigured Sensor".to_string(),
         payload_conversion: "".to_string(),
@@ -470,6 +483,7 @@ async fn test_cel_expression_returns_non_object() {
         organization_id: "org-scalar".to_string(),
         workspace_id: "ws-scalar".to_string(),
         definition_id: "def-scalar".to_string(),
+        gateway_id: "gw-001".to_string(),
         definition_name: "Scalar Definition".to_string(),
         name: "Scalar Sensor".to_string(),
         payload_conversion: "42".to_string(), // Returns number, not object
