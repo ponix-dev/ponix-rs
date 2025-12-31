@@ -1,8 +1,9 @@
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
     CreateDeviceRepoInput, Device, DeviceRepository, DomainError, DomainResult,
-    EndDeviceDefinitionRepository, GetDeviceRepoInput, GetEndDeviceDefinitionRepoInput,
-    GetOrganizationRepoInput, ListDevicesRepoInput, OrganizationRepository,
+    EndDeviceDefinitionRepository, GatewayRepository, GetDeviceRepoInput,
+    GetEndDeviceDefinitionRepoInput, GetGatewayRepoInput, GetOrganizationRepoInput,
+    ListDevicesByGatewayRepoInput, ListDevicesRepoInput, OrganizationRepository,
 };
 use garde::Validate;
 use std::sync::Arc;
@@ -19,6 +20,8 @@ pub struct CreateDeviceRequest {
     pub workspace_id: String,
     #[garde(length(min = 1))]
     pub definition_id: String,
+    #[garde(length(min = 1))]
+    pub gateway_id: String,
     #[garde(length(min = 1))]
     pub name: String,
 }
@@ -47,12 +50,24 @@ pub struct ListDevicesRequest {
     pub workspace_id: String,
 }
 
+/// Service request for listing devices by gateway
+#[derive(Debug, Clone, Validate)]
+pub struct ListDevicesByGatewayRequest {
+    #[garde(skip)]
+    pub user_id: String,
+    #[garde(length(min = 1))]
+    pub organization_id: String,
+    #[garde(length(min = 1))]
+    pub gateway_id: String,
+}
+
 /// Domain service for device management business logic
 /// This is the orchestration layer that handlers call
 pub struct DeviceService {
     device_repository: Arc<dyn DeviceRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
     definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
+    gateway_repository: Arc<dyn GatewayRepository>,
     authorization_provider: Arc<dyn AuthorizationProvider>,
 }
 
@@ -61,12 +76,14 @@ impl DeviceService {
         device_repository: Arc<dyn DeviceRepository>,
         organization_repository: Arc<dyn OrganizationRepository>,
         definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
+        gateway_repository: Arc<dyn GatewayRepository>,
         authorization_provider: Arc<dyn AuthorizationProvider>,
     ) -> Self {
         Self {
             device_repository,
             organization_repository,
             definition_repository,
+            gateway_repository,
             authorization_provider,
         }
     }
@@ -75,7 +92,8 @@ impl DeviceService {
     /// Generates a unique device_id using xid
     /// Validates that the organization exists and is not deleted
     /// Validates that the definition exists and belongs to the same organization
-    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, device_name = %request.name))]
+    /// Validates that the gateway exists and belongs to the same organization
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, gateway_id = %request.gateway_id, device_name = %request.name))]
     pub async fn create_device(&self, request: CreateDeviceRequest) -> DomainResult<Device> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
@@ -131,10 +149,27 @@ impl DeviceService {
                 DomainError::EndDeviceDefinitionNotFound(request.definition_id.clone())
             })?;
 
+        // Validate gateway exists and belongs to the same organization
+        debug!(gateway_id = %request.gateway_id, "validating gateway exists");
+        let gateway_input = GetGatewayRepoInput {
+            gateway_id: request.gateway_id.clone(),
+            organization_id: request.organization_id.clone(),
+        };
+
+        self.gateway_repository
+            .get_gateway(gateway_input)
+            .await?
+            .ok_or_else(|| {
+                DomainError::GatewayNotFound(format!(
+                    "Gateway {} not found in organization {}",
+                    request.gateway_id, request.organization_id
+                ))
+            })?;
+
         // Generate unique device ID
         let device_id = xid::new().to_string();
 
-        debug!(device_id = %device_id, organization_id = %request.organization_id, "creating device");
+        debug!(device_id = %device_id, organization_id = %request.organization_id, gateway_id = %request.gateway_id, "creating device");
 
         // Create input with generated ID for repository
         let repo_input = CreateDeviceRepoInput {
@@ -142,6 +177,7 @@ impl DeviceService {
             organization_id: request.organization_id,
             workspace_id: request.workspace_id,
             definition_id: request.definition_id,
+            gateway_id: request.gateway_id,
             name: request.name,
         };
 
@@ -211,6 +247,58 @@ impl DeviceService {
         debug!(count = devices.len(), "listed devices for workspace");
         Ok(devices)
     }
+
+    /// List devices for a gateway
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, gateway_id = %request.gateway_id))]
+    pub async fn list_devices_by_gateway(
+        &self,
+        request: ListDevicesByGatewayRequest,
+    ) -> DomainResult<Vec<Device>> {
+        // Validate request using garde
+        common::garde::validate_struct(&request)?;
+
+        // Check authorization (at org level for device read)
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Device,
+                Action::Read,
+            )
+            .await?;
+
+        // Validate gateway exists and belongs to the organization
+        debug!(gateway_id = %request.gateway_id, "validating gateway exists");
+        let gateway_input = GetGatewayRepoInput {
+            gateway_id: request.gateway_id.clone(),
+            organization_id: request.organization_id.clone(),
+        };
+
+        self.gateway_repository
+            .get_gateway(gateway_input)
+            .await?
+            .ok_or_else(|| {
+                DomainError::GatewayNotFound(format!(
+                    "Gateway {} not found in organization {}",
+                    request.gateway_id, request.organization_id
+                ))
+            })?;
+
+        debug!(organization_id = %request.organization_id, gateway_id = %request.gateway_id, "listing devices for gateway");
+
+        let repo_input = ListDevicesByGatewayRepoInput {
+            organization_id: request.organization_id,
+            gateway_id: request.gateway_id,
+        };
+
+        let devices = self
+            .device_repository
+            .list_devices_by_gateway(repo_input)
+            .await?;
+
+        debug!(count = devices.len(), "listed devices for gateway");
+        Ok(devices)
+    }
 }
 
 #[cfg(test)]
@@ -218,11 +306,13 @@ mod tests {
     use super::*;
     use common::auth::MockAuthorizationProvider;
     use common::domain::{
-        EndDeviceDefinition, MockDeviceRepository, MockEndDeviceDefinitionRepository,
-        MockOrganizationRepository, Organization,
+        EndDeviceDefinition, Gateway, GatewayConfig, MockDeviceRepository,
+        MockEndDeviceDefinitionRepository, MockGatewayRepository, MockOrganizationRepository,
+        Organization,
     };
 
     const TEST_USER_ID: &str = "user-123";
+    const TEST_GATEWAY_ID: &str = "gw-001";
 
     fn create_mock_auth_provider() -> Arc<MockAuthorizationProvider> {
         let mut mock = MockAuthorizationProvider::new();
@@ -231,11 +321,33 @@ mod tests {
         Arc::new(mock)
     }
 
+    fn create_mock_gateway_repo() -> MockGatewayRepository {
+        let mut mock = MockGatewayRepository::new();
+        mock.expect_get_gateway()
+            .returning(|input| {
+                Ok(Some(Gateway {
+                    gateway_id: input.gateway_id.clone(),
+                    organization_id: input.organization_id.clone(),
+                    name: "Test Gateway".to_string(),
+                    gateway_type: "emqx".to_string(),
+                    gateway_config: GatewayConfig::Emqx(common::domain::EmqxGatewayConfig {
+                        broker_url: "mqtt://localhost:1883".to_string(),
+                        subscription_group: "test".to_string(),
+                    }),
+                    deleted_at: None,
+                    created_at: None,
+                    updated_at: None,
+                }))
+            });
+        mock
+    }
+
     #[tokio::test]
     async fn test_create_device_success() {
         let mut mock_device_repo = MockDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = create_mock_gateway_repo();
 
         // Mock organization exists and is active
         let org = Organization {
@@ -276,6 +388,7 @@ mod tests {
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
+            gateway_id: TEST_GATEWAY_ID.to_string(),
             name: "Test Device".to_string(),
             created_at: None,
             updated_at: None,
@@ -288,6 +401,7 @@ mod tests {
                     && input.organization_id == "org-456"
                     && input.workspace_id == "ws-123"
                     && input.definition_id == "def-789"
+                    && input.gateway_id == TEST_GATEWAY_ID
                     && input.name == "Test Device"
             })
             .times(1)
@@ -297,6 +411,7 @@ mod tests {
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -305,6 +420,7 @@ mod tests {
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
+            gateway_id: TEST_GATEWAY_ID.to_string(),
             name: "Test Device".to_string(),
         };
 
@@ -315,6 +431,7 @@ mod tests {
         assert!(!device.device_id.is_empty()); // ID was generated
         assert_eq!(device.name, "Test Device");
         assert_eq!(device.definition_id, "def-789");
+        assert_eq!(device.gateway_id, TEST_GATEWAY_ID);
     }
 
     #[tokio::test]
@@ -322,11 +439,13 @@ mod tests {
         let mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -335,6 +454,7 @@ mod tests {
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
+            gateway_id: TEST_GATEWAY_ID.to_string(),
             name: "".to_string(),
         };
 
@@ -351,6 +471,7 @@ mod tests {
         let mock_device_repo = MockDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         // Mock organization not found
         mock_org_repo
@@ -362,6 +483,7 @@ mod tests {
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -370,6 +492,7 @@ mod tests {
             organization_id: "nonexistent-org".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
+            gateway_id: TEST_GATEWAY_ID.to_string(),
             name: "Test Device".to_string(),
         };
 
@@ -386,6 +509,7 @@ mod tests {
         let mock_device_repo = MockDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         // Mock deleted organization
         let deleted_org = Organization {
@@ -405,6 +529,7 @@ mod tests {
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -413,6 +538,7 @@ mod tests {
             organization_id: "org-deleted".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
+            gateway_id: TEST_GATEWAY_ID.to_string(),
             name: "Test Device".to_string(),
         };
 
@@ -429,6 +555,7 @@ mod tests {
         let mock_device_repo = MockDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         // Mock organization exists
         let org = Organization {
@@ -454,6 +581,7 @@ mod tests {
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -462,6 +590,7 @@ mod tests {
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "nonexistent-def".to_string(),
+            gateway_id: TEST_GATEWAY_ID.to_string(),
             name: "Test Device".to_string(),
         };
 
@@ -478,12 +607,14 @@ mod tests {
         let mut mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         let expected_device = Device {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
+            gateway_id: TEST_GATEWAY_ID.to_string(),
             name: "Test Device".to_string(),
             created_at: None,
             updated_at: None,
@@ -503,6 +634,7 @@ mod tests {
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -522,6 +654,7 @@ mod tests {
         let mut mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         mock_device_repo
             .expect_get_device()
@@ -532,6 +665,7 @@ mod tests {
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -555,11 +689,13 @@ mod tests {
         let mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         let service = DeviceService::new(
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -583,6 +719,7 @@ mod tests {
         let mut mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         let devices = vec![
             Device {
@@ -590,6 +727,7 @@ mod tests {
                 organization_id: "org-456".to_string(),
                 workspace_id: "ws-123".to_string(),
                 definition_id: "def-789".to_string(),
+                gateway_id: TEST_GATEWAY_ID.to_string(),
                 name: "Device 1".to_string(),
                 created_at: None,
                 updated_at: None,
@@ -599,6 +737,7 @@ mod tests {
                 organization_id: "org-456".to_string(),
                 workspace_id: "ws-123".to_string(),
                 definition_id: "def-789".to_string(),
+                gateway_id: TEST_GATEWAY_ID.to_string(),
                 name: "Device 2".to_string(),
                 created_at: None,
                 updated_at: None,
@@ -617,6 +756,7 @@ mod tests {
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
@@ -636,6 +776,7 @@ mod tests {
         let mock_device_repo = MockDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_gateway_repo = MockGatewayRepository::new();
 
         let mut mock_auth = MockAuthorizationProvider::new();
         mock_auth
@@ -652,6 +793,7 @@ mod tests {
             Arc::new(mock_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
+            Arc::new(mock_gateway_repo),
             Arc::new(mock_auth),
         );
 
@@ -660,6 +802,7 @@ mod tests {
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
+            gateway_id: TEST_GATEWAY_ID.to_string(),
             name: "Test Device".to_string(),
         };
 

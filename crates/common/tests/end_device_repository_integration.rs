@@ -110,6 +110,22 @@ async fn create_test_definition(
     def_id
 }
 
+async fn create_test_gateway(client: &PostgresClient, org_id: &str) -> String {
+    // Ensure organization exists first
+    create_test_organization(client, org_id).await;
+
+    // Create gateway with unique ID
+    let gateway_id = format!("gw-{}-{}", org_id, chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let conn = client.get_connection().await.unwrap();
+    conn.execute(
+        "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
+        &[&gateway_id, &org_id, &"Test Gateway", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883", "subscription_group": "test"})],
+    )
+    .await
+    .unwrap();
+    gateway_id
+}
+
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_create_and_get_device() {
@@ -117,12 +133,14 @@ async fn test_create_and_get_device() {
 
     let workspace_id = create_test_workspace(&client, "test-org-456").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org-456").await;
+    let gateway_id = create_test_gateway(&client, "test-org-456").await;
 
     let input = CreateDeviceRepoInput {
         device_id: "test-device-123".to_string(),
         organization_id: "test-org-456".to_string(),
         definition_id: definition_id.clone(),
         workspace_id: workspace_id.clone(),
+        gateway_id: gateway_id.clone(),
         name: "Test Device".to_string(),
     };
 
@@ -132,6 +150,7 @@ async fn test_create_and_get_device() {
     assert_eq!(created.name, "Test Device");
     assert_eq!(created.definition_id, definition_id);
     assert_eq!(created.workspace_id, workspace_id);
+    assert_eq!(created.gateway_id, gateway_id);
     assert!(created.created_at.is_some());
 
     // Get device
@@ -148,6 +167,7 @@ async fn test_create_and_get_device() {
     assert_eq!(device.name, "Test Device");
     assert_eq!(device.definition_id, definition_id);
     assert_eq!(device.workspace_id, workspace_id);
+    assert_eq!(device.gateway_id, gateway_id);
 }
 
 #[tokio::test]
@@ -157,12 +177,14 @@ async fn test_get_device_with_definition() {
 
     let workspace_id = create_test_workspace(&client, "test-org-789").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org-789").await;
+    let gateway_id = create_test_gateway(&client, "test-org-789").await;
 
     let input = CreateDeviceRepoInput {
         device_id: "test-device-with-def".to_string(),
         organization_id: "test-org-789".to_string(),
         definition_id: definition_id.clone(),
         workspace_id,
+        gateway_id: gateway_id.clone(),
         name: "Test Device With Def".to_string(),
     };
 
@@ -183,6 +205,7 @@ async fn test_get_device_with_definition() {
     assert_eq!(device_with_def.device_id, "test-device-with-def");
     assert_eq!(device_with_def.name, "Test Device With Def");
     assert_eq!(device_with_def.definition_id, definition_id);
+    assert_eq!(device_with_def.gateway_id, gateway_id);
     assert_eq!(device_with_def.definition_name, "Test Definition");
     assert_eq!(
         device_with_def.payload_conversion,
@@ -212,6 +235,7 @@ async fn test_list_devices_by_workspace() {
 
     let workspace_id = create_test_workspace(&client, "test-org").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org").await;
+    let gateway_id = create_test_gateway(&client, "test-org").await;
 
     // Create multiple devices in the same workspace
     for i in 1..=3 {
@@ -220,6 +244,7 @@ async fn test_list_devices_by_workspace() {
             organization_id: "test-org".to_string(),
             definition_id: definition_id.clone(),
             workspace_id: workspace_id.clone(),
+            gateway_id: gateway_id.clone(),
             name: format!("Device {}", i),
         };
         device_repo.create_device(input).await.unwrap();
@@ -258,12 +283,14 @@ async fn test_create_duplicate_device() {
 
     let workspace_id = create_test_workspace(&client, "test-org").await;
     let definition_id = create_test_definition(&definition_repo, &client, "test-org").await;
+    let gateway_id = create_test_gateway(&client, "test-org").await;
 
     let input = CreateDeviceRepoInput {
         device_id: "duplicate-device".to_string(),
         organization_id: "test-org".to_string(),
         definition_id: definition_id.clone(),
         workspace_id,
+        gateway_id,
         name: "Original Device".to_string(),
     };
 
@@ -319,12 +346,22 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     };
     definition_repo.create_definition(def_input).await.unwrap();
 
+    // Create gateway for org-1
+    let gateway_id = format!("gw-org1-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    conn.execute(
+        "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
+        &[&gateway_id, &"org-1", &"Gateway for Org 1", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883", "subscription_group": "test"})],
+    )
+    .await
+    .unwrap();
+
     // Create device in org-1
     let input = CreateDeviceRepoInput {
         device_id: "device-in-org-1".to_string(),
         organization_id: "org-1".to_string(),
         definition_id: def_id,
         workspace_id: workspace_id.clone(),
+        gateway_id,
         name: "Device in Org 1".to_string(),
     };
     device_repo.create_device(input).await.unwrap();

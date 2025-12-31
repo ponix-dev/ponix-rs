@@ -24,7 +24,7 @@ use common::nats::{
 };
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresEndDeviceDefinitionRepository,
-    PostgresOrganizationRepository,
+    PostgresGatewayRepository, PostgresOrganizationRepository,
 };
 
 use gateway_orchestrator::nats::RawEnvelopeProducer;
@@ -242,6 +242,7 @@ async fn initialize_services(
     let device_repo = Arc::new(PostgresDeviceRepository::new(pg_client.clone()));
     let org_repo = Arc::new(PostgresOrganizationRepository::new(pg_client.clone()));
     let definition_repo = Arc::new(PostgresEndDeviceDefinitionRepository::new(pg_client.clone()));
+    let gateway_repo = Arc::new(PostgresGatewayRepository::new(pg_client.clone()));
 
     // Mock authorization provider that allows all operations (E2E test bypasses auth)
     let mut mock_auth = MockAuthorizationProvider::new();
@@ -254,6 +255,7 @@ async fn initialize_services(
         device_repo.clone(),
         org_repo.clone(),
         definition_repo.clone(),
+        gateway_repo,
         Arc::new(mock_auth),
     ));
 
@@ -346,12 +348,24 @@ async fn create_test_device(
         })
         .await?;
 
+    // Create a gateway for the device
+    let gateway_id = format!(
+        "gw-test-{}",
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
+    conn.execute(
+        "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
+        &[&gateway_id, &"test-org-123", &"Test Gateway", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883", "subscription_group": "test"})],
+    )
+    .await?;
+
     let device = device_service
         .create_device(CreateDeviceRequest {
             user_id: "test-user-id".to_string(),
             organization_id: "test-org-123".to_string(),
             workspace_id,
             definition_id,
+            gateway_id,
             name: "Test Environmental Sensor".to_string(),
         })
         .await?;

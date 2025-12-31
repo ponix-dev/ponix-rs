@@ -20,6 +20,7 @@ pub fn to_proto_device(device: Device) -> EndDevice {
         organization_id: device.organization_id,
         workspace_id: device.workspace_id,
         definition_id: device.definition_id,
+        gateway_id: device.gateway_id,
         name: device.name,
         created_at: datetime_to_timestamp(device.created_at),
         updated_at: datetime_to_timestamp(device.updated_at),
@@ -52,6 +53,7 @@ mod tests {
             organization_id: "org-456".to_string(),
             workspace_id: "ws-abc".to_string(),
             definition_id: "def-789".to_string(),
+            gateway_id: "gw-xyz".to_string(),
             name: "Test Device".to_string(),
             created_at: Some(now),
             updated_at: Some(now),
@@ -63,6 +65,7 @@ mod tests {
         assert_eq!(proto.organization_id, "org-456");
         assert_eq!(proto.workspace_id, "ws-abc");
         assert_eq!(proto.definition_id, "def-789");
+        assert_eq!(proto.gateway_id, "gw-xyz");
         assert_eq!(proto.name, "Test Device");
         assert!(proto.created_at.is_some());
         assert!(proto.updated_at.is_some());

@@ -120,6 +120,7 @@ DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"organization_id\": \"$ORG_ID\",
         \"workspace_id\": \"$WORKSPACE_ID\",
         \"definition_id\": \"$DEFINITION_ID\",
+        \"gateway_id\": \"$GATEWAY_ID\",
         \"name\": \"Temperature Sensor\"
     }")
 
