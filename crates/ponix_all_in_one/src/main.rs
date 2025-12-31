@@ -94,6 +94,7 @@ async fn main() {
         postgres_repos.device.clone(),
         postgres_repos.organization.clone(),
         postgres_repos.definition.clone(),
+        postgres_repos.gateway.clone(),
         authorization_service.clone(),
     ));
     let definition_service = Arc::new(EndDeviceDefinitionService::new(

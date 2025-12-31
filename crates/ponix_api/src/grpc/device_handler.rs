@@ -2,13 +2,17 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
-use crate::domain::{CreateDeviceRequest, DeviceService, GetDeviceRequest, ListDevicesRequest};
+use crate::domain::{
+    CreateDeviceRequest, DeviceService, GetDeviceRequest, ListDevicesByGatewayRequest,
+    ListDevicesRequest,
+};
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
 use common::proto::to_proto_device;
 use ponix_proto_prost::end_device::v1::{
     CreateEndDeviceRequest, CreateEndDeviceResponse, EndDevice, GetEndDeviceRequest,
-    GetEndDeviceResponse, GetWorkspaceEndDevicesRequest, GetWorkspaceEndDevicesResponse,
+    GetEndDeviceResponse, GetGatewayEndDevicesRequest, GetGatewayEndDevicesResponse,
+    GetWorkspaceEndDevicesRequest, GetWorkspaceEndDevicesResponse,
 };
 use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceService as DeviceServiceTrait;
 
@@ -38,6 +42,7 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         skip(self, request),
         fields(
             organization_id = %request.get_ref().organization_id,
+            gateway_id = %request.get_ref().gateway_id,
             device_name = %request.get_ref().name,
         )
     )]
@@ -55,6 +60,7 @@ impl DeviceServiceTrait for DeviceServiceHandler {
             organization_id: req.organization_id,
             workspace_id: req.workspace_id,
             definition_id: req.definition_id,
+            gateway_id: req.gateway_id,
             name: req.name,
         };
 
@@ -151,6 +157,46 @@ impl DeviceServiceTrait for DeviceServiceHandler {
         let proto_devices: Vec<EndDevice> = devices.into_iter().map(to_proto_device).collect();
 
         Ok(Response::new(GetWorkspaceEndDevicesResponse {
+            end_devices: proto_devices,
+        }))
+    }
+
+    #[instrument(
+        name = "GetGatewayEndDevices",
+        skip(self, request),
+        fields(
+            organization_id = %request.get_ref().organization_id,
+            gateway_id = %request.get_ref().gateway_id
+        )
+    )]
+    async fn get_gateway_end_devices(
+        &self,
+        request: Request<GetGatewayEndDevicesRequest>,
+    ) -> Result<Response<GetGatewayEndDevicesResponse>, Status> {
+        // Extract user context from JWT
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let req = request.into_inner();
+
+        // Construct service request with embedded user_id
+        let service_request = ListDevicesByGatewayRequest {
+            user_id: user_context.user_id,
+            organization_id: req.organization_id,
+            gateway_id: req.gateway_id,
+        };
+
+        // Call domain service
+        let devices = self
+            .domain_service
+            .list_devices_by_gateway(service_request)
+            .await
+            .map_err(domain_error_to_status)?;
+
+        debug!(count = devices.len(), "Listed devices for gateway");
+
+        // Convert domain → proto
+        let proto_devices: Vec<EndDevice> = devices.into_iter().map(to_proto_device).collect();
+
+        Ok(Response::new(GetGatewayEndDevicesResponse {
             end_devices: proto_devices,
         }))
     }
