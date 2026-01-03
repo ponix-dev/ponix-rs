@@ -23,9 +23,6 @@ jobs:
           install: true
           cache: true
 
-      - name: Install tools
-        run: mise run install-tools
-
       - name: Configure BSR authentication
         run: cargo login --registry buf "Bearer ${{ secrets.BSR_TOKEN }}"
 

@@ -5,7 +5,7 @@ set -euo pipefail
 # Tests the complete flow: MQTT -> Gateway -> NATS -> Analytics Worker -> ClickHouse
 #
 # Prerequisites:
-#   - mqttx-cli (mise run install-tools)
+#   - mqttx-cli (mise install)
 #   - grpcurl and jq installed
 #   - ponix service running (tilt up or docker-compose)
 #
@@ -28,7 +28,7 @@ echo -e "  Gateway URL: ${GATEWAY_BROKER_URL}"
 echo ""
 
 # Check MQTT prerequisites
-require_command "mqttx-cli" "mise run install-tools"
+require_command "mqttx-cli" "mise install"
 
 # ============================================
 # SETUP - Create all required resources
