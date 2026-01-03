@@ -1,3 +1,9 @@
+## [1.14.0](https://github.com/ponix-dev/ponix-rs/compare/v1.13.0...v1.14.0) (2026-01-03)
+
+### Features
+
+* CDC support for all entities + CI tooling improvements ([#117](https://github.com/ponix-dev/ponix-rs/issues/117)) ([f40895b](https://github.com/ponix-dev/ponix-rs/commit/f40895b339e56b34b7506e78eea02ca51e048809))
+
 ## [1.13.0](https://github.com/ponix-dev/ponix-rs/compare/v1.12.1...v1.13.0) (2025-12-31)
 
 ### Features
