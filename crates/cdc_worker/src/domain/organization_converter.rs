@@ -46,8 +46,13 @@ impl OrganizationConverter {
             .and_then(|v| v.as_str())
             .and_then(|s| parse_timestamp(s).ok());
 
-        // Status: 0 = active, 1 = deleted
-        let status = if deleted_at.is_some() { 1 } else { 0 };
+        // Status enum: ACTIVE=2, INACTIVE=3 (for soft-deleted)
+        use ponix_proto_prost::organization::v1::OrganizationStatus;
+        let status = if deleted_at.is_some() {
+            OrganizationStatus::Inactive as i32
+        } else {
+            OrganizationStatus::Active as i32
+        };
 
         Ok(Organization {
             id,
@@ -91,6 +96,7 @@ fn parse_timestamp(s: &str) -> anyhow::Result<prost_types::Timestamp> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ponix_proto_prost::organization::v1::OrganizationStatus;
     use serde_json::json;
 
     #[tokio::test]
@@ -112,7 +118,7 @@ mod tests {
         let decoded = Organization::decode(bytes).unwrap();
         assert_eq!(decoded.id, "org-123");
         assert_eq!(decoded.name, "Test Organization");
-        assert_eq!(decoded.status, 0); // Active
+        assert_eq!(decoded.status, OrganizationStatus::Active as i32);
         assert!(decoded.deleted_at.is_none());
     }
 
@@ -155,7 +161,7 @@ mod tests {
         let bytes = result.unwrap();
         let decoded = Organization::decode(bytes).unwrap();
         assert_eq!(decoded.id, "org-123");
-        assert_eq!(decoded.status, 1); // Deleted
+        assert_eq!(decoded.status, OrganizationStatus::Inactive as i32);
         assert!(decoded.deleted_at.is_some());
     }
 
