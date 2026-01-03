@@ -278,6 +278,155 @@ print_summary() {
     echo -e "${BLUE}========================================${NC}"
 }
 
+# ============================================
+# CDC VALIDATION HELPERS
+# ============================================
+
+# NATS configuration
+NATS_URL="${NATS_URL:-nats://localhost:4222}"
+CDC_TIMEOUT="${CDC_TIMEOUT:-10}"
+
+# Check if nats CLI is available
+has_nats_cli() {
+    command -v nats &> /dev/null
+}
+
+# Start a background subscriber for CDC events
+# Usage: start_cdc_listener "entity_name" (e.g., "organizations", "devices")
+# Sets CDC_LISTENER_PID and CDC_OUTPUT_FILE
+start_cdc_listener() {
+    local entity="$1"
+    local subject="${entity}.>"
+
+    if ! has_nats_cli; then
+        print_warning "nats CLI not installed - skipping CDC validation"
+        return 1
+    fi
+
+    CDC_OUTPUT_FILE=$(mktemp)
+    nats sub "$subject" --server="$NATS_URL" --count=1 > "$CDC_OUTPUT_FILE" 2>&1 &
+    CDC_LISTENER_PID=$!
+
+    # Give subscriber time to connect
+    sleep 0.5
+
+    print_info "CDC listener started for '$subject' (PID: $CDC_LISTENER_PID)"
+    return 0
+}
+
+# Wait for CDC event and validate it was received
+# Usage: wait_for_cdc_event "entity_name" "event_type" [timeout_seconds]
+# event_type: "create", "update", or "delete"
+wait_for_cdc_event() {
+    local entity="$1"
+    local event_type="$2"
+    local timeout="${3:-$CDC_TIMEOUT}"
+
+    if [ -z "$CDC_LISTENER_PID" ]; then
+        print_warning "No CDC listener active - skipping validation"
+        return 0
+    fi
+
+    print_info "Waiting for CDC ${entity}.${event_type} event (${timeout}s timeout)..."
+
+    local elapsed=0
+    while [ $elapsed -lt $timeout ]; do
+        # Check if listener received a message and exited
+        if ! kill -0 "$CDC_LISTENER_PID" 2>/dev/null; then
+            # Process exited, check output
+            if [ -s "$CDC_OUTPUT_FILE" ]; then
+                if grep -q "${entity}.${event_type}\|Received on.*${entity}" "$CDC_OUTPUT_FILE"; then
+                    print_success "CDC event received: ${entity}.${event_type}"
+                    cleanup_cdc_listener
+                    return 0
+                fi
+            fi
+            # Exited but no matching message
+            break
+        fi
+        sleep 1
+        ((elapsed++))
+    done
+
+    print_error "CDC event not received: ${entity}.${event_type} (timeout: ${timeout}s)"
+    cleanup_cdc_listener
+    return 1
+}
+
+# Cleanup CDC listener
+cleanup_cdc_listener() {
+    if [ -n "$CDC_LISTENER_PID" ]; then
+        kill "$CDC_LISTENER_PID" 2>/dev/null || true
+        wait "$CDC_LISTENER_PID" 2>/dev/null || true
+        unset CDC_LISTENER_PID
+    fi
+    if [ -n "$CDC_OUTPUT_FILE" ] && [ -f "$CDC_OUTPUT_FILE" ]; then
+        rm -f "$CDC_OUTPUT_FILE"
+        unset CDC_OUTPUT_FILE
+    fi
+}
+
+# Combined helper: listen, perform action, verify CDC event
+# Usage: with_cdc_validation "entity" "event_type" "command_to_run"
+# Example: with_cdc_validation "organizations" "create" 'grpc_call "$AUTH_TOKEN" "..." "{...}"'
+with_cdc_validation() {
+    local entity="$1"
+    local event_type="$2"
+    local command="$3"
+
+    if ! has_nats_cli; then
+        # No nats CLI, just run the command
+        eval "$command"
+        return $?
+    fi
+
+    # Start listener
+    start_cdc_listener "$entity"
+
+    # Run the command
+    local result
+    result=$(eval "$command")
+    local cmd_exit=$?
+
+    # Output the result for caller to capture
+    echo "$result"
+
+    # Wait for CDC event
+    if [ $cmd_exit -eq 0 ]; then
+        wait_for_cdc_event "$entity" "$event_type"
+    else
+        cleanup_cdc_listener
+    fi
+
+    return $cmd_exit
+}
+
+# Validate CDC event was published for an entity creation
+# Call AFTER creating an entity - uses simpler polling approach
+# Usage: verify_cdc_create "entity_name" [timeout]
+verify_cdc_create() {
+    local entity="$1"
+    local timeout="${2:-$CDC_TIMEOUT}"
+    local subject="${entity}.create"
+
+    if ! has_nats_cli; then
+        print_warning "nats CLI not installed - skipping CDC validation"
+        return 0
+    fi
+
+    print_info "Verifying CDC event on '$subject'..."
+
+    # Use nats sub with timeout to wait for message
+    local output
+    if output=$(timeout "$timeout" nats sub "$subject" --server="$NATS_URL" --count=1 2>&1); then
+        print_success "CDC create event verified for $entity"
+        return 0
+    else
+        print_error "CDC create event not received for $entity (timeout: ${timeout}s)"
+        return 1
+    fi
+}
+
 # Track test counts (optional)
 TESTS_PASSED=0
 TESTS_FAILED=0

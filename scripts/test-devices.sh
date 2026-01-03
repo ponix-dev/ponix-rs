@@ -148,6 +148,7 @@ fi
 # CreateEndDevice
 print_step "Testing CreateEndDevice (happy path)..."
 
+start_cdc_listener "devices"
 DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "end_device.v1.EndDeviceService/CreateEndDevice" \
     "{
@@ -164,8 +165,10 @@ if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
 else
     print_error "Failed to create device"
     echo "$DEVICE_RESPONSE"
+    cleanup_cdc_listener
     exit 1
 fi
+wait_for_cdc_event "devices" "create"
 
 # GetEndDevice
 print_step "Testing GetEndDevice (happy path)..."

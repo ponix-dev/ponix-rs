@@ -18,6 +18,7 @@ TEST_NAME="Auth Test User"
 # Step 1: Register user
 print_step "Testing RegisterUser (happy path)..."
 
+start_cdc_listener "users"
 REGISTER_RESPONSE=$(grpcurl -plaintext \
     -d "{\"email\": \"$TEST_EMAIL\", \"password\": \"$TEST_PASSWORD\", \"name\": \"$TEST_NAME\"}" \
     "$GRPC_HOST" user.v1.UserService/RegisterUser)
@@ -28,8 +29,10 @@ if [ -n "$USER_ID" ] && [ "$USER_ID" != "null" ]; then
 else
     print_error "Failed to register user"
     echo "$REGISTER_RESPONSE"
+    cleanup_cdc_listener
     exit 1
 fi
+wait_for_cdc_event "users" "create"
 
 # Step 2: Login
 print_step "Testing Login (happy path)..."
