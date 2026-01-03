@@ -37,6 +37,7 @@ print_success "Organization created: $ORG_ID"
 # CreateGateway
 print_step "Testing CreateGateway (happy path)..."
 
+start_cdc_listener "gateways"
 GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "gateway.v1.GatewayService/CreateGateway" \
     "{
@@ -55,8 +56,10 @@ if [ -n "$GATEWAY_ID" ] && [ "$GATEWAY_ID" != "null" ]; then
 else
     print_error "Failed to create gateway"
     echo "$GATEWAY_RESPONSE"
+    cleanup_cdc_listener
     exit 1
 fi
+wait_for_cdc_event "gateways" "create"
 
 # GetGateway
 print_step "Testing GetGateway (happy path)..."

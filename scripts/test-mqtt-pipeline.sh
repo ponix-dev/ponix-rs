@@ -5,7 +5,7 @@ set -euo pipefail
 # Tests the complete flow: MQTT -> Gateway -> NATS -> Analytics Worker -> ClickHouse
 #
 # Prerequisites:
-#   - mosquitto_pub (mise run install-tools)
+#   - mqttx-cli (mise install)
 #   - grpcurl and jq installed
 #   - ponix service running (tilt up or docker-compose)
 #
@@ -28,7 +28,7 @@ echo -e "  Gateway URL: ${GATEWAY_BROKER_URL}"
 echo ""
 
 # Check MQTT prerequisites
-require_command "mosquitto_pub" "mise run install-tools"
+require_command "mqttx-cli" "mise install"
 
 # ============================================
 # SETUP - Create all required resources
@@ -156,11 +156,12 @@ CAYENNE_PAYLOAD_HEX="016700FF026864"
 echo -e "  Payload (hex): ${CAYENNE_PAYLOAD_HEX}"
 echo -e "  Decoded: Temperature 25.5C, Humidity 50%"
 
-echo -n "${CAYENNE_PAYLOAD_HEX}" | xxd -r -p | mosquitto_pub \
+mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
     -t "${ORG_ID}/${DEVICE_ID}" \
-    -s
+    -m "${CAYENNE_PAYLOAD_HEX}" \
+    --format hex
 
 print_success "Message 1 published"
 
@@ -168,21 +169,23 @@ print_success "Message 1 published"
 print_step "Publishing additional test messages..."
 
 # Temperature: 30.0C = 300 = 0x012C, Humidity: 70% = 140 = 0x8C
-echo -n "0167012C02688C" | xxd -r -p | mosquitto_pub \
+mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
     -t "${ORG_ID}/${DEVICE_ID}" \
-    -s
+    -m "0167012C02688C" \
+    --format hex
 print_info "Published: Temperature 30.0C, Humidity 70%"
 
 sleep 1
 
 # Temperature: 18.5C = 185 = 0x00B9, Humidity: 45% = 90 = 0x5A
-echo -n "016700B902685A" | xxd -r -p | mosquitto_pub \
+mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
     -t "${ORG_ID}/${DEVICE_ID}" \
-    -s
+    -m "016700B902685A" \
+    --format hex
 print_info "Published: Temperature 18.5C, Humidity 45%"
 
 print_success "All messages published"

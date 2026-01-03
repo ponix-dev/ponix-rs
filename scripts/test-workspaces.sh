@@ -37,6 +37,7 @@ print_success "Organization created: $ORG_ID"
 # CreateWorkspace
 print_step "Testing CreateWorkspace (happy path)..."
 
+start_cdc_listener "workspaces"
 WORKSPACE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "workspace.v1.WorkspaceService/CreateWorkspace" \
     "{\"organization_id\": \"$ORG_ID\", \"name\": \"Test Workspace\"}")
@@ -47,8 +48,10 @@ if [ -n "$WORKSPACE_ID" ] && [ "$WORKSPACE_ID" != "null" ]; then
 else
     print_error "Failed to create workspace"
     echo "$WORKSPACE_RESPONSE"
+    cleanup_cdc_listener
     exit 1
 fi
+wait_for_cdc_event "workspaces" "create"
 
 # GetWorkspace
 print_step "Testing GetWorkspace (happy path)..."

@@ -42,18 +42,18 @@ impl GatewayConverter {
 
         let r#type = string_to_gateway_type(gateway_type_str) as i32;
 
+        // Extract name from top-level column
+        let name = data
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
         // Extract gateway_config JSON
         let gateway_config = data
             .get("gateway_config")
             .cloned()
             .unwrap_or_else(|| Value::Object(Default::default()));
-
-        // Extract name from config
-        let name = gateway_config
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
 
         // Extract broker_url and subscription_group from config and create Config oneof
         let config = gateway_config
@@ -155,9 +155,11 @@ mod tests {
         let data = json!({
             "gateway_id": "test-gateway-1",
             "organization_id": "org-1",
+            "name": "Test Gateway",
             "gateway_type": "EMQX",
             "gateway_config": {
-                "name": "Test Gateway"
+                "broker_url": "mqtt://localhost:1883",
+                "subscription_group": "ponix"
             },
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z"
@@ -183,18 +185,16 @@ mod tests {
         let old = json!({
             "gateway_id": "test-gateway-1",
             "organization_id": "org-1",
+            "name": "Old Name",
             "gateway_type": "EMQX",
-            "gateway_config": {
-                "name": "Old Name"
-            }
+            "gateway_config": {}
         });
         let new = json!({
             "gateway_id": "test-gateway-1",
             "organization_id": "org-1",
+            "name": "Updated Gateway",
             "gateway_type": "EMQX",
-            "gateway_config": {
-                "name": "Updated Gateway"
-            },
+            "gateway_config": {},
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-02T00:00:00Z"
         });
@@ -213,10 +213,9 @@ mod tests {
         let data = json!({
             "gateway_id": "test-gateway-1",
             "organization_id": "org-1",
+            "name": "Deleted Gateway",
             "gateway_type": "EMQX",
-            "gateway_config": {
-                "name": "Deleted Gateway"
-            },
+            "gateway_config": {},
             "deleted_at": "2024-01-03T00:00:00Z"
         });
 

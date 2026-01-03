@@ -73,7 +73,7 @@ impl CdcProcess {
             },
             table_error_retry_delay_ms: self.config.retry_delay_ms,
             table_error_retry_max_attempts: self.config.max_retry_attempts,
-            max_table_sync_workers: 4,
+            max_table_sync_workers: 10,
         };
 
         // Create pipeline

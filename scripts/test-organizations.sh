@@ -25,6 +25,9 @@ print_success "Authenticated as $TEST_EMAIL"
 # CreateOrganization
 print_step "Testing CreateOrganization (happy path)..."
 
+# Start CDC listener before creating organization
+start_cdc_listener "organizations"
+
 ORG_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "organization.v1.OrganizationService/CreateOrganization" \
     '{"name": "Test Organization"}')
@@ -35,8 +38,12 @@ if [ -n "$ORG_ID" ] && [ "$ORG_ID" != "null" ]; then
 else
     print_error "Failed to create organization"
     echo "$ORG_RESPONSE"
+    cleanup_cdc_listener
     exit 1
 fi
+
+# Verify CDC event was received
+wait_for_cdc_event "organizations" "create"
 
 # GetOrganization
 print_step "Testing GetOrganization (happy path)..."

@@ -19,7 +19,7 @@ This directory contains test scripts for the Ponix gRPC API, organized by domain
 
 ## Prerequisites
 
-- `mise run install-tools`
+- `mise install`
 - `tilt up`
 
 ## Test Scripts
