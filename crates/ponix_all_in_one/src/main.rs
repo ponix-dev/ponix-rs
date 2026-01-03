@@ -2,7 +2,10 @@ mod config;
 
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
-use cdc_worker::domain::{CdcConfig, EntityConfig, GatewayConverter, WorkspaceConverter};
+use cdc_worker::domain::{
+    CdcConfig, DeviceConverter, EndDeviceDefinitionConverter, EntityConfig, GatewayConverter,
+    OrganizationConverter, UserConverter, WorkspaceConverter,
+};
 use common::auth::{
     Argon2PasswordService, CasbinAuthorizationService, CryptoRefreshTokenProvider,
     JwtAuthTokenProvider, JwtConfig,
@@ -207,11 +210,38 @@ async fn main() {
         table_name: config.cdc_workspace_table_name.clone(),
         converter: Box::new(WorkspaceConverter::new()),
     };
+    let device_entity_config = EntityConfig {
+        entity_name: config.cdc_device_entity_name.clone(),
+        table_name: config.cdc_device_table_name.clone(),
+        converter: Box::new(DeviceConverter::new()),
+    };
+    let organization_entity_config = EntityConfig {
+        entity_name: config.cdc_organization_entity_name.clone(),
+        table_name: config.cdc_organization_table_name.clone(),
+        converter: Box::new(OrganizationConverter::new()),
+    };
+    let user_entity_config = EntityConfig {
+        entity_name: config.cdc_user_entity_name.clone(),
+        table_name: config.cdc_user_table_name.clone(),
+        converter: Box::new(UserConverter::new()),
+    };
+    let end_device_definition_entity_config = EntityConfig {
+        entity_name: config.cdc_end_device_definition_entity_name.clone(),
+        table_name: config.cdc_end_device_definition_table_name.clone(),
+        converter: Box::new(EndDeviceDefinitionConverter::new()),
+    };
     let cdc_worker = CdcWorker::new(
         nats_client.clone(),
         CdcWorkerConfig {
             cdc_config: build_cdc_config(&config),
-            entity_configs: vec![gateway_entity_config, workspace_entity_config],
+            entity_configs: vec![
+                gateway_entity_config,
+                workspace_entity_config,
+                device_entity_config,
+                organization_entity_config,
+                user_entity_config,
+                end_device_definition_entity_config,
+            ],
         },
     );
 
@@ -411,6 +441,14 @@ async fn ensure_nats_streams(client: &NatsClient, config: &ServiceConfig) -> any
     client.ensure_stream(&config.nats_raw_stream).await?;
     client.ensure_stream(&config.nats_gateway_stream).await?;
     client.ensure_stream(&config.nats_workspace_stream).await?;
+    client.ensure_stream(&config.nats_device_stream).await?;
+    client
+        .ensure_stream(&config.nats_organization_stream)
+        .await?;
+    client.ensure_stream(&config.nats_user_stream).await?;
+    client
+        .ensure_stream(&config.nats_end_device_definition_stream)
+        .await?;
     Ok(())
 }
 
