@@ -36,7 +36,6 @@ impl GatewayProcessHandle {
         match config {
             GatewayConfig::Emqx(emqx) => {
                 emqx.broker_url.hash(&mut hasher);
-                emqx.subscription_group.hash(&mut hasher);
             }
         }
         format!("{:x}", hasher.finish())

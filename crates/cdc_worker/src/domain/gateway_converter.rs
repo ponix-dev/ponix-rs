@@ -55,20 +55,13 @@ impl GatewayConverter {
             .cloned()
             .unwrap_or_else(|| Value::Object(Default::default()));
 
-        // Extract broker_url and subscription_group from config and create Config oneof
+        // Extract broker_url from config and create Config oneof
         let config = gateway_config
             .get("broker_url")
             .and_then(|v| v.as_str())
             .map(|broker_url| {
-                let subscription_group = gateway_config
-                    .get("subscription_group")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-
                 Config::EmqxConfig(EmqxGatewayConfig {
                     broker_url: broker_url.to_string(),
-                    subscription_group,
                 })
             });
 
@@ -158,8 +151,7 @@ mod tests {
             "name": "Test Gateway",
             "gateway_type": "EMQX",
             "gateway_config": {
-                "broker_url": "mqtt://localhost:1883",
-                "subscription_group": "ponix"
+                "broker_url": "mqtt://localhost:1883"
             },
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z"

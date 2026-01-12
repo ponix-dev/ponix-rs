@@ -32,13 +32,11 @@ pub fn proto_to_domain_gateway(proto: &ProtoGateway) -> Result<Gateway> {
     let gateway_config = match &proto.config {
         Some(Config::EmqxConfig(emqx)) => GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: emqx.broker_url.clone(),
-            subscription_group: emqx.subscription_group.clone(),
         }),
         None => {
             // Default to empty EMQX config if not provided
             GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: String::new(),
-                subscription_group: String::new(),
             })
         }
     };
@@ -85,13 +83,11 @@ pub fn proto_create_config_to_domain(config: Option<CreateConfig>) -> GatewayCon
     match config {
         Some(CreateConfig::EmqxConfig(emqx)) => GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: emqx.broker_url,
-            subscription_group: emqx.subscription_group,
         }),
         None => {
             // Default to empty EMQX config if not provided
             GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: String::new(),
-                subscription_group: String::new(),
             })
         }
     }
@@ -102,7 +98,6 @@ pub fn proto_update_config_to_domain(config: Option<UpdateConfig>) -> Option<Gat
     match config {
         Some(UpdateConfig::EmqxConfig(emqx)) => Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: emqx.broker_url,
-            subscription_group: emqx.subscription_group,
         })),
         None => None,
     }
@@ -114,7 +109,6 @@ pub fn to_proto_gateway(gateway: Gateway) -> ProtoGateway {
     let config = match &gateway.gateway_config {
         GatewayConfig::Emqx(emqx) => Some(ProtoGatewayConfig::EmqxConfig(ProtoEmqxConfig {
             broker_url: emqx.broker_url.clone(),
-            subscription_group: emqx.subscription_group.clone(),
         })),
     };
 

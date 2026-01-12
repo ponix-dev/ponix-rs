@@ -145,7 +145,6 @@ mod tests {
 
         let config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://localhost:1883".to_string(),
-            subscription_group: "ponix".to_string(),
         });
 
         let runner = factory.create_runner(&config);
@@ -161,7 +160,6 @@ mod tests {
 
         let config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://localhost:1883".to_string(),
-            subscription_group: "ponix".to_string(),
         });
 
         let runner = factory.create_runner(&config);
@@ -175,7 +173,6 @@ mod tests {
 
         let config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://localhost:1883".to_string(),
-            subscription_group: "ponix".to_string(),
         });
 
         assert!(factory.is_supported(&config));
@@ -187,7 +184,6 @@ mod tests {
 
         let config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://localhost:1883".to_string(),
-            subscription_group: "ponix".to_string(),
         });
 
         assert!(!factory.is_supported(&config));
@@ -198,7 +194,6 @@ mod tests {
         let factory = GatewayRunnerFactory::new();
         let config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://localhost:1883".to_string(),
-            subscription_group: "ponix".to_string(),
         });
 
         assert_eq!(factory.gateway_type_name(&config), "EMQX");

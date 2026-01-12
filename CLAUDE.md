@@ -239,6 +239,28 @@ GatewayOrchestrator (CDC consumer)
 GatewayOrchestrationService
 ```
 
+#### CEL Payload Conversion
+The `CelEnvironment` executes CEL expressions to transform binary payloads into JSON. The binary payload is exposed as a variable named `input` (defined in `analytics_worker/src/domain/cel.rs:148`):
+
+```rust
+context.add_variable_from_value("input", input_value);
+```
+
+Available functions:
+- `cayenne_lpp_decode(input)` - Decode Cayenne Low Power Payload format
+
+Example expressions:
+```cel
+// Decode entire payload
+cayenne_lpp_decode(input)
+
+// Extract and transform specific fields
+{
+  'temp_celsius': cayenne_lpp_decode(input).temperature_1,
+  'temp_fahrenheit': cayenne_lpp_decode(input).temperature_1 * 9.0 / 5.0 + 32.0
+}
+```
+
 #### Observability Architecture
 The system uses OpenTelemetry for distributed tracing and log correlation:
 

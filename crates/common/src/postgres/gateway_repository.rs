@@ -49,16 +49,7 @@ fn json_to_gateway_config(json: &serde_json::Value) -> GatewayConfig {
         .unwrap_or_default()
         .to_string();
 
-    let subscription_group = json
-        .get("subscription_group")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-
-    GatewayConfig::Emqx(EmqxGatewayConfig {
-        broker_url,
-        subscription_group,
-    })
+    GatewayConfig::Emqx(EmqxGatewayConfig { broker_url })
 }
 
 /// Convert domain GatewayConfig to serde_json::Value
@@ -66,8 +57,7 @@ pub fn gateway_config_to_json(config: &GatewayConfig) -> serde_json::Value {
     match config {
         GatewayConfig::Emqx(emqx) => {
             serde_json::json!({
-                "broker_url": emqx.broker_url,
-                "subscription_group": emqx.subscription_group
+                "broker_url": emqx.broker_url
             })
         }
     }

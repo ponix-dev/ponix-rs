@@ -119,7 +119,7 @@ async fn create_test_gateway(client: &PostgresClient, org_id: &str) -> String {
     let conn = client.get_connection().await.unwrap();
     conn.execute(
         "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
-        &[&gateway_id, &org_id, &"Test Gateway", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883", "subscription_group": "test"})],
+        &[&gateway_id, &org_id, &"Test Gateway", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883"})],
     )
     .await
     .unwrap();
@@ -350,7 +350,7 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     let gateway_id = format!("gw-org1-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
     conn.execute(
         "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
-        &[&gateway_id, &"org-1", &"Gateway for Org 1", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883", "subscription_group": "test"})],
+        &[&gateway_id, &"org-1", &"Gateway for Org 1", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883"})],
     )
     .await
     .unwrap();

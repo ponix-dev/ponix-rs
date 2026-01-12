@@ -355,7 +355,7 @@ async fn create_test_device(
     );
     conn.execute(
         "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
-        &[&gateway_id, &"test-org-123", &"Test Gateway", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883", "subscription_group": "test"})],
+        &[&gateway_id, &"test-org-123", &"Test Gateway", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883"})],
     )
     .await?;
 
