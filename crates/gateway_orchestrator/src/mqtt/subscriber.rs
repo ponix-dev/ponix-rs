@@ -29,15 +29,14 @@ pub async fn run_mqtt_subscriber(
     shutdown_token: CancellationToken,
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
 ) {
-    let (broker_url, subscription_group) = match &gateway.gateway_config {
-        GatewayConfig::Emqx(emqx) => (&emqx.broker_url, &emqx.subscription_group),
+    let broker_url = match &gateway.gateway_config {
+        GatewayConfig::Emqx(emqx) => &emqx.broker_url,
     };
 
     info!(
         gateway_id = %gateway.gateway_id,
         organization_id = %gateway.organization_id,
         broker_url = %broker_url,
-        subscription_group = %subscription_group,
         "starting MQTT 5 subscriber with shared subscription"
     );
 
@@ -53,7 +52,6 @@ pub async fn run_mqtt_subscriber(
         match run_mqtt_connection(
             &gateway,
             broker_url,
-            subscription_group,
             &process_token,
             &shutdown_token,
             Arc::clone(&raw_envelope_producer),
@@ -109,13 +107,11 @@ pub async fn run_mqtt_subscriber(
     fields(
         gateway_id = %gateway.gateway_id,
         broker_url = %broker_url,
-        subscription_group = %subscription_group,
     )
 )]
 async fn run_mqtt_connection(
     gateway: &Gateway,
     broker_url: &str,
-    subscription_group: &str,
     process_token: &CancellationToken,
     shutdown_token: &CancellationToken,
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
@@ -131,10 +127,10 @@ async fn run_mqtt_connection(
 
     let (client, mut eventloop) = AsyncClient::new(mqtt_options, 100);
 
-    // Build shared subscription topic: $share/{group}/{org_id}/+
-    // This enables load balancing across multiple gateway instances
+    // Build shared subscription topic: $share/{gateway_id}/{org_id}/+
+    // This enables load balancing across multiple instances of the same gateway
     let base_topic = format!("{}/+", gateway.organization_id);
-    let subscribe_topic = format!("$share/{}/{}", subscription_group, base_topic);
+    let subscribe_topic = format!("$share/{}/{}", gateway.gateway_id, base_topic);
 
     client
         .subscribe(&subscribe_topic, QoS::AtLeastOnce)
@@ -144,7 +140,6 @@ async fn run_mqtt_connection(
     info!(
         gateway_id = %gateway.gateway_id,
         topic = %subscribe_topic,
-        subscription_group = %subscription_group,
         "subscribed to MQTT 5 shared subscription topic"
     );
 
@@ -313,7 +308,6 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://localhost:1883".to_string(),
-                subscription_group: "ponix".to_string(),
             }),
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),

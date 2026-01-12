@@ -50,8 +50,7 @@ GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"name\": \"Device Test Gateway\",
         \"type\": \"GATEWAY_TYPE_EMQX\",
         \"emqx_config\": {
-            \"broker_url\": \"mqtt://localhost:1883\",
-            \"subscription_group\": \"ponix\"
+            \"broker_url\": \"mqtt://localhost:1883\"
         }
     }")
 

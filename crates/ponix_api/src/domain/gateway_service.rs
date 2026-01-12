@@ -300,7 +300,6 @@ mod tests {
 
         let test_config = GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
-            subscription_group: "ponix".to_string(),
         });
 
         mock_org_repo
@@ -384,7 +383,6 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://localhost:1883".to_string(),
-                subscription_group: "ponix".to_string(),
             }),
         };
 
@@ -423,7 +421,6 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "mqtt://localhost:1883".to_string(),
-                subscription_group: "ponix".to_string(),
             }),
         };
 
@@ -449,7 +446,6 @@ mod tests {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: "".to_string(),
-                subscription_group: "ponix".to_string(),
             }),
         };
 
@@ -457,35 +453,6 @@ mod tests {
         assert!(matches!(result, Err(DomainError::ValidationError(_))));
         if let Err(DomainError::ValidationError(msg)) = result {
             assert!(msg.contains("broker_url"));
-        }
-    }
-
-    #[tokio::test]
-    async fn test_create_gateway_empty_subscription_group() {
-        let mock_gateway_repo = MockGatewayRepository::new();
-        let mock_org_repo = MockOrganizationRepository::new();
-
-        let service = GatewayService::new(
-            Arc::new(mock_gateway_repo),
-            Arc::new(mock_org_repo),
-            create_mock_auth_provider(),
-        );
-
-        let request = CreateGatewayRequest {
-            user_id: TEST_USER_ID.to_string(),
-            organization_id: "org-001".to_string(),
-            name: "Test Gateway".to_string(),
-            gateway_type: "emqx".to_string(),
-            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-                broker_url: "mqtt://localhost:1883".to_string(),
-                subscription_group: "".to_string(),
-            }),
-        };
-
-        let result = service.create_gateway(request).await;
-        assert!(matches!(result, Err(DomainError::ValidationError(_))));
-        if let Err(DomainError::ValidationError(msg)) = result {
-            assert!(msg.contains("subscription_group"));
         }
     }
 

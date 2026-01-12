@@ -98,7 +98,6 @@ async fn test_gateway_crud_operations() {
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
-            subscription_group: "test-group".to_string(),
         }),
     };
 
@@ -132,7 +131,6 @@ async fn test_gateway_crud_operations() {
         gateway_type: None,
         gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt2.example.com:8883".to_string(),
-            subscription_group: "test-group".to_string(),
         })),
     };
     let updated = gateway_repo.update_gateway(update_input).await.unwrap();
@@ -186,7 +184,6 @@ async fn test_gateway_unique_constraint() {
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: String::new(),
-            subscription_group: "test-group".to_string(),
         }),
     };
 
@@ -226,7 +223,6 @@ async fn test_list_excludes_soft_deleted() {
             gateway_type: "emqx".to_string(),
             gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
                 broker_url: format!("mqtt://mqtt{}.example.com:1883", i),
-                subscription_group: "test-group".to_string(),
             }),
         };
         gateway_repo.create_gateway(create_input).await.unwrap();
@@ -276,7 +272,6 @@ async fn test_get_gateway_with_wrong_organization_returns_none() {
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
-            subscription_group: "test-group".to_string(),
         }),
     };
     gateway_repo.create_gateway(create_input).await.unwrap();
@@ -329,7 +324,6 @@ async fn test_update_gateway_with_wrong_organization_returns_not_found() {
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
-            subscription_group: "test-group".to_string(),
         }),
     };
     gateway_repo.create_gateway(create_input).await.unwrap();
@@ -378,7 +372,6 @@ async fn test_delete_gateway_with_wrong_organization_returns_not_found() {
         gateway_type: "emqx".to_string(),
         gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
             broker_url: "mqtt://mqtt.example.com:1883".to_string(),
-            subscription_group: "test-group".to_string(),
         }),
     };
     gateway_repo.create_gateway(create_input).await.unwrap();
