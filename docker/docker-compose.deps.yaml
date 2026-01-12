@@ -75,8 +75,12 @@ services:
       - "4318:4318" # OTLP HTTP
     volumes:
       - otel-data:/data
+      - ./grafana/provisioning/datasources/clickhouse.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/clickhouse.yaml
+      - ./grafana/provisioning/dashboards/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/dashboards.yaml
+      - ./grafana/provisioning/dashboards/sensor-dashboard.json:/otel-lgtm/grafana/conf/provisioning/dashboards/sensor-dashboard.json
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
     networks:
       - ponix
     restart: unless-stopped
