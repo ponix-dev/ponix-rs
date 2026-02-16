@@ -45,8 +45,7 @@ GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"name\": \"EMQX Gateway 01\",
         \"type\": \"GATEWAY_TYPE_EMQX\",
         \"emqx_config\": {
-            \"broker_url\": \"mqtt://ponix-emqx:1883\",
-            \"subscription_group\": \"ponix-test-group\"
+            \"broker_url\": \"mqtt://ponix-emqx:1883\"
         }
     }")
 
@@ -123,8 +122,7 @@ GATEWAY2_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"name\": \"Gateway to Delete\",
         \"type\": \"GATEWAY_TYPE_EMQX\",
         \"emqx_config\": {
-            \"broker_url\": \"mqtt://localhost:1883\",
-            \"subscription_group\": \"delete-test\"
+            \"broker_url\": \"mqtt://localhost:1883\"
         }
     }")
 

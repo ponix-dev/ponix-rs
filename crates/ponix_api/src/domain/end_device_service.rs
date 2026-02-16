@@ -332,7 +332,6 @@ mod tests {
                     gateway_type: "emqx".to_string(),
                     gateway_config: GatewayConfig::Emqx(common::domain::EmqxGatewayConfig {
                         broker_url: "mqtt://localhost:1883".to_string(),
-                        subscription_group: "test".to_string(),
                     }),
                     deleted_at: None,
                     created_at: None,
