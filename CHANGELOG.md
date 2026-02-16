@@ -1,3 +1,9 @@
+## [1.14.1](https://github.com/ponix-dev/ponix-rs/compare/v1.14.0...v1.14.1) (2026-02-16)
+
+### Code Refactoring
+
+* remove custom MQTT subscription group + add ClickHouse to docker ([#118](https://github.com/ponix-dev/ponix-rs/issues/118)) ([f593b79](https://github.com/ponix-dev/ponix-rs/commit/f593b79a0305c2367935458458a1448085ff8b02))
+
 ## [1.14.0](https://github.com/ponix-dev/ponix-rs/compare/v1.13.0...v1.14.0) (2026-01-03)
 
 ### Features
