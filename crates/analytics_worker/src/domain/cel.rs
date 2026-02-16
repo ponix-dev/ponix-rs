@@ -73,10 +73,9 @@
 
 use crate::domain::cayenne_lpp::CayenneLppDecoder;
 use crate::domain::{PayloadDecoder, PayloadError, Result};
-use cel_interpreter::objects::{Key, Map};
-use cel_interpreter::{Context, ExecutionError, Program, Value as CelValue};
+use cel_core::types::{CelType, FunctionDecl, OverloadDecl};
+use cel_core::{Env, EvalError, EvalErrorKind, MapActivation, MapKey, Value as CelValue, ValueMap};
 use serde_json::Value as JsonValue;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, instrument};
 
@@ -86,16 +85,54 @@ use tracing::{debug, instrument};
 /// against binary payloads. Custom decoder functions are automatically registered
 /// when the environment is created.
 pub struct CelEnvironment {
-    // Store as owned Context since we can't store references without lifetimes
-    _marker: std::marker::PhantomData<()>,
+    env: Env,
 }
 
 impl CelEnvironment {
     /// Create a new CEL environment with cayenne_lpp_decode function registered
     pub fn new() -> Self {
-        Self {
-            _marker: std::marker::PhantomData,
-        }
+        let cayenne_lpp_decode = FunctionDecl::new("cayenne_lpp_decode").with_overload(
+            OverloadDecl::function(
+                "cayenne_lpp_decode_bytes",
+                vec![CelType::Bytes],
+                CelType::Dyn,
+            )
+            .with_impl(|args: &[CelValue]| {
+                let bytes: Arc<[u8]> = match &args[0] {
+                    CelValue::Bytes(b) => Arc::clone(b),
+                    other => {
+                        return CelValue::error(EvalError::new(
+                            EvalErrorKind::InvalidArgument,
+                            format!(
+                                "cayenne_lpp_decode expects bytes, got {:?}",
+                                other.cel_type()
+                            ),
+                        ));
+                    }
+                };
+
+                let decoder = CayenneLppDecoder::new();
+                match decoder.decode(&bytes) {
+                    Ok(json_value) => match json_to_cel_value(json_value) {
+                        Ok(cel_val) => cel_val,
+                        Err(e) => CelValue::error(EvalError::new(
+                            EvalErrorKind::InvalidArgument,
+                            format!("cayenne_lpp_decode conversion error: {}", e),
+                        )),
+                    },
+                    Err(e) => CelValue::error(EvalError::new(
+                        EvalErrorKind::InvalidArgument,
+                        format!("cayenne_lpp_decode error: {}", e),
+                    )),
+                }
+            }),
+        );
+
+        let env = Env::with_standard_library()
+            .with_variable("input", CelType::Bytes)
+            .with_function(cayenne_lpp_decode);
+
+        Self { env }
     }
 
     /// Execute a CEL expression string with binary input data
@@ -116,41 +153,29 @@ impl CelEnvironment {
         )
     )]
     pub fn execute(&self, expression: &str, input: &[u8]) -> Result<JsonValue> {
-        // Compile the CEL expression
-        let program = Program::compile(expression)
+        // Parse the CEL expression
+        let ast = self
+            .env
+            .parse_only(expression)
             .map_err(|e| PayloadError::CelCompilationError(e.to_string()))?;
 
-        // Create a fresh context for execution with custom functions
-        let mut context = Context::default();
+        // Create a compiled program
+        let program = self
+            .env
+            .program(&ast)
+            .map_err(|e| PayloadError::CelCompilationError(e.to_string()))?;
 
-        // Register cayenne_lpp_decode function
-        context.add_function(
-            "cayenne_lpp_decode",
-            |bytes: Arc<Vec<u8>>| -> std::result::Result<CelValue, ExecutionError> {
-                let decoder = CayenneLppDecoder::new();
-                decoder
-                    .decode(&bytes)
-                    .map_err(|e| ExecutionError::FunctionError {
-                        function: "cayenne_lpp_decode".to_string(),
-                        message: e.to_string(),
-                    })
-                    .and_then(|json_value| {
-                        json_to_cel_value(json_value).map_err(|e| ExecutionError::FunctionError {
-                            function: "cayenne_lpp_decode".to_string(),
-                            message: e.to_string(),
-                        })
-                    })
-            },
-        );
+        // Create activation with input variable
+        let mut activation = MapActivation::new();
+        activation.insert("input", CelValue::from(input.to_vec()));
 
-        // Add input variable as bytes
-        let input_value = CelValue::Bytes(Arc::new(input.to_vec()));
-        context.add_variable_from_value("input", input_value);
+        // Execute the program
+        let result = program.eval(&activation);
 
-        // Execute the program with the context
-        let result = program
-            .execute(&context)
-            .map_err(|e| PayloadError::CelExecutionError(e.to_string()))?;
+        // Check for evaluation errors (cel-core returns errors as values)
+        if result.is_error() {
+            return Err(PayloadError::CelExecutionError(format!("{}", result)));
+        }
 
         // Convert CEL value to JSON and validate
         let json_result = cel_value_to_json(result)?;
@@ -171,13 +196,13 @@ fn cel_value_to_json(value: CelValue) -> Result<JsonValue> {
         CelValue::String(s) => {
             // If it's a string, try parsing as JSON first
             // Otherwise return as JSON string
-            serde_json::from_str(s.as_ref()).or_else(|_| Ok(JsonValue::String(s.to_string())))
+            serde_json::from_str(&s).or_else(|_| Ok(JsonValue::String(s.to_string())))
         }
         CelValue::Int(i) => Ok(JsonValue::Number(i.into())),
         CelValue::UInt(u) => serde_json::Number::from_f64(u as f64)
             .map(JsonValue::Number)
             .ok_or(PayloadError::InvalidJsonOutput),
-        CelValue::Float(f) => serde_json::Number::from_f64(f)
+        CelValue::Double(f) => serde_json::Number::from_f64(f)
             .map(JsonValue::Number)
             .ok_or(PayloadError::InvalidJsonOutput),
         CelValue::Bool(b) => Ok(JsonValue::Bool(b)),
@@ -195,12 +220,12 @@ fn cel_value_to_json(value: CelValue) -> Result<JsonValue> {
         }
         CelValue::Map(map) => {
             let mut json_map = serde_json::Map::new();
-            for (key, value) in map.map.iter() {
+            for (key, value) in map.iter() {
                 let key_str = match key {
-                    Key::String(s) => s.to_string(),
-                    Key::Int(i) => i.to_string(),
-                    Key::Uint(u) => u.to_string(),
-                    Key::Bool(b) => b.to_string(),
+                    MapKey::String(s) => s.to_string(),
+                    MapKey::Int(i) => i.to_string(),
+                    MapKey::UInt(u) => u.to_string(),
+                    MapKey::Bool(b) => b.to_string(),
                 };
                 let json_value = cel_value_to_json(value.clone())?;
                 json_map.insert(key_str, json_value);
@@ -208,6 +233,7 @@ fn cel_value_to_json(value: CelValue) -> Result<JsonValue> {
             Ok(JsonValue::Object(json_map))
         }
         CelValue::Null => Ok(JsonValue::Null),
+        CelValue::Error(err) => Err(PayloadError::CelExecutionError(err.to_string())),
         _ => Err(PayloadError::InvalidJsonOutput),
     }
 }
@@ -223,24 +249,22 @@ fn json_to_cel_value(json: JsonValue) -> Result<CelValue> {
             } else if let Some(u) = n.as_u64() {
                 Ok(CelValue::UInt(u))
             } else if let Some(f) = n.as_f64() {
-                Ok(CelValue::Float(f))
+                Ok(CelValue::Double(f))
             } else {
                 Err(PayloadError::InvalidJsonOutput)
             }
         }
-        JsonValue::String(s) => Ok(CelValue::String(Arc::new(s))),
+        JsonValue::String(s) => Ok(CelValue::String(Arc::from(s.as_str()))),
         JsonValue::Array(arr) => {
             let cel_list: Result<Vec<CelValue>> = arr.into_iter().map(json_to_cel_value).collect();
-            Ok(CelValue::List(Arc::new(cel_list?)))
+            Ok(CelValue::List(Arc::from(cel_list?)))
         }
         JsonValue::Object(obj) => {
-            let mut cel_map: HashMap<Key, CelValue> = HashMap::new();
+            let mut cel_map = ValueMap::new();
             for (key, value) in obj {
-                cel_map.insert(Key::String(Arc::new(key)), json_to_cel_value(value)?);
+                cel_map.insert(MapKey::String(Arc::from(key.as_str())), json_to_cel_value(value)?);
             }
-            Ok(CelValue::Map(Map {
-                map: Arc::new(cel_map),
-            }))
+            Ok(CelValue::Map(Arc::new(cel_map)))
         }
     }
 }
