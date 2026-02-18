@@ -1,5 +1,5 @@
 ---
-description: Create a pull request with pre-flight checks (format, clippy, tests)
+description: Use when the user asks to create a PR, open a pull request, submit changes for review, or says "make a PR". Runs format, clippy, and test checks before creating the pull request.
 user-invocable: true
 ---
 
