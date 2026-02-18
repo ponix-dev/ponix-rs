@@ -73,8 +73,6 @@ gh pr create --title "<conventional commit style title>" --body "$(cat <<'EOF'
 ## Additional Context
 
 <any extra context or notes>
-
-https://claude.ai/code
 EOF
 )"
 ```
