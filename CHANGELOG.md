@@ -1,3 +1,9 @@
+## [1.15.0](https://github.com/ponix-dev/ponix-rs/compare/v1.14.1...v1.15.0) (2026-02-18)
+
+### Features
+
+* add PR skill with pre-flight checks and PR template ([#123](https://github.com/ponix-dev/ponix-rs/issues/123)) ([e3df17b](https://github.com/ponix-dev/ponix-rs/commit/e3df17bdc7aa3aced19e3a05455d99b6acba0987))
+
 ## [1.14.1](https://github.com/ponix-dev/ponix-rs/compare/v1.14.0...v1.14.1) (2026-02-16)
 
 ### Code Refactoring
