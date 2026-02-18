@@ -21,6 +21,15 @@ macos-x64 = { asset_pattern = "mqttx-cli-macos-x64" }
 _.file = '.env'
 
 
+# Code quality tasks
+[tasks."fmt:check"]
+description = "Check code formatting (cargo fmt --check)"
+run = "cargo fmt --all -- --check"
+
+[tasks."clippy:check"]
+description = "Run clippy lints with warnings as errors"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
+
 # Test tasks - run from workspace root
 [tasks.test]
 description = "Run all unit tests (fast, no external dependencies)"
