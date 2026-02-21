@@ -49,15 +49,15 @@ Bring Ollama into the stack and build the two-tier tool layer — built-in platf
 ### Embeddings — Indexing the Knowledge Layer
 
 - [ ] #112 — Ollama + embedding service — local LLM inference and embedding generation
-- [ ] `TBD` — Document embedding pipeline — when a document reaches `ready` status (via CDC), chunk it, embed chunks with `nomic-embed-text`, store vectors in pgvector. Low-volume — documents are created occasionally, not thousands per second
-- [ ] `TBD` — Device definition embedding — embed device definitions and their payload contract descriptions. Semantic search finds the right definitions when the agent needs to understand what a device is and what it reports
+- [ ] #124 — Document embedding pipeline — when a document reaches `ready` status (via CDC), chunk it, embed chunks with `nomic-embed-text`, store vectors in pgvector. Low-volume — documents are created occasionally, not thousands per second
+- [ ] #125 — Device definition embedding — embed device definitions and their payload contract descriptions. Semantic search finds the right definitions when the agent needs to understand what a device is and what it reports
 
 ### Built-in Platform Tools
 
 These are compiled into the agent runtime and always available on every agent run. They interact with the platform's own data stores and action primitives directly — no network hop, no discovery step. Data access is scoped to the workspace the agent belongs to.
 
-- [ ] `TBD` — Agent runtime — orchestration loop: receive prompt + context → LLM selects tool(s) → execute → feed results back → LLM reasons again → repeat until terminal action or step limit. Supports multi-step, multi-tool reasoning chains
-- [ ] `TBD` — Agent execution context — scoped per-invocation context carrying workspace ID, org/tenant ID, device scope, and step limits. Built-in tools use this to enforce data boundaries — an agent can only query and act on resources within its workspace
+- [ ] #126 — Agent runtime — orchestration loop: receive prompt + context → LLM selects tool(s) → execute → feed results back → LLM reasons again → repeat until terminal action or step limit. Supports multi-step, multi-tool reasoning chains
+- [ ] #127 — Agent execution context — scoped per-invocation context carrying workspace ID, org/tenant ID, device scope, and step limits. Built-in tools use this to enforce data boundaries — an agent can only query and act on resources within its workspace
 
 | Built-in Tool | What the Agent Can Do With It |
 |---------------|-------------------------------|
@@ -68,20 +68,20 @@ These are compiled into the agent runtime and always available on every agent ru
 | `send_alert` | Publish an alert/notification — email, webhook, NATS subject, or push notification. Used when the right action is to notify a human rather than actuate a device |
 | `create_record` | Write structured data back — create an incident, log a decision, update an entity attribute. Gives the agent persistent side-effects beyond downlinks |
 
-- [ ] `TBD` — `clickhouse_query` tool implementation
-- [ ] `TBD` — `knowledge_search` tool implementation
-- [ ] `TBD` — `graph_traverse` tool implementation
-- [ ] `TBD` — `downlink_command` tool implementation
-- [ ] `TBD` — `send_alert` tool implementation
-- [ ] `TBD` — `create_record` tool implementation
+- [ ] #128 — `clickhouse_query` tool implementation
+- [ ] #129 — `knowledge_search` tool implementation
+- [ ] #130 — `graph_traverse` tool implementation
+- [ ] #131 — `downlink_command` tool implementation
+- [ ] #132 — `send_alert` tool implementation
+- [ ] #133 — `create_record` tool implementation
 
 ### Workspace MCP Servers
 
 Additional capabilities are exposed through [MCP](https://modelcontextprotocol.io) servers registered to a workspace. Each workspace maintains a flat list of MCP servers — the platform doesn't care where they're hosted or who built them. When an agent runs, it connects to the workspace's registered servers, discovers their tools via `tools/list`, and calls them via `tools/call` over streamable HTTP. Adding a capability means registering a server; removing one means the agent can no longer use it.
 
-- [ ] `TBD` — MCP client in agent runtime — the agent runtime speaks MCP natively. On each run, it connects to the workspace's registered MCP servers, discovers tools, and uses `tools/call` during the reasoning loop
-- [ ] `TBD` — Workspace MCP registry — each workspace maintains a list of registered MCP servers (name, endpoint URL, health status). Admins add/remove servers per workspace. The agent executor resolves the registry to live HTTP connections at run start
-- [ ] `TBD` — MCP server management API — CRUD for MCP server registrations per workspace. Health checks. Connection testing
+- [ ] #134 — MCP client in agent runtime — the agent runtime speaks MCP natively. On each run, it connects to the workspace's registered MCP servers, discovers tools, and uses `tools/call` during the reasoning loop
+- [ ] #135 — Workspace MCP registry — each workspace maintains a list of registered MCP servers (name, endpoint URL, health status). Admins add/remove servers per workspace. The agent executor resolves the registry to live HTTP connections at run start
+- [ ] #136 — MCP server management API — CRUD for MCP server registrations per workspace. Health checks. Connection testing
 
 > **Key insight:** The sensor time-series stays in ClickHouse. The agent accesses it through the built-in `clickhouse_query` tool, not embeddings. Vectors are reserved for documents, definitions, and other sparse semantic content where similarity search adds value. Core platform actions (downlinks, alerts, records) are also built-in. MCP servers extend the agent with additional capabilities — the platform treats them all the same regardless of where they're hosted.
 
@@ -91,11 +91,11 @@ Additional capabilities are exposed through [MCP](https://modelcontextprotocol.i
 
 Build the reverse path — platform to device. This becomes the built-in `downlink_command` tool that agents use to act on the physical world.
 
-- [ ] `TBD` — Downlink command domain model — `DownlinkCommand` entity with lifecycle states (`Pending → Sent → Acknowledged → Failed`). Repository trait. Migration
-- [ ] `TBD` — Downlink NATS stream — `downlink_commands` stream. Commands flow through the same event infrastructure as uplinks
-- [ ] `TBD` — Downlink gRPC service — manual command submission, status queries, command history
-- [ ] `TBD` — Gateway downlink publishing — extend gateway runners to publish to device MQTT topics. Consume from `downlink_commands` stream, deliver via the appropriate gateway
-- [ ] `TBD` — Downlink encoding — reverse payload conversion — JSON to device-native binary. Mirrors the uplink CEL contracts. Store downlink expressions alongside uplink contracts in `EndDeviceDefinition`
+- [ ] #137 — Downlink command domain model — `DownlinkCommand` entity with lifecycle states (`Pending → Sent → Acknowledged → Failed`). Repository trait. Migration
+- [ ] #138 — Downlink NATS stream — `downlink_commands` stream. Commands flow through the same event infrastructure as uplinks
+- [ ] #139 — Downlink gRPC service — manual command submission, status queries, command history
+- [ ] #140 — Gateway downlink publishing — extend gateway runners to publish to device MQTT topics. Consume from `downlink_commands` stream, deliver via the appropriate gateway
+- [ ] #141 — Downlink encoding — reverse payload conversion — JSON to device-native binary. Mirrors the uplink CEL contracts. Store downlink expressions alongside uplink contracts in `EndDeviceDefinition`
 
 > **Why here and not earlier:** Downlink is useless without something intelligent deciding what to send. But it doesn't need the full autonomous loop to be valuable — manual downlinks via gRPC are useful on their own and let you test the plumbing before agents drive it.
 
@@ -114,11 +114,11 @@ Wire the agent runtime to two trigger sources — real-time events from the NATS
 
 ### Workflow Engine
 
-- [ ] `TBD` — Workflow definition model — a workflow belongs to a **workspace** and binds a **trigger** (event CEL / cron expression) to an **agent configuration** (system prompt template). Because the workflow belongs to the workspace, the agent automatically inherits the workspace's data scope (built-in tools) and registered MCP servers. Stored as a first-class entity with CRUD + CDC
-- [ ] `TBD` — Cron scheduler — persistent cron registry backed by PostgreSQL. Evaluates cron expressions, publishes trigger events to NATS on schedule. Survives restarts. Distributed-lock-safe for HA
-- [ ] `TBD` — Agent executor service — consumes trigger events from NATS, hydrates the workflow config, resolves the workflow's workspace (MCP registry + data scope), initializes the agent runtime, and manages the execution lifecycle (timeout, retries, step budgets)
-- [ ] `TBD` — Workflow audit log — every agent run is recorded: trigger source, workspace, tools called (with inputs/outputs), LLM reasoning trace, final actions taken, and outcome. Stored in ClickHouse for analysis
-- [ ] `TBD` — Workflow management API — CRUD for workflows within a workspace. Enable/disable triggers. View run history, MCP tool usage breakdown
+- [ ] #142 — Workflow definition model — a workflow belongs to a **workspace** and binds a **trigger** (event CEL / cron expression) to an **agent configuration** (system prompt template). Because the workflow belongs to the workspace, the agent automatically inherits the workspace's data scope (built-in tools) and registered MCP servers. Stored as a first-class entity with CRUD + CDC
+- [ ] #143 — Cron scheduler — persistent cron registry backed by PostgreSQL. Evaluates cron expressions, publishes trigger events to NATS on schedule. Survives restarts. Distributed-lock-safe for HA
+- [ ] #144 — Agent executor service — consumes trigger events from NATS, hydrates the workflow config, resolves the workflow's workspace (MCP registry + data scope), initializes the agent runtime, and manages the execution lifecycle (timeout, retries, step budgets)
+- [ ] #145 — Workflow audit log — every agent run is recorded: trigger source, workspace, tools called (with inputs/outputs), LLM reasoning trace, final actions taken, and outcome. Stored in ClickHouse for analysis
+- [ ] #146 — Workflow management API — CRUD for workflows within a workspace. Enable/disable triggers. View run history, MCP tool usage breakdown
 
 ---
 
@@ -128,14 +128,14 @@ Add first-class LoRaWAN support via ChirpStack integration — both uplink and d
 
 ### Uplink
 
-- [ ] `TBD` — ChirpStack `EndDeviceDefinition` type — a new device definition type representing ChirpStack-managed LoRaWAN devices. Carries ChirpStack-specific metadata: application ID, device profile, device EUI, and payload codec configuration
-- [ ] `TBD` — ChirpStack uplink ingest — subscribe to ChirpStack's event stream (MQTT or gRPC integration), receive uplink events, map them to the platform's envelope format. Feeds into the same NATS → CEL → ClickHouse pipeline as all other devices
-- [ ] `TBD` — ChirpStack payload contracts — CEL expressions (or ChirpStack's built-in codec output) for decoding LoRaWAN payloads. Stored on the `EndDeviceDefinition` alongside the standard uplink contracts
+- [ ] #147 — ChirpStack `EndDeviceDefinition` type — a new device definition type representing ChirpStack-managed LoRaWAN devices. Carries ChirpStack-specific metadata: application ID, device profile, device EUI, and payload codec configuration
+- [ ] #148 — ChirpStack uplink ingest — subscribe to ChirpStack's event stream (MQTT or gRPC integration), receive uplink events, map them to the platform's envelope format. Feeds into the same NATS → CEL → ClickHouse pipeline as all other devices
+- [ ] #149 — ChirpStack payload contracts — CEL expressions (or ChirpStack's built-in codec output) for decoding LoRaWAN payloads. Stored on the `EndDeviceDefinition` alongside the standard uplink contracts
 
 ### Downlink
 
-- [ ] `TBD` — ChirpStack downlink routing — when a `DownlinkCommand` targets a ChirpStack device, route it through ChirpStack's downlink API (enqueue) instead of direct MQTT publish. The downlink infrastructure from Phase 4 handles lifecycle tracking — ChirpStack handles the LoRaWAN Class A/B/C scheduling
-- [ ] `TBD` — ChirpStack downlink encoding — reverse payload conversion for LoRaWAN devices. Store downlink encoding expressions on the ChirpStack `EndDeviceDefinition`. The `downlink_command` built-in tool uses these to encode the agent's JSON payload into the binary format ChirpStack expects
+- [ ] #150 — ChirpStack downlink routing — when a `DownlinkCommand` targets a ChirpStack device, route it through ChirpStack's downlink API (enqueue) instead of direct MQTT publish. The downlink infrastructure from Phase 4 handles lifecycle tracking — ChirpStack handles the LoRaWAN Class A/B/C scheduling
+- [ ] #151 — ChirpStack downlink encoding — reverse payload conversion for LoRaWAN devices. Store downlink encoding expressions on the ChirpStack `EndDeviceDefinition`. The `downlink_command` built-in tool uses these to encode the agent's JSON payload into the binary format ChirpStack expects
 
 > **Why last:** The full platform — ingest, knowledge layer, agent runtime, downlink infrastructure, and workflow engine — needs to be solid before adding a new protocol integration. ChirpStack support is additive: it's a new `EndDeviceDefinition` type that plugs into every layer, not a rearchitecture. Doing it last means the abstractions are proven and the integration is straightforward.
 
