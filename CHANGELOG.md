@@ -1,3 +1,9 @@
+## [1.16.0](https://github.com/ponix-dev/ponix-rs/compare/v1.15.0...v1.16.0) (2026-02-21)
+
+### Features
+
+* migrate CEL runtime from cel-interpreter to cel-core ([#121](https://github.com/ponix-dev/ponix-rs/issues/121)) ([8a9eea9](https://github.com/ponix-dev/ponix-rs/commit/8a9eea939c8bbed14dc70c71ed2f5b96785d4709)), closes [#119](https://github.com/ponix-dev/ponix-rs/issues/119)
+
 ## [1.15.0](https://github.com/ponix-dev/ponix-rs/compare/v1.14.1...v1.15.0) (2026-02-18)
 
 ### Features
