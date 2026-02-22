@@ -86,11 +86,11 @@ docker exec -it ponix-clickhouse clickhouse-client -u ponix --password ponix
 # Query recent sensor data
 SELECT
   end_device_id,
-  occurred_at,
+  received_at,
   data
 FROM ponix.processed_envelopes
 WHERE end_device_id = 'your-device-id'
-ORDER BY occurred_at DESC
+ORDER BY received_at DESC
 LIMIT 10;
 ```
 

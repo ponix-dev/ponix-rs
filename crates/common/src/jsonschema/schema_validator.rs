@@ -33,9 +33,5 @@ pub trait SchemaValidator: Send + Sync {
     /// # Returns
     /// * `Ok(())` if validation passes
     /// * `Err(SchemaValidationError)` if validation fails
-    fn validate(
-        &self,
-        schema_str: &str,
-        data: &serde_json::Value,
-    ) -> SchemaValidationResult<()>;
+    fn validate(&self, schema_str: &str, data: &serde_json::Value) -> SchemaValidationResult<()>;
 }

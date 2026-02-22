@@ -27,6 +27,7 @@ use ponix_api::domain::{
     DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
     WorkspaceService,
 };
+use ponix_api::grpc::PonixApiServices;
 use ponix_api::ponix_api::PonixApi;
 use ponix_runner::Runner;
 use std::sync::Arc;
@@ -164,16 +165,18 @@ async fn main() {
 
     // Initialize application modules
     let ponix_api = PonixApi::new(
-        device_service.clone(),
-        definition_service,
-        organization_service,
-        gateway_service,
-        user_service,
-        workspace_service,
-        auth_token_provider,
+        PonixApiServices {
+            device_service: device_service.clone(),
+            definition_service,
+            organization_service,
+            gateway_service,
+            user_service,
+            workspace_service,
+            auth_token_provider,
+            refresh_token_expiration_days: config.refresh_token_expiration_days,
+            secure_cookies: config.secure_cookies,
+        },
         grpc_config,
-        config.refresh_token_expiration_days,
-        config.secure_cookies,
     );
 
     // Create orchestrator shutdown token - owned by main for lifecycle coordination

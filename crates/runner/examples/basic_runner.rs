@@ -9,7 +9,6 @@
 
 use ponix_runner::Runner;
 use std::time::Duration;
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() {

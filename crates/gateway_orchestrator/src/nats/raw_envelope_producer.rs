@@ -91,7 +91,7 @@ mod tests {
         let envelope = RawEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x02, 0x03],
         };
 
@@ -119,7 +119,7 @@ mod tests {
         let envelope = RawEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x02, 0x03],
         };
 

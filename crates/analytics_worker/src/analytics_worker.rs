@@ -1,10 +1,10 @@
 use crate::clickhouse::{ClickHouseInserterRepository, InserterCommitHandle, InserterConfig};
 use crate::domain::{CelPayloadConverter, RawEnvelopeService};
-use common::jsonschema::JsonSchemaValidator;
 use crate::nats::{
     ProcessedEnvelopeConsumerService, ProcessedEnvelopeProducer, RawEnvelopeConsumerService,
 };
 use common::clickhouse::ClickHouseClient;
+use common::jsonschema::JsonSchemaValidator;
 use common::nats::{
     NatsClient, NatsConsumeLoggingLayer, NatsConsumeTracingConfig, NatsConsumeTracingLayer,
     TowerConsumer,

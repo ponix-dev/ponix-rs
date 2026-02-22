@@ -1,9 +1,9 @@
 #![cfg(feature = "integration-tests")]
 
 use common::domain::{
-    CreateDeviceRepoInput, CreateEndDeviceDefinitionRepoInput, DeviceRepository,
-    DomainError, EndDeviceDefinitionRepository, GetDeviceRepoInput,
-    GetDeviceWithDefinitionRepoInput, ListDevicesRepoInput,
+    CreateDeviceRepoInput, CreateEndDeviceDefinitionRepoInput, DeviceRepository, DomainError,
+    EndDeviceDefinitionRepository, GetDeviceRepoInput, GetDeviceWithDefinitionRepoInput,
+    ListDevicesRepoInput,
 };
 use common::postgres::{
     PostgresClient, PostgresDeviceRepository, PostgresEndDeviceDefinitionRepository,
@@ -78,7 +78,11 @@ async fn create_test_workspace(client: &PostgresClient, org_id: &str) -> String 
     create_test_organization(client, org_id).await;
 
     // Create workspace with unique ID
-    let workspace_id = format!("ws-{}-{}", org_id, chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let workspace_id = format!(
+        "ws-{}-{}",
+        org_id,
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
     let conn = client.get_connection().await.unwrap();
     conn.execute(
         "INSERT INTO workspaces (id, name, organization_id) VALUES ($1, $2, $3)",
@@ -98,7 +102,11 @@ async fn create_test_definition(
     create_test_organization(client, org_id).await;
 
     // Create definition with unique ID based on org and timestamp
-    let def_id = format!("def-{}-{}", org_id, chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let def_id = format!(
+        "def-{}-{}",
+        org_id,
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
     let input = CreateEndDeviceDefinitionRepoInput {
         id: def_id.clone(),
         organization_id: org_id.to_string(),
@@ -115,7 +123,11 @@ async fn create_test_gateway(client: &PostgresClient, org_id: &str) -> String {
     create_test_organization(client, org_id).await;
 
     // Create gateway with unique ID
-    let gateway_id = format!("gw-{}-{}", org_id, chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let gateway_id = format!(
+        "gw-{}-{}",
+        org_id,
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
     let conn = client.get_connection().await.unwrap();
     conn.execute(
         "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
@@ -327,7 +339,10 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     .unwrap();
 
     // Create workspace for org-1
-    let workspace_id = format!("ws-org1-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let workspace_id = format!(
+        "ws-org1-{}",
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
     conn.execute(
         "INSERT INTO workspaces (id, name, organization_id) VALUES ($1, $2, $3)",
         &[&workspace_id, &"Workspace for Org 1", &"org-1"],
@@ -336,7 +351,10 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     .unwrap();
 
     // Create definition for org-1
-    let def_id = format!("def-org1-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let def_id = format!(
+        "def-org1-{}",
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
     let def_input = CreateEndDeviceDefinitionRepoInput {
         id: def_id.clone(),
         organization_id: "org-1".to_string(),
@@ -347,7 +365,10 @@ async fn test_get_device_with_wrong_organization_returns_none() {
     definition_repo.create_definition(def_input).await.unwrap();
 
     // Create gateway for org-1
-    let gateway_id = format!("gw-org1-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let gateway_id = format!(
+        "gw-org1-{}",
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
     conn.execute(
         "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
         &[&gateway_id, &"org-1", &"Gateway for Org 1", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883"})],

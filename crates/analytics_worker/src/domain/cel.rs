@@ -262,7 +262,10 @@ fn json_to_cel_value(json: JsonValue) -> Result<CelValue> {
         JsonValue::Object(obj) => {
             let mut cel_map = ValueMap::new();
             for (key, value) in obj {
-                cel_map.insert(MapKey::String(Arc::from(key.as_str())), json_to_cel_value(value)?);
+                cel_map.insert(
+                    MapKey::String(Arc::from(key.as_str())),
+                    json_to_cel_value(value)?,
+                );
             }
             Ok(CelValue::Map(Arc::new(cel_map)))
         }

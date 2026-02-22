@@ -264,10 +264,7 @@ impl DeviceRepository for PostgresDeviceRepository {
                     created_at: row.get(9),
                     updated_at: row.get(10),
                 };
-                debug!(
-                    "found device with definition: {}",
-                    joined_row.device_id
-                );
+                debug!("found device with definition: {}", joined_row.device_id);
                 Ok(Some(joined_row.into()))
             }
             None => Ok(None),

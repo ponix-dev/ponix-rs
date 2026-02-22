@@ -3,20 +3,20 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::{
-    CreateEndDeviceDefinitionRequest, DeleteEndDeviceDefinitionRequest,
-    EndDeviceDefinitionService, GetEndDeviceDefinitionRequest,
-    ListEndDeviceDefinitionsRequest, UpdateEndDeviceDefinitionRequest,
+    CreateEndDeviceDefinitionRequest, DeleteEndDeviceDefinitionRequest, EndDeviceDefinitionService,
+    GetEndDeviceDefinitionRequest, ListEndDeviceDefinitionsRequest,
+    UpdateEndDeviceDefinitionRequest,
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
 use common::proto::to_proto_end_device_definition;
 use ponix_proto_prost::end_device::v1::{
-    CreateEndDeviceDefinitionRequest as ProtoCreateRequest,
-    CreateEndDeviceDefinitionResponse, DeleteEndDeviceDefinitionRequest as ProtoDeleteRequest,
-    DeleteEndDeviceDefinitionResponse, EndDeviceDefinition,
-    GetEndDeviceDefinitionRequest as ProtoGetRequest, GetEndDeviceDefinitionResponse,
-    ListEndDeviceDefinitionsRequest as ProtoListRequest, ListEndDeviceDefinitionsResponse,
-    UpdateEndDeviceDefinitionRequest as ProtoUpdateRequest, UpdateEndDeviceDefinitionResponse,
+    CreateEndDeviceDefinitionRequest as ProtoCreateRequest, CreateEndDeviceDefinitionResponse,
+    DeleteEndDeviceDefinitionRequest as ProtoDeleteRequest, DeleteEndDeviceDefinitionResponse,
+    EndDeviceDefinition, GetEndDeviceDefinitionRequest as ProtoGetRequest,
+    GetEndDeviceDefinitionResponse, ListEndDeviceDefinitionsRequest as ProtoListRequest,
+    ListEndDeviceDefinitionsResponse, UpdateEndDeviceDefinitionRequest as ProtoUpdateRequest,
+    UpdateEndDeviceDefinitionResponse,
 };
 use ponix_proto_tonic::end_device::v1::tonic::end_device_definition_service_server::EndDeviceDefinitionService as EndDeviceDefinitionServiceTrait;
 

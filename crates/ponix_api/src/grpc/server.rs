@@ -34,45 +34,55 @@ pub const REFLECTION_DESCRIPTORS: &[&[u8]] = &[
     ponix_proto_prost::workspace::v1::FILE_DESCRIPTOR_SET,
 ];
 
-/// Build Routes containing all Ponix API services.
-pub fn build_ponix_api_routes(
-    device_service: Arc<DeviceService>,
-    definition_service: Arc<EndDeviceDefinitionService>,
-    organization_service: Arc<OrganizationService>,
-    gateway_service: Arc<GatewayService>,
-    user_service: Arc<UserService>,
-    workspace_service: Arc<WorkspaceService>,
-    auth_token_provider: Arc<dyn AuthTokenProvider>,
-    refresh_token_expiration_days: u64,
-    secure_cookies: bool,
-) -> Routes {
-    // Create handlers
-    let device_handler = DeviceServiceHandler::new(device_service, auth_token_provider.clone());
-    let definition_handler =
-        EndDeviceDefinitionServiceHandler::new(definition_service, auth_token_provider.clone());
-    let organization_handler =
-        OrganizationServiceHandler::new(organization_service, auth_token_provider.clone());
-    let gateway_handler =
-        GatewayServiceHandler::new(gateway_service, auth_token_provider.clone());
-    let workspace_handler =
-        WorkspaceServiceHandler::new(workspace_service, auth_token_provider.clone());
-    let user_handler = UserServiceHandler::new(
-        user_service,
-        auth_token_provider.clone(),
-        refresh_token_expiration_days,
-        secure_cookies,
-    );
+/// All domain services needed to build gRPC routes.
+pub struct PonixApiServices {
+    pub device_service: Arc<DeviceService>,
+    pub definition_service: Arc<EndDeviceDefinitionService>,
+    pub organization_service: Arc<OrganizationService>,
+    pub gateway_service: Arc<GatewayService>,
+    pub user_service: Arc<UserService>,
+    pub workspace_service: Arc<WorkspaceService>,
+    pub auth_token_provider: Arc<dyn AuthTokenProvider>,
+    pub refresh_token_expiration_days: u64,
+    pub secure_cookies: bool,
+}
 
-    // Build routes with all services
-    let mut builder = Routes::builder();
-    builder
-        .add_service(EndDeviceServiceServer::new(device_handler))
-        .add_service(EndDeviceDefinitionServiceServer::new(definition_handler))
-        .add_service(OrganizationServiceServer::new(organization_handler))
-        .add_service(GatewayServiceServer::new(gateway_handler))
-        .add_service(WorkspaceServiceServer::new(workspace_handler))
-        .add_service(UserServiceServer::new(user_handler));
-    builder.routes()
+impl PonixApiServices {
+    /// Build Routes containing all Ponix API services.
+    pub fn into_routes(self) -> Routes {
+        // Create handlers
+        let device_handler =
+            DeviceServiceHandler::new(self.device_service, self.auth_token_provider.clone());
+        let definition_handler = EndDeviceDefinitionServiceHandler::new(
+            self.definition_service,
+            self.auth_token_provider.clone(),
+        );
+        let organization_handler = OrganizationServiceHandler::new(
+            self.organization_service,
+            self.auth_token_provider.clone(),
+        );
+        let gateway_handler =
+            GatewayServiceHandler::new(self.gateway_service, self.auth_token_provider.clone());
+        let workspace_handler =
+            WorkspaceServiceHandler::new(self.workspace_service, self.auth_token_provider.clone());
+        let user_handler = UserServiceHandler::new(
+            self.user_service,
+            self.auth_token_provider.clone(),
+            self.refresh_token_expiration_days,
+            self.secure_cookies,
+        );
+
+        // Build routes with all services
+        let mut builder = Routes::builder();
+        builder
+            .add_service(EndDeviceServiceServer::new(device_handler))
+            .add_service(EndDeviceDefinitionServiceServer::new(definition_handler))
+            .add_service(OrganizationServiceServer::new(organization_handler))
+            .add_service(GatewayServiceServer::new(gateway_handler))
+            .add_service(WorkspaceServiceServer::new(workspace_handler))
+            .add_service(UserServiceServer::new(user_handler));
+        builder.routes()
+    }
 }
 
 /// Run the Ponix API gRPC server with graceful shutdown.
@@ -85,28 +95,9 @@ pub fn build_ponix_api_routes(
 /// - Reflection service
 pub async fn run_ponix_grpc_server(
     config: GrpcServerConfig,
-    device_service: Arc<DeviceService>,
-    definition_service: Arc<EndDeviceDefinitionService>,
-    organization_service: Arc<OrganizationService>,
-    gateway_service: Arc<GatewayService>,
-    user_service: Arc<UserService>,
-    workspace_service: Arc<WorkspaceService>,
-    auth_token_provider: Arc<dyn AuthTokenProvider>,
-    refresh_token_expiration_days: u64,
-    secure_cookies: bool,
+    services: PonixApiServices,
     cancellation_token: CancellationToken,
 ) -> Result<(), anyhow::Error> {
-    let routes = build_ponix_api_routes(
-        device_service,
-        definition_service,
-        organization_service,
-        gateway_service,
-        user_service,
-        workspace_service,
-        auth_token_provider,
-        refresh_token_expiration_days,
-        secure_cookies,
-    );
-
+    let routes = services.into_routes();
     run_grpc_server(config, routes, REFLECTION_DESCRIPTORS, cancellation_token).await
 }
