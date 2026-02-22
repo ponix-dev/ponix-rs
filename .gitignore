@@ -27,6 +27,7 @@ Thumbs.db
 
 
 /.thoughts
+/handoff.md
 /temp
 /priv
 /docker/grafana/provisioning/dashboards
