@@ -1,3 +1,9 @@
+## [1.17.0](https://github.com/ponix-dev/ponix-rs/compare/v1.16.0...v1.17.0) (2026-02-22)
+
+### Features
+
+* device ownership validation and occurred_at rename ([#153](https://github.com/ponix-dev/ponix-rs/issues/153)) ([81c0a37](https://github.com/ponix-dev/ponix-rs/commit/81c0a37f409fe866ac381b281a4baf89dfc3bd55)), closes [#36](https://github.com/ponix-dev/ponix-rs/issues/36)
+
 ## [1.16.0](https://github.com/ponix-dev/ponix-rs/compare/v1.15.0...v1.16.0) (2026-02-21)
 
 ### Features
