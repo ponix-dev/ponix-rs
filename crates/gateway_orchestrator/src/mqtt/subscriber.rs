@@ -256,7 +256,7 @@ pub(crate) async fn handle_mqtt_message(
         let envelope = RawEnvelope {
             organization_id: parsed.organization_id,
             end_device_id: parsed.end_device_id.clone(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: payload.to_vec(),
         };
 

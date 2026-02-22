@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_default_implementation() {
-        let provider = CryptoRefreshTokenProvider::default();
+        let provider = CryptoRefreshTokenProvider;
         let output = provider.generate_refresh_token();
         assert!(!output.raw_token.is_empty());
     }

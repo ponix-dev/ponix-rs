@@ -139,7 +139,7 @@ async fn test_migrations_and_batch_write() {
         ProcessedEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-001".to_string(),
-            occurred_at: now,
+            received_at: now,
             processed_at: now,
             data: serde_json::Map::from_iter([
                 ("temperature".to_string(), serde_json::json!(25.5)),
@@ -149,7 +149,7 @@ async fn test_migrations_and_batch_write() {
         ProcessedEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-002".to_string(),
-            occurred_at: now,
+            received_at: now,
             processed_at: now,
             data: serde_json::Map::from_iter([
                 ("status".to_string(), serde_json::json!("online")),
@@ -225,7 +225,7 @@ async fn test_large_batch_write() {
         envelopes.push(ProcessedEnvelope {
             organization_id: format!("org-{}", i % 10), // 10 different orgs
             end_device_id: format!("device-{:04}", i),
-            occurred_at: now,
+            received_at: now,
             processed_at: now,
             data: serde_json::Map::from_iter([
                 ("index".to_string(), serde_json::json!(i)),

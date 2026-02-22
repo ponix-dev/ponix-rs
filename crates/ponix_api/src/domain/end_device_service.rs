@@ -323,21 +323,20 @@ mod tests {
 
     fn create_mock_gateway_repo() -> MockGatewayRepository {
         let mut mock = MockGatewayRepository::new();
-        mock.expect_get_gateway()
-            .returning(|input| {
-                Ok(Some(Gateway {
-                    gateway_id: input.gateway_id.clone(),
-                    organization_id: input.organization_id.clone(),
-                    name: "Test Gateway".to_string(),
-                    gateway_type: "emqx".to_string(),
-                    gateway_config: GatewayConfig::Emqx(common::domain::EmqxGatewayConfig {
-                        broker_url: "mqtt://localhost:1883".to_string(),
-                    }),
-                    deleted_at: None,
-                    created_at: None,
-                    updated_at: None,
-                }))
-            });
+        mock.expect_get_gateway().returning(|input| {
+            Ok(Some(Gateway {
+                gateway_id: input.gateway_id.clone(),
+                organization_id: input.organization_id.clone(),
+                name: "Test Gateway".to_string(),
+                gateway_type: "emqx".to_string(),
+                gateway_config: GatewayConfig::Emqx(common::domain::EmqxGatewayConfig {
+                    broker_url: "mqtt://localhost:1883".to_string(),
+                }),
+                deleted_at: None,
+                created_at: None,
+                updated_at: None,
+            }))
+        });
         mock
     }
 

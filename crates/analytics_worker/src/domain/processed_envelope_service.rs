@@ -51,14 +51,14 @@ mod tests {
             ProcessedEnvelope {
                 organization_id: "org-123".to_string(),
                 end_device_id: "device-456".to_string(),
-                occurred_at: Utc::now(),
+                received_at: Utc::now(),
                 processed_at: Utc::now(),
                 data: serde_json::Map::new(),
             },
             ProcessedEnvelope {
                 organization_id: "org-123".to_string(),
                 end_device_id: "device-789".to_string(),
-                occurred_at: Utc::now(),
+                received_at: Utc::now(),
                 processed_at: Utc::now(),
                 data: serde_json::Map::new(),
             },

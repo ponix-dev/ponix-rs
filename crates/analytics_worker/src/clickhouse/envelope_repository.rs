@@ -16,7 +16,7 @@ pub struct ProcessedEnvelopeRow {
     // CRITICAL: This serde attribute is required when using JSON type alongside DateTime
     // Reference: https://github.com/ClickHouse/clickhouse-rs/blob/main/examples/data_types_derive_simple.rs
     #[serde(with = "clickhouse::serde::chrono::datetime")]
-    pub occurred_at: DateTime<Utc>,
+    pub received_at: DateTime<Utc>,
     #[serde(with = "clickhouse::serde::chrono::datetime")]
     pub processed_at: DateTime<Utc>,
     // JSON type in ClickHouse, mapped to String in Rust
@@ -32,7 +32,7 @@ impl From<&ProcessedEnvelope> for ProcessedEnvelopeRow {
         ProcessedEnvelopeRow {
             organization_id: envelope.organization_id.clone(),
             end_device_id: envelope.end_device_id.clone(),
-            occurred_at: envelope.occurred_at,
+            received_at: envelope.received_at,
             processed_at: envelope.processed_at,
             data: data_json,
         }
@@ -119,7 +119,7 @@ mod tests {
         let domain_envelope = ProcessedEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: Utc::now(),
+            received_at: Utc::now(),
             processed_at: Utc::now(),
             data: data_map,
         };
@@ -137,7 +137,7 @@ mod tests {
         let domain_envelope = ProcessedEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: Utc::now(),
+            received_at: Utc::now(),
             processed_at: Utc::now(),
             data: serde_json::Map::new(),
         };

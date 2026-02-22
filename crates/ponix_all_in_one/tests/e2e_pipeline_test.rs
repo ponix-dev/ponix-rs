@@ -241,7 +241,9 @@ async fn initialize_services(
     let pg_client = PostgresClient::new(host, port, "postgres", "postgres", "postgres", 5)?;
     let device_repo = Arc::new(PostgresDeviceRepository::new(pg_client.clone()));
     let org_repo = Arc::new(PostgresOrganizationRepository::new(pg_client.clone()));
-    let definition_repo = Arc::new(PostgresEndDeviceDefinitionRepository::new(pg_client.clone()));
+    let definition_repo = Arc::new(PostgresEndDeviceDefinitionRepository::new(
+        pg_client.clone(),
+    ));
     let gateway_repo = Arc::new(PostgresGatewayRepository::new(pg_client.clone()));
 
     // Mock authorization provider that allows all operations (E2E test bypasses auth)
@@ -401,7 +403,7 @@ async fn produce_raw_messages(
         let raw_envelope = RawEnvelope {
             organization_id: device.organization_id.clone(),
             end_device_id: device.device_id.clone(),
-            occurred_at: base_time + chrono::Duration::seconds(i as i64),
+            received_at: base_time + chrono::Duration::seconds(i as i64),
             payload: cayenne_payload.clone(),
         };
 

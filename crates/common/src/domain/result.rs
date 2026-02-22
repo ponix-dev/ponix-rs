@@ -7,6 +7,9 @@ pub enum DomainError {
     #[error("Device not found: {0}")]
     DeviceNotFound(String),
 
+    #[error("Device {0} not owned by organization {1}")]
+    DeviceNotOwnedByOrganization(String, String),
+
     #[error("Device already exists: {0}")]
     DeviceAlreadyExists(String),
 

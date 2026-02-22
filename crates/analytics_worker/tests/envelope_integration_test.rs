@@ -216,7 +216,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
     let raw_envelope = RawEnvelope {
         organization_id: "org-123".to_string(),
         end_device_id: "sensor-001".to_string(),
-        occurred_at: chrono::Utc::now(),
+        received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
 
@@ -232,7 +232,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
     let processed = &published[0];
     assert_eq!(processed.organization_id, "org-123");
     assert_eq!(processed.end_device_id, "sensor-001");
-    assert_eq!(processed.occurred_at, raw_envelope.occurred_at);
+    assert_eq!(processed.received_at, raw_envelope.received_at);
     assert!(processed.data.contains_key("temperature_1"));
 }
 
@@ -291,7 +291,7 @@ async fn test_full_conversion_flow_custom_transformation() {
     let raw_envelope = RawEnvelope {
         organization_id: "org-456".to_string(),
         end_device_id: "sensor-002".to_string(),
-        occurred_at: chrono::Utc::now(),
+        received_at: chrono::Utc::now(),
         payload: vec![
             0x01, 0x67, 0x01, 0x10, // Channel 1: temperature 27.2°C
             0x02, 0x68, 0x50, // Channel 2: humidity 80%
@@ -335,7 +335,7 @@ async fn test_device_not_found() {
     let raw_envelope = RawEnvelope {
         organization_id: "org-999".to_string(),
         end_device_id: "nonexistent-device".to_string(),
-        occurred_at: chrono::Utc::now(),
+        received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
 
@@ -397,7 +397,7 @@ async fn test_invalid_cel_expression() {
     let raw_envelope = RawEnvelope {
         organization_id: "org-789".to_string(),
         end_device_id: "sensor-bad".to_string(),
-        occurred_at: chrono::Utc::now(),
+        received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
 
@@ -459,7 +459,7 @@ async fn test_empty_cel_expression() {
     let raw_envelope = RawEnvelope {
         organization_id: "org-000".to_string(),
         end_device_id: "sensor-empty".to_string(),
-        occurred_at: chrono::Utc::now(),
+        received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
 
@@ -521,7 +521,7 @@ async fn test_cel_expression_returns_non_object() {
     let raw_envelope = RawEnvelope {
         organization_id: "org-scalar".to_string(),
         end_device_id: "sensor-scalar".to_string(),
-        occurred_at: chrono::Utc::now(),
+        received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
 

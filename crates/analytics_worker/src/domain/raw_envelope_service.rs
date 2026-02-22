@@ -154,7 +154,7 @@ impl RawEnvelopeService {
         let processed_envelope = ProcessedEnvelope {
             organization_id: raw.organization_id.clone(),
             end_device_id: raw.end_device_id.clone(),
-            occurred_at: raw.occurred_at,
+            received_at: raw.received_at,
             processed_at: chrono::Utc::now(),
             data,
         };
@@ -224,7 +224,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10], // Cayenne LPP temperature
         };
 
@@ -309,7 +309,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-999".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         };
 
@@ -372,7 +372,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         };
 
@@ -444,7 +444,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         };
 
@@ -521,7 +521,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         };
 
@@ -612,7 +612,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         };
 
@@ -676,7 +676,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-deleted".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         };
 
@@ -732,7 +732,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-nonexistent".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         };
 
@@ -815,7 +815,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x68, 0x3C], // Some payload
         };
 
@@ -879,7 +879,7 @@ mod tests {
         let raw_envelope = RawEnvelope {
             organization_id: "org-456".to_string(),
             end_device_id: "device-123".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         };
 

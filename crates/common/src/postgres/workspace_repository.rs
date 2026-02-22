@@ -101,10 +101,7 @@ impl WorkspaceRepository for PostgresWorkspaceRepository {
     }
 
     #[instrument(skip(self, input), fields(workspace_id = %input.workspace_id, organization_id = %input.organization_id))]
-    async fn get_workspace(
-        &self,
-        input: GetWorkspaceRepoInput,
-    ) -> DomainResult<Option<Workspace>> {
+    async fn get_workspace(&self, input: GetWorkspaceRepoInput) -> DomainResult<Option<Workspace>> {
         let conn = self
             .client
             .get_connection()
@@ -140,10 +137,7 @@ impl WorkspaceRepository for PostgresWorkspaceRepository {
     }
 
     #[instrument(skip(self, input), fields(workspace_id = %input.workspace_id, organization_id = %input.organization_id))]
-    async fn update_workspace(
-        &self,
-        input: UpdateWorkspaceRepoInput,
-    ) -> DomainResult<Workspace> {
+    async fn update_workspace(&self, input: UpdateWorkspaceRepoInput) -> DomainResult<Workspace> {
         let conn = self
             .client
             .get_connection()

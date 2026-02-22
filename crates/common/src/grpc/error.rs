@@ -6,6 +6,10 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
     match error {
         DomainError::DeviceNotFound(msg) => Status::not_found(msg),
 
+        DomainError::DeviceNotOwnedByOrganization(device_id, org_id) => Status::permission_denied(
+            format!("Device {} not owned by organization {}", device_id, org_id),
+        ),
+
         DomainError::DeviceAlreadyExists(msg) => Status::already_exists(msg),
 
         DomainError::InvalidDeviceId(msg)
@@ -21,10 +25,12 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::InvalidJsonSchema(msg) => Status::invalid_argument(msg),
 
-        DomainError::SchemaValidationFailed(device_id, reason) => Status::invalid_argument(format!(
-            "Schema validation failed for device {}: {}",
-            device_id, reason
-        )),
+        DomainError::SchemaValidationFailed(device_id, reason) => {
+            Status::invalid_argument(format!(
+                "Schema validation failed for device {}: {}",
+                device_id, reason
+            ))
+        }
 
         DomainError::EndDeviceDefinitionInUse(msg) => Status::failed_precondition(msg),
 

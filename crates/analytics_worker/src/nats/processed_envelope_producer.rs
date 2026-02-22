@@ -115,7 +115,7 @@ mod domain_trait_tests {
         let envelope = DomainProcessedEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             processed_at: chrono::Utc::now(),
             data,
         };
@@ -148,7 +148,7 @@ mod domain_trait_tests {
         let envelope = DomainProcessedEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: chrono::Utc::now(),
+            received_at: chrono::Utc::now(),
             processed_at: chrono::Utc::now(),
             data,
         };

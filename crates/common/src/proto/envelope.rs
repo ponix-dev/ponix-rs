@@ -9,10 +9,10 @@ pub fn processed_envelop_proto_to_domain(
     proto: ProtoProcessedEnvelope,
 ) -> Result<ProcessedEnvelope> {
     // Convert timestamps
-    let occurred_at = timestamp_to_datetime(
+    let received_at = timestamp_to_datetime(
         proto
-            .occurred_at
-            .ok_or_else(|| anyhow!("Missing occurred_at timestamp"))?,
+            .received_at
+            .ok_or_else(|| anyhow!("Missing received_at timestamp"))?,
     )?;
 
     let processed_at = timestamp_to_datetime(
@@ -38,7 +38,7 @@ pub fn processed_envelop_proto_to_domain(
     Ok(ProcessedEnvelope {
         organization_id: proto.organization_id,
         end_device_id: proto.end_device_id,
-        occurred_at,
+        received_at,
         processed_at,
         data,
     })
@@ -86,7 +86,7 @@ fn prost_value_to_json(value: &prost_types::Value) -> Option<serde_json::Value> 
 
 /// Convert protobuf RawEnvelope to domain RawEnvelope
 pub fn raw_envelope_proto_to_domain(proto: ProtoRawEnvelope) -> Result<RawEnvelope> {
-    let occurred_at = timestamp_to_datetime(
+    let received_at = timestamp_to_datetime(
         proto
             .received_at
             .ok_or_else(|| anyhow!("Missing received_at timestamp"))?,
@@ -95,7 +95,7 @@ pub fn raw_envelope_proto_to_domain(proto: ProtoRawEnvelope) -> Result<RawEnvelo
     Ok(RawEnvelope {
         organization_id: proto.organization_id,
         end_device_id: proto.device_id,
-        occurred_at,
+        received_at,
         payload: proto.payload.to_vec(),
     })
 }
@@ -106,8 +106,8 @@ pub fn raw_envelope_domain_to_proto(envelope: &RawEnvelope) -> ProtoRawEnvelope 
         organization_id: envelope.organization_id.clone(),
         device_id: envelope.end_device_id.clone(),
         received_at: Some(Timestamp {
-            seconds: envelope.occurred_at.timestamp(),
-            nanos: envelope.occurred_at.timestamp_subsec_nanos() as i32,
+            seconds: envelope.received_at.timestamp(),
+            nanos: envelope.received_at.timestamp_subsec_nanos() as i32,
         }),
         payload: envelope.payload.clone().into(),
     }
@@ -124,7 +124,7 @@ mod tests {
         let proto = ProtoProcessedEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: Some(Timestamp {
+            received_at: Some(Timestamp {
                 seconds: 1700000000,
                 nanos: 0,
             }),
@@ -150,7 +150,7 @@ mod tests {
         let proto = ProtoProcessedEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: None, // Missing timestamp
+            received_at: None, // Missing timestamp
             processed_at: Some(Timestamp {
                 seconds: 1700000010,
                 nanos: 0,
@@ -160,7 +160,7 @@ mod tests {
 
         let result = processed_envelop_proto_to_domain(proto);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("occurred_at"));
+        assert!(result.unwrap_err().to_string().contains("received_at"));
     }
 }
 
@@ -170,9 +170,9 @@ pub fn domain_to_proto_envelope(envelope: &ProcessedEnvelope) -> ProtoProcessedE
     ProtoProcessedEnvelope {
         organization_id: envelope.organization_id.clone(),
         end_device_id: envelope.end_device_id.clone(),
-        occurred_at: Some(Timestamp {
-            seconds: envelope.occurred_at.timestamp(),
-            nanos: envelope.occurred_at.timestamp_subsec_nanos() as i32,
+        received_at: Some(Timestamp {
+            seconds: envelope.received_at.timestamp(),
+            nanos: envelope.received_at.timestamp_subsec_nanos() as i32,
         }),
         processed_at: Some(Timestamp {
             seconds: envelope.processed_at.timestamp(),
@@ -238,7 +238,7 @@ mod domain_conversion_tests {
         data.insert("humidity".to_string(), serde_json::json!(60));
         data.insert("active".to_string(), serde_json::json!(true));
 
-        let occurred_at = chrono::DateTime::parse_from_rfc3339("2025-11-20T10:00:00Z")
+        let received_at = chrono::DateTime::parse_from_rfc3339("2025-11-20T10:00:00Z")
             .unwrap()
             .with_timezone(&chrono::Utc);
         let processed_at = chrono::DateTime::parse_from_rfc3339("2025-11-20T10:00:01Z")
@@ -248,7 +248,7 @@ mod domain_conversion_tests {
         let domain_envelope = ProcessedEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at,
+            received_at,
             processed_at,
             data,
         };
@@ -259,7 +259,7 @@ mod domain_conversion_tests {
         // Assert
         assert_eq!(proto_envelope.organization_id, "org-123");
         assert_eq!(proto_envelope.end_device_id, "device-456");
-        assert!(proto_envelope.occurred_at.is_some());
+        assert!(proto_envelope.received_at.is_some());
         assert!(proto_envelope.processed_at.is_some());
         assert!(proto_envelope.data.is_some());
 
@@ -388,7 +388,7 @@ mod raw_envelope_tests {
         let domain = RawEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: now,
+            received_at: now,
             payload: vec![0x01, 0x02, 0x03],
         };
 
@@ -405,7 +405,7 @@ mod raw_envelope_tests {
         let original = RawEnvelope {
             organization_id: "org-123".to_string(),
             end_device_id: "device-456".to_string(),
-            occurred_at: now,
+            received_at: now,
             payload: vec![0x01, 0x02, 0x03],
         };
 
@@ -419,8 +419,8 @@ mod raw_envelope_tests {
         assert_eq!(domain.payload, original.payload);
         // Note: timestamp precision may differ slightly due to conversion
         assert_eq!(
-            domain.occurred_at.timestamp(),
-            original.occurred_at.timestamp()
+            domain.received_at.timestamp(),
+            original.received_at.timestamp()
         );
     }
 }

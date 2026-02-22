@@ -60,8 +60,7 @@ pub trait WorkspaceRepository: Send + Sync {
     ) -> DomainResult<Workspace>;
 
     /// Get a workspace by ID (excludes soft deleted)
-    async fn get_workspace(&self, input: GetWorkspaceRepoInput)
-        -> DomainResult<Option<Workspace>>;
+    async fn get_workspace(&self, input: GetWorkspaceRepoInput) -> DomainResult<Option<Workspace>>;
 
     /// Update a workspace
     async fn update_workspace(&self, input: UpdateWorkspaceRepoInput) -> DomainResult<Workspace>;
@@ -70,8 +69,6 @@ pub trait WorkspaceRepository: Send + Sync {
     async fn delete_workspace(&self, input: DeleteWorkspaceRepoInput) -> DomainResult<()>;
 
     /// List all active workspaces for an organization (excludes soft deleted)
-    async fn list_workspaces(
-        &self,
-        input: ListWorkspacesRepoInput,
-    ) -> DomainResult<Vec<Workspace>>;
+    async fn list_workspaces(&self, input: ListWorkspacesRepoInput)
+        -> DomainResult<Vec<Workspace>>;
 }

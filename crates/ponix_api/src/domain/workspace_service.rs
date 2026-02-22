@@ -100,9 +100,9 @@ impl WorkspaceService {
             .await?;
 
         match organization {
-            Some(org) if org.deleted_at.is_some() => {
-                Err(DomainError::OrganizationDeleted(organization_id.to_string()))
-            }
+            Some(org) if org.deleted_at.is_some() => Err(DomainError::OrganizationDeleted(
+                organization_id.to_string(),
+            )),
             Some(_) => Ok(()),
             None => Err(DomainError::OrganizationNotFound(
                 organization_id.to_string(),
@@ -144,7 +144,10 @@ impl WorkspaceService {
             organization_id: request.organization_id,
         };
 
-        let workspace = self.workspace_repository.create_workspace(repo_input).await?;
+        let workspace = self
+            .workspace_repository
+            .create_workspace(repo_input)
+            .await?;
 
         debug!(workspace_id = %workspace.id, "workspace created successfully");
         Ok(workspace)
