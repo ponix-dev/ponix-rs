@@ -1,3 +1,9 @@
+## [1.19.0](https://github.com/ponix-dev/ponix-rs/compare/v1.18.0...v1.19.0) (2026-02-23)
+
+### Features
+
+* pre-compiled CEL expressions for payload contracts ([#155](https://github.com/ponix-dev/ponix-rs/issues/155)) ([c8fcb3f](https://github.com/ponix-dev/ponix-rs/commit/c8fcb3fdeb782e71fd85d63621b6e238c8a2434d)), closes [#120](https://github.com/ponix-dev/ponix-rs/issues/120)
+
 ## [1.18.0](https://github.com/ponix-dev/ponix-rs/compare/v1.17.0...v1.18.0) (2026-02-23)
 
 ### Features
