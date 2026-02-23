@@ -9,7 +9,7 @@ use crate::domain::{
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
-use common::proto::to_proto_end_device_definition;
+use common::proto::{from_proto_payload_contract, to_proto_end_device_definition};
 use ponix_proto_prost::end_device::v1::{
     CreateEndDeviceDefinitionRequest as ProtoCreateRequest, CreateEndDeviceDefinitionResponse,
     DeleteEndDeviceDefinitionRequest as ProtoDeleteRequest, DeleteEndDeviceDefinitionResponse,
@@ -56,8 +56,11 @@ impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
             user_id: user_context.user_id,
             organization_id: req.organization_id,
             name: req.name,
-            json_schema: req.json_schema,
-            payload_conversion: req.payload_conversion,
+            contracts: req
+                .contracts
+                .into_iter()
+                .map(from_proto_payload_contract)
+                .collect(),
         };
 
         let definition = self
@@ -114,13 +117,27 @@ impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
+        // Protobuf cannot distinguish "field not set" from "empty repeated field", so
+        // an empty contracts list means "don't update contracts". At least one contract is
+        // always required and enforced by both the domain service validation and the DB
+        // CHECK constraint (contracts_non_empty).
+        let contracts = if req.contracts.is_empty() {
+            None
+        } else {
+            Some(
+                req.contracts
+                    .into_iter()
+                    .map(from_proto_payload_contract)
+                    .collect(),
+            )
+        };
+
         let service_request = UpdateEndDeviceDefinitionRequest {
             user_id: user_context.user_id,
             id: req.id,
             organization_id: req.organization_id,
             name: req.name,
-            json_schema: req.json_schema,
-            payload_conversion: req.payload_conversion,
+            contracts,
         };
 
         let definition = self

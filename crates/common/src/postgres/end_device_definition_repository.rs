@@ -1,7 +1,7 @@
 use crate::domain::{
     CreateEndDeviceDefinitionRepoInput, DeleteEndDeviceDefinitionRepoInput, DomainError,
     DomainResult, EndDeviceDefinition, EndDeviceDefinitionRepository,
-    GetEndDeviceDefinitionRepoInput, ListEndDeviceDefinitionsRepoInput,
+    GetEndDeviceDefinitionRepoInput, ListEndDeviceDefinitionsRepoInput, PayloadContract,
     UpdateEndDeviceDefinitionRepoInput,
 };
 use crate::postgres::PostgresClient;
@@ -16,23 +16,31 @@ pub struct EndDeviceDefinitionRow {
     pub id: String,
     pub organization_id: String,
     pub name: String,
-    pub json_schema: String,
-    pub payload_conversion: String,
+    pub contracts: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<EndDeviceDefinitionRow> for EndDeviceDefinition {
-    fn from(row: EndDeviceDefinitionRow) -> Self {
-        EndDeviceDefinition {
+impl TryFrom<EndDeviceDefinitionRow> for EndDeviceDefinition {
+    type Error = DomainError;
+
+    fn try_from(row: EndDeviceDefinitionRow) -> Result<Self, Self::Error> {
+        let contracts: Vec<PayloadContract> =
+            serde_json::from_value(row.contracts).map_err(|e| {
+                DomainError::RepositoryError(anyhow::anyhow!(
+                    "Failed to deserialize contracts: {}",
+                    e
+                ))
+            })?;
+
+        Ok(EndDeviceDefinition {
             id: row.id,
             organization_id: row.organization_id,
             name: row.name,
-            json_schema: row.json_schema,
-            payload_conversion: row.payload_conversion,
+            contracts,
             created_at: Some(row.created_at),
             updated_at: Some(row.updated_at),
-        }
+        })
     }
 }
 
@@ -63,16 +71,19 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         let now = Utc::now();
 
+        let contracts_json = serde_json::to_value(&input.contracts).map_err(|e| {
+            DomainError::RepositoryError(anyhow::anyhow!("Failed to serialize contracts: {}", e))
+        })?;
+
         let result = conn
             .execute(
-                "INSERT INTO end_device_definitions (id, organization_id, name, json_schema, payload_conversion, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                "INSERT INTO end_device_definitions (id, organization_id, name, contracts, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6)",
                 &[
                     &input.id,
                     &input.organization_id,
                     &input.name,
-                    &input.json_schema,
-                    &input.payload_conversion,
+                    &contracts_json,
                     &now,
                     &now,
                 ],
@@ -94,8 +105,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
             id: input.id,
             organization_id: input.organization_id,
             name: input.name,
-            json_schema: input.json_schema,
-            payload_conversion: input.payload_conversion,
+            contracts: input.contracts,
             created_at: Some(now),
             updated_at: Some(now),
         })
@@ -114,7 +124,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         let row = conn
             .query_opt(
-                "SELECT id, organization_id, name, json_schema, payload_conversion, created_at, updated_at
+                "SELECT id, organization_id, name, contracts, created_at, updated_at
                  FROM end_device_definitions
                  WHERE id = $1 AND organization_id = $2",
                 &[&input.id, &input.organization_id],
@@ -128,12 +138,11 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
                     id: row.get(0),
                     organization_id: row.get(1),
                     name: row.get(2),
-                    json_schema: row.get(3),
-                    payload_conversion: row.get(4),
-                    created_at: row.get(5),
-                    updated_at: row.get(6),
+                    contracts: row.get(3),
+                    created_at: row.get(4),
+                    updated_at: row.get(5),
                 };
-                Ok(Some(def_row.into()))
+                Ok(Some(def_row.try_into()?))
             }
             None => Ok(None),
         }
@@ -163,21 +172,29 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
             param_idx += 1;
         }
 
-        if let Some(ref json_schema) = input.json_schema {
-            query.push_str(&format!(", json_schema = ${}", param_idx));
-            params.push(json_schema);
-            param_idx += 1;
-        }
+        // Serialize contracts if provided
+        let contracts_json = input
+            .contracts
+            .as_ref()
+            .map(|c| {
+                serde_json::to_value(c).map_err(|e| {
+                    DomainError::RepositoryError(anyhow::anyhow!(
+                        "Failed to serialize contracts: {}",
+                        e
+                    ))
+                })
+            })
+            .transpose()?;
 
-        if let Some(ref payload_conversion) = input.payload_conversion {
-            query.push_str(&format!(", payload_conversion = ${}", param_idx));
-            params.push(payload_conversion);
+        if let Some(ref contracts) = contracts_json {
+            query.push_str(&format!(", contracts = ${}", param_idx));
+            params.push(contracts);
             param_idx += 1;
         }
 
         query.push_str(&format!(
             " WHERE id = ${} AND organization_id = ${}
-             RETURNING id, organization_id, name, json_schema, payload_conversion, created_at, updated_at",
+             RETURNING id, organization_id, name, contracts, created_at, updated_at",
             param_idx,
             param_idx + 1
         ));
@@ -195,13 +212,12 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
                     id: row.get(0),
                     organization_id: row.get(1),
                     name: row.get(2),
-                    json_schema: row.get(3),
-                    payload_conversion: row.get(4),
-                    created_at: row.get(5),
-                    updated_at: row.get(6),
+                    contracts: row.get(3),
+                    created_at: row.get(4),
+                    updated_at: row.get(5),
                 };
                 debug!("updated end device definition: {}", input.id);
-                Ok(def_row.into())
+                def_row.try_into()
             }
             None => Err(DomainError::EndDeviceDefinitionNotFound(input.id)),
         }
@@ -235,7 +251,6 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
             }
             Err(e) => {
                 if let Some(db_err) = e.as_db_error() {
-                    // PostgreSQL error code 23503 is foreign_key_violation
                     if db_err.code().code() == "23503" {
                         return Err(DomainError::EndDeviceDefinitionInUse(input.id));
                     }
@@ -258,7 +273,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         let rows = conn
             .query(
-                "SELECT id, organization_id, name, json_schema, payload_conversion, created_at, updated_at
+                "SELECT id, organization_id, name, contracts, created_at, updated_at
                  FROM end_device_definitions
                  WHERE organization_id = $1
                  ORDER BY created_at DESC",
@@ -267,25 +282,22 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
             .await
             .map_err(|e| DomainError::RepositoryError(e.into()))?;
 
-        let definitions = rows
-            .iter()
-            .map(|row| {
-                let def_row = EndDeviceDefinitionRow {
-                    id: row.get(0),
-                    organization_id: row.get(1),
-                    name: row.get(2),
-                    json_schema: row.get(3),
-                    payload_conversion: row.get(4),
-                    created_at: row.get(5),
-                    updated_at: row.get(6),
-                };
-                def_row.into()
-            })
-            .collect();
+        let mut definitions = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let def_row = EndDeviceDefinitionRow {
+                id: row.get(0),
+                organization_id: row.get(1),
+                name: row.get(2),
+                contracts: row.get(3),
+                created_at: row.get(4),
+                updated_at: row.get(5),
+            };
+            definitions.push(def_row.try_into()?);
+        }
 
         debug!(
             "found {} definitions for organization: {}",
-            rows.len(),
+            definitions.len(),
             input.organization_id
         );
 

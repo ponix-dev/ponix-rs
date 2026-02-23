@@ -367,8 +367,7 @@ mod tests {
             id: "def-789".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
-            json_schema: "{}".to_string(),
-            payload_conversion: "cayenne_lpp.decode(payload)".to_string(),
+            contracts: vec![],
             created_at: None,
             updated_at: None,
         };

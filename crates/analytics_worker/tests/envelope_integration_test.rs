@@ -180,8 +180,11 @@ async fn test_full_conversion_flow_cayenne_lpp() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Temperature Sensor Def".to_string(),
         name: "Temperature Sensor".to_string(),
-        payload_conversion: "cayenne_lpp_decode(input)".to_string(),
-        json_schema: "{}".to_string(),
+        contracts: vec![common::domain::PayloadContract {
+            match_expression: "true".to_string(),
+            transform_expression: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: "{}".to_string(),
+        }],
         created_at: None,
         updated_at: None,
     };
@@ -247,7 +250,9 @@ async fn test_full_conversion_flow_custom_transformation() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Multi Sensor Def".to_string(),
         name: "Multi Sensor".to_string(),
-        payload_conversion: r#"
+        contracts: vec![common::domain::PayloadContract {
+            match_expression: "true".to_string(),
+            transform_expression: r#"
             {
                 'temp_c': cayenne_lpp_decode(input).temperature_1,
                 'temp_f': cayenne_lpp_decode(input).temperature_1 * 9.0 / 5.0 + 32.0,
@@ -255,8 +260,9 @@ async fn test_full_conversion_flow_custom_transformation() {
                 'status': 'active'
             }
         "#
-        .to_string(),
-        json_schema: "{}".to_string(),
+            .to_string(),
+            json_schema: "{}".to_string(),
+        }],
         created_at: None,
         updated_at: None,
     };
@@ -362,8 +368,11 @@ async fn test_invalid_cel_expression() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Broken Definition".to_string(),
         name: "Broken Sensor".to_string(),
-        payload_conversion: "invalid{[syntax".to_string(),
-        json_schema: "{}".to_string(),
+        contracts: vec![common::domain::PayloadContract {
+            match_expression: "true".to_string(),
+            transform_expression: "invalid{[syntax".to_string(),
+            json_schema: "{}".to_string(),
+        }],
         created_at: None,
         updated_at: None,
     };
@@ -424,8 +433,7 @@ async fn test_empty_cel_expression() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Unconfigured Definition".to_string(),
         name: "Unconfigured Sensor".to_string(),
-        payload_conversion: "".to_string(),
-        json_schema: "{}".to_string(),
+        contracts: vec![], // Empty contracts - fails garde validation
         created_at: None,
         updated_at: None,
     };
@@ -466,7 +474,7 @@ async fn test_empty_cel_expression() {
     // Act
     let result = service.process_raw_envelope(raw_envelope).await;
 
-    // Assert - garde validates that payload_conversion is non-empty
+    // Assert - garde validates that contracts is non-empty
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
@@ -486,8 +494,11 @@ async fn test_cel_expression_returns_non_object() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Scalar Definition".to_string(),
         name: "Scalar Sensor".to_string(),
-        payload_conversion: "42".to_string(), // Returns number, not object
-        json_schema: "{}".to_string(),
+        contracts: vec![common::domain::PayloadContract {
+            match_expression: "true".to_string(),
+            transform_expression: "42".to_string(), // Returns number, not object
+            json_schema: "{}".to_string(),
+        }],
         created_at: None,
         updated_at: None,
     };

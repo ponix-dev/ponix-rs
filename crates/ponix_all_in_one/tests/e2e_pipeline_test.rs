@@ -345,8 +345,11 @@ async fn create_test_device(
             id: definition_id.clone(),
             organization_id: "test-org-123".to_string(),
             name: "Environmental Sensor Definition".to_string(),
-            json_schema: "{}".to_string(),
-            payload_conversion: cel_expression.to_string(),
+            contracts: vec![common::domain::PayloadContract {
+                match_expression: "true".to_string(),
+                transform_expression: cel_expression.to_string(),
+                json_schema: "{}".to_string(),
+            }],
         })
         .await?;
 

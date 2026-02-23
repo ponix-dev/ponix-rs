@@ -15,7 +15,7 @@ An agentic system that can observe device data, query historical context, consul
 Make the existing ingest path multi-protocol and production-grade before building on it.
 
 - [x] #36 — Device ownership validation before raw envelope publish
-- [ ] #122 — Multi-protocol payload contracts — devices aren't locked to one CEL expression
+- [x] #122 — Multi-protocol payload contracts — devices aren't locked to one CEL expression
 - [ ] #119 — Own the CEL runtime — ability to add IoT-specific functions
 - [ ] #120 — Pre-compiled CEL — removes per-message compilation cost at scale
 - [ ] #26 — RAKwireless decoder — broader hardware support

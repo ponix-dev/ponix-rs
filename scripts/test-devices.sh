@@ -73,8 +73,11 @@ DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Cayenne LPP Temperature Sensor\",
-        \"json_schema\": \"{\\\"type\\\": \\\"object\\\"}\",
-        \"payload_conversion\": \"cayenne_lpp.decode(payload)\"
+        \"contracts\": [{
+            \"match_expression\": \"true\",
+            \"transform_expression\": \"cayenne_lpp_decode(input)\",
+            \"json_schema\": \"{\\\"type\\\": \\\"object\\\"}\"
+        }]
     }")
 
 DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.id // .id // empty')
@@ -111,8 +114,11 @@ UPDATE_DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"id\": \"$DEFINITION_ID\",
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Cayenne LPP Sensor - Updated\",
-        \"json_schema\": \"{\\\"type\\\": \\\"object\\\", \\\"description\\\": \\\"Updated\\\"}\",
-        \"payload_conversion\": \"cayenne_lpp.decode(payload)\"
+        \"contracts\": [{
+            \"match_expression\": \"true\",
+            \"transform_expression\": \"cayenne_lpp_decode(input)\",
+            \"json_schema\": \"{\\\"type\\\": \\\"object\\\", \\\"description\\\": \\\"Updated\\\"}\"
+        }]
     }")
 
 UPDATED_DEF_NAME=$(echo "$UPDATE_DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.name // .name // empty')
@@ -238,8 +244,11 @@ DEF2_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Definition to Delete\",
-        \"json_schema\": \"{}\",
-        \"payload_conversion\": \"input\"
+        \"contracts\": [{
+            \"match_expression\": \"true\",
+            \"transform_expression\": \"input\",
+            \"json_schema\": \"{}\"
+        }]
     }")
 
 DEFINITION2_ID=$(echo "$DEF2_RESPONSE" | jq -r '.endDeviceDefinition.id // .id // empty')

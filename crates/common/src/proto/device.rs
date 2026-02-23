@@ -1,7 +1,8 @@
-use crate::domain::{Device, EndDeviceDefinition};
+use crate::domain::{Device, EndDeviceDefinition, PayloadContract};
 use chrono::{DateTime, Utc};
 use ponix_proto_prost::end_device::v1::{
     EndDevice, EndDeviceDefinition as ProtoEndDeviceDefinition,
+    PayloadContract as ProtoPayloadContract,
 };
 use prost_types::Timestamp;
 
@@ -33,10 +34,31 @@ pub fn to_proto_end_device_definition(def: EndDeviceDefinition) -> ProtoEndDevic
         id: def.id,
         organization_id: def.organization_id,
         name: def.name,
-        json_schema: def.json_schema,
-        payload_conversion: def.payload_conversion,
+        contracts: def
+            .contracts
+            .into_iter()
+            .map(to_proto_payload_contract)
+            .collect(),
         created_at: datetime_to_timestamp(def.created_at),
         updated_at: datetime_to_timestamp(def.updated_at),
+    }
+}
+
+/// Convert domain PayloadContract to protobuf PayloadContract
+pub fn to_proto_payload_contract(contract: PayloadContract) -> ProtoPayloadContract {
+    ProtoPayloadContract {
+        match_expression: contract.match_expression,
+        transform_expression: contract.transform_expression,
+        json_schema: contract.json_schema,
+    }
+}
+
+/// Convert protobuf PayloadContract to domain PayloadContract
+pub fn from_proto_payload_contract(proto: ProtoPayloadContract) -> PayloadContract {
+    PayloadContract {
+        match_expression: proto.match_expression,
+        transform_expression: proto.transform_expression,
+        json_schema: proto.json_schema,
     }
 }
 
@@ -78,8 +100,11 @@ mod tests {
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
-            json_schema: r#"{"type": "object"}"#.to_string(),
-            payload_conversion: "cayenne_lpp.decode(payload)".to_string(),
+            contracts: vec![PayloadContract {
+                match_expression: "true".to_string(),
+                transform_expression: "cayenne_lpp_decode(input)".to_string(),
+                json_schema: r#"{"type": "object"}"#.to_string(),
+            }],
             created_at: Some(now),
             updated_at: Some(now),
         };
@@ -89,9 +114,28 @@ mod tests {
         assert_eq!(proto.id, "def-123");
         assert_eq!(proto.organization_id, "org-456");
         assert_eq!(proto.name, "Test Definition");
-        assert_eq!(proto.json_schema, r#"{"type": "object"}"#);
-        assert_eq!(proto.payload_conversion, "cayenne_lpp.decode(payload)");
+        assert_eq!(proto.contracts.len(), 1);
+        assert_eq!(proto.contracts[0].match_expression, "true");
+        assert_eq!(
+            proto.contracts[0].transform_expression,
+            "cayenne_lpp_decode(input)"
+        );
+        assert_eq!(proto.contracts[0].json_schema, r#"{"type": "object"}"#);
         assert!(proto.created_at.is_some());
         assert!(proto.updated_at.is_some());
+    }
+
+    #[test]
+    fn test_payload_contract_roundtrip() {
+        let contract = PayloadContract {
+            match_expression: "size(input) > 0".to_string(),
+            transform_expression: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: "{}".to_string(),
+        };
+
+        let proto = to_proto_payload_contract(contract.clone());
+        let back = from_proto_payload_contract(proto);
+
+        assert_eq!(back, contract);
     }
 }

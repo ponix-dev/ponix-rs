@@ -153,34 +153,54 @@ impl CelEnvironment {
         )
     )]
     pub fn execute(&self, expression: &str, input: &[u8]) -> Result<JsonValue> {
-        // Parse the CEL expression
+        let cel_value = self.execute_raw(expression, CelValue::from(input.to_vec()))?;
+        let json_result = cel_value_to_json(cel_value)?;
+        debug!("CEL expression executed successfully");
+        Ok(json_result)
+    }
+
+    /// Evaluate a CEL expression that should return a boolean
+    ///
+    /// # Arguments
+    /// * `expression` - CEL expression string that returns a boolean
+    /// * `input` - CelValue to bind as the `input` variable
+    ///
+    /// # Returns
+    /// * `Ok(bool)` - The boolean result
+    /// * `Err(PayloadError)` - If expression doesn't return a boolean or fails
+    pub fn evaluate_bool(&self, expression: &str, input: CelValue) -> Result<bool> {
+        let result = self.execute_raw(expression, input)?;
+        match result {
+            CelValue::Bool(b) => Ok(b),
+            other => Err(PayloadError::CelExecutionError(format!(
+                "Expected boolean result, got {:?}",
+                other.cel_type()
+            ))),
+        }
+    }
+
+    /// Internal: execute a CEL expression with a given CelValue as `input`
+    fn execute_raw(&self, expression: &str, input: CelValue) -> Result<CelValue> {
         let ast = self
             .env
             .parse_only(expression)
             .map_err(|e| PayloadError::CelCompilationError(e.to_string()))?;
 
-        // Create a compiled program
         let program = self
             .env
             .program(&ast)
             .map_err(|e| PayloadError::CelCompilationError(e.to_string()))?;
 
-        // Create activation with input variable
         let mut activation = MapActivation::new();
-        activation.insert("input", CelValue::from(input.to_vec()));
+        activation.insert("input", input);
 
-        // Execute the program
         let result = program.eval(&activation);
 
-        // Check for evaluation errors (cel-core returns errors as values)
         if result.is_error() {
             return Err(PayloadError::CelExecutionError(format!("{}", result)));
         }
 
-        // Convert CEL value to JSON and validate
-        let json_result = cel_value_to_json(result)?;
-        debug!("CEL expression executed successfully");
-        Ok(json_result)
+        Ok(result)
     }
 }
 
@@ -550,6 +570,42 @@ mod tests {
         });
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_evaluate_bool_true() {
+        let env = CelEnvironment::new();
+        let result = env
+            .evaluate_bool("true", CelValue::from(vec![0u8]))
+            .unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_evaluate_bool_false() {
+        let env = CelEnvironment::new();
+        let result = env
+            .evaluate_bool("false", CelValue::from(vec![0u8]))
+            .unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_evaluate_bool_expression() {
+        let env = CelEnvironment::new();
+        // Payload size > 2
+        let result = env
+            .evaluate_bool("size(input) > 2", CelValue::from(vec![1u8, 2, 3, 4]))
+            .unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_evaluate_bool_non_bool_result() {
+        let env = CelEnvironment::new();
+        let result = env.evaluate_bool("42", CelValue::from(vec![0u8]));
+        assert!(result.is_err());
+        assert!(matches!(result, Err(PayloadError::CelExecutionError(_))));
     }
 
     #[test]

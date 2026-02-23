@@ -59,8 +59,9 @@ run_test "test-workspaces.sh" "Workspace Tests"
 run_test "test-devices.sh" "Device Tests"
 run_test "test-gateways.sh" "Gateway Tests"
 
-# MQTT pipeline test
+# MQTT pipeline tests
 run_test "test-mqtt-pipeline.sh" "MQTT Pipeline Test"
+run_test "test-multi-contract-pipeline.sh" "Multi-Contract Pipeline Test"
 
 # Summary
 echo -e "${BLUE}==========================================${NC}"

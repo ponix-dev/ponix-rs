@@ -111,8 +111,11 @@ async fn create_test_definition(
         id: def_id.clone(),
         organization_id: org_id.to_string(),
         name: "Test Definition".to_string(),
-        json_schema: "{}".to_string(),
-        payload_conversion: "cayenne_lpp_decode(input)".to_string(),
+        contracts: vec![common::domain::PayloadContract {
+            match_expression: "true".to_string(),
+            transform_expression: "cayenne_lpp_decode(input)".to_string(),
+            json_schema: "{}".to_string(),
+        }],
     };
     definition_repo.create_definition(input).await.unwrap();
     def_id
@@ -219,11 +222,11 @@ async fn test_get_device_with_definition() {
     assert_eq!(device_with_def.definition_id, definition_id);
     assert_eq!(device_with_def.gateway_id, gateway_id);
     assert_eq!(device_with_def.definition_name, "Test Definition");
+    assert_eq!(device_with_def.contracts.len(), 1);
     assert_eq!(
-        device_with_def.payload_conversion,
+        device_with_def.contracts[0].transform_expression,
         "cayenne_lpp_decode(input)"
     );
-    assert_eq!(device_with_def.json_schema, "{}");
 }
 
 #[tokio::test]
@@ -359,8 +362,11 @@ async fn test_get_device_with_wrong_organization_returns_none() {
         id: def_id.clone(),
         organization_id: "org-1".to_string(),
         name: "Definition for Org 1".to_string(),
-        json_schema: "{}".to_string(),
-        payload_conversion: "test".to_string(),
+        contracts: vec![common::domain::PayloadContract {
+            match_expression: "true".to_string(),
+            transform_expression: "test".to_string(),
+            json_schema: "{}".to_string(),
+        }],
     };
     definition_repo.create_definition(def_input).await.unwrap();
 
