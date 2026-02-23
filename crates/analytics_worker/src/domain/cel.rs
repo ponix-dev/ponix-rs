@@ -74,10 +74,61 @@
 use crate::domain::cayenne_lpp::CayenneLppDecoder;
 use crate::domain::{PayloadDecoder, PayloadError, Result};
 use cel_core::types::{CelType, FunctionDecl, OverloadDecl};
-use cel_core::{Env, EvalError, EvalErrorKind, MapActivation, MapKey, Value as CelValue, ValueMap};
+use cel_core::{
+    Ast, Env, EvalError, EvalErrorKind, MapActivation, MapKey, Value as CelValue, ValueMap,
+};
+use cel_core_proto::{check_result_from_proto, from_parsed_expr, CheckedExpr};
+use prost::Message;
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use tracing::{debug, instrument};
+
+/// Create a CEL environment with standard library, `input` variable, and custom functions.
+///
+/// This is the shared environment setup used by both `CelEnvironment` (runtime execution)
+/// and `CelCompiler` (compile-time expression compilation).
+pub fn create_cel_env() -> Env {
+    let cayenne_lpp_decode = FunctionDecl::new("cayenne_lpp_decode").with_overload(
+        OverloadDecl::function(
+            "cayenne_lpp_decode_bytes",
+            vec![CelType::Bytes],
+            CelType::Dyn,
+        )
+        .with_impl(|args: &[CelValue]| {
+            let bytes: Arc<[u8]> = match &args[0] {
+                CelValue::Bytes(b) => Arc::clone(b),
+                other => {
+                    return CelValue::error(EvalError::new(
+                        EvalErrorKind::InvalidArgument,
+                        format!(
+                            "cayenne_lpp_decode expects bytes, got {:?}",
+                            other.cel_type()
+                        ),
+                    ));
+                }
+            };
+
+            let decoder = CayenneLppDecoder::new();
+            match decoder.decode(&bytes) {
+                Ok(json_value) => match json_to_cel_value(json_value) {
+                    Ok(cel_val) => cel_val,
+                    Err(e) => CelValue::error(EvalError::new(
+                        EvalErrorKind::InvalidArgument,
+                        format!("cayenne_lpp_decode conversion error: {}", e),
+                    )),
+                },
+                Err(e) => CelValue::error(EvalError::new(
+                    EvalErrorKind::InvalidArgument,
+                    format!("cayenne_lpp_decode error: {}", e),
+                )),
+            }
+        }),
+    );
+
+    Env::with_standard_library()
+        .with_variable("input", CelType::Bytes)
+        .with_function(cayenne_lpp_decode)
+}
 
 /// CEL execution environment with registered custom functions
 ///
@@ -91,85 +142,48 @@ pub struct CelEnvironment {
 impl CelEnvironment {
     /// Create a new CEL environment with cayenne_lpp_decode function registered
     pub fn new() -> Self {
-        let cayenne_lpp_decode = FunctionDecl::new("cayenne_lpp_decode").with_overload(
-            OverloadDecl::function(
-                "cayenne_lpp_decode_bytes",
-                vec![CelType::Bytes],
-                CelType::Dyn,
-            )
-            .with_impl(|args: &[CelValue]| {
-                let bytes: Arc<[u8]> = match &args[0] {
-                    CelValue::Bytes(b) => Arc::clone(b),
-                    other => {
-                        return CelValue::error(EvalError::new(
-                            EvalErrorKind::InvalidArgument,
-                            format!(
-                                "cayenne_lpp_decode expects bytes, got {:?}",
-                                other.cel_type()
-                            ),
-                        ));
-                    }
-                };
-
-                let decoder = CayenneLppDecoder::new();
-                match decoder.decode(&bytes) {
-                    Ok(json_value) => match json_to_cel_value(json_value) {
-                        Ok(cel_val) => cel_val,
-                        Err(e) => CelValue::error(EvalError::new(
-                            EvalErrorKind::InvalidArgument,
-                            format!("cayenne_lpp_decode conversion error: {}", e),
-                        )),
-                    },
-                    Err(e) => CelValue::error(EvalError::new(
-                        EvalErrorKind::InvalidArgument,
-                        format!("cayenne_lpp_decode error: {}", e),
-                    )),
-                }
-            }),
-        );
-
-        let env = Env::with_standard_library()
-            .with_variable("input", CelType::Bytes)
-            .with_function(cayenne_lpp_decode);
-
-        Self { env }
+        Self {
+            env: create_cel_env(),
+        }
     }
 
-    /// Execute a CEL expression string with binary input data
+    /// Execute a pre-compiled CEL expression with binary input data
     ///
     /// # Arguments
-    /// * `expression` - CEL expression string (e.g., "cayenne_lpp_decode(input)")
+    /// * `compiled` - Serialized CheckedExpr bytes (from CelCompiler)
+    /// * `source` - Original expression source (for error messages/tracing)
     /// * `input` - Binary payload data
     ///
     /// # Returns
     /// * `Ok(JsonValue)` - Valid JSON output from expression
-    /// * `Err(PayloadError)` - Compilation, execution, or validation error
+    /// * `Err(PayloadError)` - Deserialization, execution, or validation error
     #[instrument(
         name = "cel_execute",
-        skip(self, input),
+        skip(self, compiled, input),
         fields(
-            expression = %expression,
+            source = %source,
             input_size = input.len(),
         )
     )]
-    pub fn execute(&self, expression: &str, input: &[u8]) -> Result<JsonValue> {
-        let cel_value = self.execute_raw(expression, CelValue::from(input.to_vec()))?;
+    pub fn execute(&self, compiled: &[u8], source: &str, input: &[u8]) -> Result<JsonValue> {
+        let cel_value = self.execute_raw(compiled, source, CelValue::from(input.to_vec()))?;
         let json_result = cel_value_to_json(cel_value)?;
         debug!("CEL expression executed successfully");
         Ok(json_result)
     }
 
-    /// Evaluate a CEL expression that should return a boolean
+    /// Evaluate a pre-compiled CEL expression that should return a boolean
     ///
     /// # Arguments
-    /// * `expression` - CEL expression string that returns a boolean
+    /// * `compiled` - Serialized CheckedExpr bytes (from CelCompiler)
+    /// * `source` - Original expression source (for error messages/tracing)
     /// * `input` - CelValue to bind as the `input` variable
     ///
     /// # Returns
     /// * `Ok(bool)` - The boolean result
     /// * `Err(PayloadError)` - If expression doesn't return a boolean or fails
-    pub fn evaluate_bool(&self, expression: &str, input: CelValue) -> Result<bool> {
-        let result = self.execute_raw(expression, input)?;
+    pub fn evaluate_bool(&self, compiled: &[u8], source: &str, input: CelValue) -> Result<bool> {
+        let result = self.execute_raw(compiled, source, input)?;
         match result {
             CelValue::Bool(b) => Ok(b),
             other => Err(PayloadError::CelExecutionError(format!(
@@ -179,12 +193,35 @@ impl CelEnvironment {
         }
     }
 
-    /// Internal: execute a CEL expression with a given CelValue as `input`
-    fn execute_raw(&self, expression: &str, input: CelValue) -> Result<CelValue> {
-        let ast = self
-            .env
-            .parse_only(expression)
-            .map_err(|e| PayloadError::CelCompilationError(e.to_string()))?;
+    /// Internal: deserialize compiled bytes → AST → Program → eval
+    fn execute_raw(&self, compiled: &[u8], source: &str, input: CelValue) -> Result<CelValue> {
+        if compiled.is_empty() {
+            return Err(PayloadError::CelCompilationError(
+                format!("Missing pre-compiled CEL expression for '{}' — contracts must be compiled at write time", source),
+            ));
+        }
+
+        let checked = CheckedExpr::decode(compiled).map_err(|e| {
+            PayloadError::CelCompilationError(format!("Failed to decode compiled expression: {e}"))
+        })?;
+
+        let parsed_expr = checked.expr.as_ref().ok_or_else(|| {
+            PayloadError::CelCompilationError("Missing expr in CheckedExpr".to_string())
+        })?;
+
+        let spanned = from_parsed_expr(&cel_core_proto::ParsedExpr {
+            expr: Some(parsed_expr.clone()),
+            source_info: checked.source_info.clone(),
+        })
+        .map_err(|e| {
+            PayloadError::CelCompilationError(format!("Failed to reconstruct AST: {e}"))
+        })?;
+
+        let check_result = check_result_from_proto(&checked).map_err(|e| {
+            PayloadError::CelCompilationError(format!("Failed to reconstruct type info: {e}"))
+        })?;
+
+        let ast = Ast::new_checked(spanned, source, check_result);
 
         let program = self
             .env
@@ -322,13 +359,19 @@ fn base64_encode(input: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::CelCompiler;
+    use common::cel::CelExpressionCompiler;
+
+    fn compile(expr: &str) -> Vec<u8> {
+        CelCompiler::new().compile(expr).unwrap()
+    }
 
     #[test]
     fn test_basic_cel_expression() {
         let env = CelEnvironment::new();
 
         // Simple arithmetic expression (no input needed)
-        let result = env.execute("1 + 1", &[]).unwrap();
+        let result = env.execute(&compile("1 + 1"), "1 + 1", &[]).unwrap();
         assert_eq!(result, JsonValue::Number(2.into()));
     }
 
@@ -338,20 +381,27 @@ mod tests {
 
         // Test various CEL value types
         assert_eq!(
-            env.execute("'hello'", &[]).unwrap(),
+            env.execute(&compile("'hello'"), "'hello'", &[]).unwrap(),
             JsonValue::String("hello".to_string())
         );
 
-        assert_eq!(env.execute("true", &[]).unwrap(), JsonValue::Bool(true));
+        assert_eq!(
+            env.execute(&compile("true"), "true", &[]).unwrap(),
+            JsonValue::Bool(true)
+        );
 
-        assert_eq!(env.execute("null", &[]).unwrap(), JsonValue::Null);
+        assert_eq!(
+            env.execute(&compile("null"), "null", &[]).unwrap(),
+            JsonValue::Null
+        );
     }
 
     #[test]
     fn test_cel_map_to_json() {
         let env = CelEnvironment::new();
 
-        let result = env.execute("{'key': 'value', 'number': 42}", &[]).unwrap();
+        let expr = "{'key': 'value', 'number': 42}";
+        let result = env.execute(&compile(expr), expr, &[]).unwrap();
 
         let expected = serde_json::json!({
             "key": "value",
@@ -362,21 +412,51 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_expression() {
-        let env = CelEnvironment::new();
-
-        let result = env.execute("invalid syntax here!", &[]);
+    fn test_invalid_expression_fails_at_compile() {
+        // Invalid expressions now fail at compile time, not at execute time
+        let compiler = CelCompiler::new();
+        let result = compiler.compile("invalid syntax here!");
         assert!(result.is_err());
-        assert!(matches!(result, Err(PayloadError::CelCompilationError(_))));
     }
 
     #[test]
-    fn test_undefined_variable() {
+    fn test_empty_compiled_bytes_rejects_with_clear_error() {
         let env = CelEnvironment::new();
 
-        let result = env.execute("undefined_var", &[]);
+        let result = env.execute(&[], "cayenne_lpp_decode(input)", &[]);
         assert!(result.is_err());
-        assert!(matches!(result, Err(PayloadError::CelExecutionError(_))));
+        let err = result.unwrap_err();
+        assert!(matches!(err, PayloadError::CelCompilationError(_)));
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Missing pre-compiled CEL expression"),
+            "Expected clear error message, got: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_empty_compiled_bytes_rejects_evaluate_bool() {
+        let env = CelEnvironment::new();
+
+        let result = env.evaluate_bool(&[], "true", CelValue::from(vec![0u8]));
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("Missing pre-compiled CEL expression"),
+            "Expected clear error message, got: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_invalid_compiled_bytes() {
+        let env = CelEnvironment::new();
+
+        // Garbage bytes should fail to deserialize
+        let result = env.execute(&[0xFF, 0xFE, 0xFD], "bad bytes", &[]);
+        assert!(result.is_err());
+        assert!(matches!(result, Err(PayloadError::CelCompilationError(_))));
     }
 
     #[test]
@@ -386,7 +466,8 @@ mod tests {
         // Temperature sensor: Channel 1, Type 103 (temp), Value 0x0110 (27.2°C)
         let payload = vec![0x01, 0x67, 0x01, 0x10];
 
-        let result = env.execute("cayenne_lpp_decode(input)", &payload).unwrap();
+        let expr = "cayenne_lpp_decode(input)";
+        let result = env.execute(&compile(expr), expr, &payload).unwrap();
 
         let expected = serde_json::json!({
             "temperature_1": 27.2
@@ -434,7 +515,8 @@ mod tests {
             0x01, 0x68, 0x78, // Channel 1, Humidity, 60.0%
         ];
 
-        let result = env.execute("cayenne_lpp_decode(input)", &payload).unwrap();
+        let expr = "cayenne_lpp_decode(input)";
+        let result = env.execute(&compile(expr), expr, &payload).unwrap();
 
         let expected = serde_json::json!({
             "temperature_0": 25.0,
@@ -451,7 +533,8 @@ mod tests {
         // Invalid: insufficient data
         let payload = vec![0x01, 0x67]; // Missing data bytes
 
-        let result = env.execute("cayenne_lpp_decode(input)", &payload);
+        let expr = "cayenne_lpp_decode(input)";
+        let result = env.execute(&compile(expr), expr, &payload);
         assert!(result.is_err());
     }
 
@@ -462,7 +545,8 @@ mod tests {
         // Invalid: unsupported sensor type 0xFF
         let payload = vec![0x01, 0xFF, 0x00, 0x00];
 
-        let result = env.execute("cayenne_lpp_decode(input)", &payload);
+        let expr = "cayenne_lpp_decode(input)";
+        let result = env.execute(&compile(expr), expr, &payload);
         assert!(result.is_err());
     }
 
@@ -486,7 +570,9 @@ mod tests {
             }
         "#;
 
-        let result = env.execute(expression, &payload).unwrap();
+        let result = env
+            .execute(&compile(expression), expression, &payload)
+            .unwrap();
 
         let expected = serde_json::json!({
             "greenhouse_temperature": 25.0,
@@ -527,7 +613,9 @@ mod tests {
             }
         "#;
 
-        let result = env.execute(expression, &payload).unwrap();
+        let result = env
+            .execute(&compile(expression), expression, &payload)
+            .unwrap();
 
         let expected = serde_json::json!({
             "device_id": "greenhouse-001",
@@ -562,7 +650,9 @@ mod tests {
                 : {'status': 'comfortable', 'temp_celsius': cayenne_lpp_decode(input).temperature_0}
         "#;
 
-        let result = env.execute(expression, &payload).unwrap();
+        let result = env
+            .execute(&compile(expression), expression, &payload)
+            .unwrap();
 
         let expected = serde_json::json!({
             "status": "comfortable",
@@ -576,7 +666,7 @@ mod tests {
     fn test_evaluate_bool_true() {
         let env = CelEnvironment::new();
         let result = env
-            .evaluate_bool("true", CelValue::from(vec![0u8]))
+            .evaluate_bool(&compile("true"), "true", CelValue::from(vec![0u8]))
             .unwrap();
         assert!(result);
     }
@@ -585,7 +675,7 @@ mod tests {
     fn test_evaluate_bool_false() {
         let env = CelEnvironment::new();
         let result = env
-            .evaluate_bool("false", CelValue::from(vec![0u8]))
+            .evaluate_bool(&compile("false"), "false", CelValue::from(vec![0u8]))
             .unwrap();
         assert!(!result);
     }
@@ -594,8 +684,9 @@ mod tests {
     fn test_evaluate_bool_expression() {
         let env = CelEnvironment::new();
         // Payload size > 2
+        let expr = "size(input) > 2";
         let result = env
-            .evaluate_bool("size(input) > 2", CelValue::from(vec![1u8, 2, 3, 4]))
+            .evaluate_bool(&compile(expr), expr, CelValue::from(vec![1u8, 2, 3, 4]))
             .unwrap();
         assert!(result);
     }
@@ -603,7 +694,7 @@ mod tests {
     #[test]
     fn test_evaluate_bool_non_bool_result() {
         let env = CelEnvironment::new();
-        let result = env.evaluate_bool("42", CelValue::from(vec![0u8]));
+        let result = env.evaluate_bool(&compile("42"), "42", CelValue::from(vec![0u8]));
         assert!(result.is_err());
         assert!(matches!(result, Err(PayloadError::CelExecutionError(_))));
     }
@@ -628,7 +719,9 @@ mod tests {
             })[0]
         "#;
 
-        let result = env.execute(expression, &payload).unwrap();
+        let result = env
+            .execute(&compile(expression), expression, &payload)
+            .unwrap();
 
         let expected = serde_json::json!({
             "greenhouse_temperature": 25.0,
@@ -638,5 +731,35 @@ mod tests {
         });
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_compile_serialize_deserialize_execute_roundtrip() {
+        let env = CelEnvironment::new();
+
+        let expression = "cayenne_lpp_decode(input)";
+        let payload = vec![0x01, 0x67, 0x01, 0x10]; // Temperature: 27.2°C
+
+        // Compile to bytes
+        let compiled_bytes = compile(expression);
+
+        // Simulate serialization roundtrip: clone the bytes as if they were
+        // stored in a database and retrieved later
+        let serialized = compiled_bytes.clone();
+        let deserialized = serialized;
+
+        // Execute with the original compiled bytes
+        let result1 = env.execute(&compiled_bytes, expression, &payload).unwrap();
+
+        // Execute with the deserialized bytes
+        let result2 = env.execute(&deserialized, expression, &payload).unwrap();
+
+        let expected = serde_json::json!({
+            "temperature_1": 27.2
+        });
+
+        assert_eq!(result1, expected);
+        assert_eq!(result2, expected);
+        assert_eq!(result1, result2);
     }
 }

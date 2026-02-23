@@ -54,11 +54,15 @@ pub fn to_proto_payload_contract(contract: PayloadContract) -> ProtoPayloadContr
 }
 
 /// Convert protobuf PayloadContract to domain PayloadContract
+///
+/// Compiled bytes are not stored in proto — they are populated by the service layer at write time.
 pub fn from_proto_payload_contract(proto: ProtoPayloadContract) -> PayloadContract {
     PayloadContract {
         match_expression: proto.match_expression,
         transform_expression: proto.transform_expression,
         json_schema: proto.json_schema,
+        compiled_match: vec![],
+        compiled_transform: vec![],
     }
 }
 
@@ -104,6 +108,8 @@ mod tests {
                 match_expression: "true".to_string(),
                 transform_expression: "cayenne_lpp_decode(input)".to_string(),
                 json_schema: r#"{"type": "object"}"#.to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             }],
             created_at: Some(now),
             updated_at: Some(now),
@@ -131,6 +137,8 @@ mod tests {
             match_expression: "size(input) > 0".to_string(),
             transform_expression: "cayenne_lpp_decode(input)".to_string(),
             json_schema: "{}".to_string(),
+            compiled_match: vec![],
+            compiled_transform: vec![],
         };
 
         let proto = to_proto_payload_contract(contract.clone());

@@ -3,12 +3,30 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+mod base64_bytes {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(bytes: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&STANDARD.encode(bytes))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+        let s = String::deserialize(d)?;
+        STANDARD.decode(s).map_err(serde::de::Error::custom)
+    }
+}
+
 /// A single payload processing contract: match -> transform -> validate
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayloadContract {
     pub match_expression: String,
     pub transform_expression: String,
     pub json_schema: String,
+    #[serde(with = "base64_bytes")]
+    pub compiled_match: Vec<u8>,
+    #[serde(with = "base64_bytes")]
+    pub compiled_transform: Vec<u8>,
 }
 
 /// Domain representation of an End Device Definition

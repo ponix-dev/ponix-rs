@@ -101,6 +101,8 @@ mod tests {
                 match_expression: "true".to_string(),
                 transform_expression: "cayenne_lpp_decode(input)".to_string(),
                 json_schema: "{}".to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             }],
             created_at: None,
             updated_at: None,

@@ -101,10 +101,13 @@ async fn main() {
         postgres_repos.gateway.clone(),
         authorization_service.clone(),
     ));
+    let cel_compiler: Arc<dyn common::cel::CelExpressionCompiler> =
+        Arc::new(analytics_worker::domain::CelCompiler::new());
     let definition_service = Arc::new(EndDeviceDefinitionService::new(
         postgres_repos.definition.clone(),
         postgres_repos.organization.clone(),
         authorization_service.clone(),
+        cel_compiler,
     ));
     let organization_service = Arc::new(OrganizationService::new(
         postgres_repos.organization.clone(),

@@ -22,6 +22,7 @@ async-nats.workspace = true
 tower.workspace = true
 clickhouse.workspace = true
 cel-core.workspace = true
+cel-core-proto.workspace = true
 
 ponix-proto-prost.workspace = true
 

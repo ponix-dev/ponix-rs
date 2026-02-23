@@ -349,6 +349,8 @@ async fn create_test_device(
                 match_expression: "true".to_string(),
                 transform_expression: cel_expression.to_string(),
                 json_schema: "{}".to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             }],
         })
         .await?;

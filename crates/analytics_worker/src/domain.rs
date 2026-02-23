@@ -1,5 +1,6 @@
 mod cayenne_lpp;
 mod cel;
+mod cel_compiler;
 mod cel_converter;
 mod error;
 mod payload_converter;
@@ -9,6 +10,7 @@ mod raw_envelope_service;
 
 pub use cayenne_lpp::*;
 pub use cel::*;
+pub use cel_compiler::*;
 pub use cel_converter::*;
 pub use error::*;
 pub use payload_converter::*;
