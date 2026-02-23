@@ -99,8 +99,11 @@ DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Cayenne LPP Temperature Sensor\",
-        \"json_schema\": \"{}\",
-        \"payload_conversion\": \"cayenne_lpp_decode(input)\"
+        \"contracts\": [{
+            \"match_expression\": \"true\",
+            \"transform_expression\": \"cayenne_lpp_decode(input)\",
+            \"json_schema\": \"{}\"
+        }]
     }")
 
 DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.id // .id // empty')

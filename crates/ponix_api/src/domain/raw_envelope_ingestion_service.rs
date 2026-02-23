@@ -88,6 +88,7 @@ mod tests {
     use common::domain::{DeviceWithDefinition, MockDeviceRepository, MockRawEnvelopeProducer};
 
     fn create_test_device() -> DeviceWithDefinition {
+        use common::domain::PayloadContract;
         DeviceWithDefinition {
             device_id: "device-123".to_string(),
             organization_id: "org-456".to_string(),
@@ -96,8 +97,11 @@ mod tests {
             gateway_id: "gw-001".to_string(),
             definition_name: "Test Definition".to_string(),
             name: "Test Device".to_string(),
-            payload_conversion: "cayenne_lpp_decode(input)".to_string(),
-            json_schema: "{}".to_string(),
+            contracts: vec![PayloadContract {
+                match_expression: "true".to_string(),
+                transform_expression: "cayenne_lpp_decode(input)".to_string(),
+                json_schema: "{}".to_string(),
+            }],
             created_at: None,
             updated_at: None,
         }

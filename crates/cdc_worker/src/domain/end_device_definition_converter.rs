@@ -1,7 +1,9 @@
 use crate::domain::CdcConverter;
 use async_trait::async_trait;
 use bytes::Bytes;
-use ponix_proto_prost::end_device::v1::EndDeviceDefinition;
+use ponix_proto_prost::end_device::v1::{
+    EndDeviceDefinition, PayloadContract as ProtoPayloadContract,
+};
 use prost::Message;
 use serde_json::Value;
 
@@ -37,17 +39,21 @@ impl EndDeviceDefinitionConverter {
             .ok_or_else(|| anyhow::anyhow!("Missing name"))?
             .to_string();
 
-        let json_schema = data
-            .get("json_schema")
-            .and_then(|v| v.as_str())
-            .unwrap_or("{}")
-            .to_string();
-
-        let payload_conversion = data
-            .get("payload_conversion")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        // Parse contracts from JSONB column (comes as a JSON string or array in CDC)
+        let contracts = match data.get("contracts") {
+            Some(Value::Array(arr)) => arr
+                .iter()
+                .map(value_to_proto_contract)
+                .collect::<anyhow::Result<Vec<_>>>()?,
+            Some(Value::String(s)) => {
+                // CDC may send JSONB as a string that needs parsing
+                let arr: Vec<Value> = serde_json::from_str(s)?;
+                arr.iter()
+                    .map(value_to_proto_contract)
+                    .collect::<anyhow::Result<Vec<_>>>()?
+            }
+            _ => vec![],
+        };
 
         let created_at = data
             .get("created_at")
@@ -63,8 +69,7 @@ impl EndDeviceDefinitionConverter {
             id,
             organization_id,
             name,
-            json_schema,
-            payload_conversion,
+            contracts,
             created_at,
             updated_at,
         })
@@ -89,6 +94,26 @@ impl CdcConverter for EndDeviceDefinitionConverter {
     }
 }
 
+fn value_to_proto_contract(c: &Value) -> anyhow::Result<ProtoPayloadContract> {
+    Ok(ProtoPayloadContract {
+        match_expression: c
+            .get("match_expression")
+            .and_then(|v| v.as_str())
+            .unwrap_or("true")
+            .to_string(),
+        transform_expression: c
+            .get("transform_expression")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        json_schema: c
+            .get("json_schema")
+            .and_then(|v| v.as_str())
+            .unwrap_or("{}")
+            .to_string(),
+    })
+}
+
 fn parse_timestamp(s: &str) -> anyhow::Result<prost_types::Timestamp> {
     use chrono::DateTime;
 
@@ -111,8 +136,13 @@ mod tests {
             "id": "def-123",
             "organization_id": "org-1",
             "name": "Test Definition",
-            "json_schema": r#"{"type": "object"}"#,
-            "payload_conversion": "cayenne_lpp.decode(payload)",
+            "contracts": [
+                {
+                    "match_expression": "true",
+                    "transform_expression": "cayenne_lpp_decode(input)",
+                    "json_schema": "{\"type\": \"object\"}"
+                }
+            ],
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z"
         });
@@ -127,8 +157,12 @@ mod tests {
         assert_eq!(decoded.id, "def-123");
         assert_eq!(decoded.organization_id, "org-1");
         assert_eq!(decoded.name, "Test Definition");
-        assert_eq!(decoded.json_schema, r#"{"type": "object"}"#);
-        assert_eq!(decoded.payload_conversion, "cayenne_lpp.decode(payload)");
+        assert_eq!(decoded.contracts.len(), 1);
+        assert_eq!(decoded.contracts[0].match_expression, "true");
+        assert_eq!(
+            decoded.contracts[0].transform_expression,
+            "cayenne_lpp_decode(input)"
+        );
     }
 
     #[tokio::test]
@@ -147,8 +181,28 @@ mod tests {
 
         let bytes = result.unwrap();
         let decoded = EndDeviceDefinition::decode(bytes).unwrap();
-        assert_eq!(decoded.json_schema, "{}");
-        assert_eq!(decoded.payload_conversion, "");
+        assert!(decoded.contracts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_convert_insert_contracts_as_string() {
+        let converter = EndDeviceDefinitionConverter::new();
+        let data = json!({
+            "id": "def-123",
+            "organization_id": "org-1",
+            "name": "Test Definition",
+            "contracts": "[{\"match_expression\":\"true\",\"transform_expression\":\"cayenne_lpp_decode(input)\",\"json_schema\":\"{}\"}]",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        });
+
+        let result = converter.convert_insert(data).await;
+        assert!(result.is_ok());
+
+        let bytes = result.unwrap();
+        let decoded = EndDeviceDefinition::decode(bytes).unwrap();
+        assert_eq!(decoded.contracts.len(), 1);
+        assert_eq!(decoded.contracts[0].match_expression, "true");
     }
 
     #[tokio::test]
@@ -163,8 +217,13 @@ mod tests {
             "id": "def-123",
             "organization_id": "org-1",
             "name": "Updated Definition",
-            "json_schema": r#"{"type": "array"}"#,
-            "payload_conversion": "updated_conversion()",
+            "contracts": [
+                {
+                    "match_expression": "true",
+                    "transform_expression": "updated_conversion()",
+                    "json_schema": "{\"type\": \"array\"}"
+                }
+            ],
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-02T00:00:00Z"
         });
@@ -175,7 +234,7 @@ mod tests {
         let bytes = result.unwrap();
         let decoded = EndDeviceDefinition::decode(bytes).unwrap();
         assert_eq!(decoded.name, "Updated Definition");
-        assert_eq!(decoded.json_schema, r#"{"type": "array"}"#);
+        assert_eq!(decoded.contracts.len(), 1);
     }
 
     #[tokio::test]

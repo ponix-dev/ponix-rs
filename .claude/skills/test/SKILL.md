@@ -20,7 +20,7 @@ If the user provided an argument or context clues, map it to a variant. Otherwis
 | **all** | `mise run test:all` | Docker running |
 | **watch** | `mise run test:watch` | None — continuous unit test feedback |
 | **watch:integration** | `mise run test:integration:watch` | Docker running |
-| **e2e** | `mise run test:e2e` | Running service (`tilt up` or `docker-compose up`) |
+| **e2e** | `mise run test:e2e` | Running service — run `tilt ci` first to start the environment |
 
 **Argument mapping examples:**
 - `/test` → ask user or default to unit

@@ -3,7 +3,7 @@ use common::domain::{
     CreateEndDeviceDefinitionRepoInput, DeleteEndDeviceDefinitionRepoInput, DomainError,
     DomainResult, EndDeviceDefinition, EndDeviceDefinitionRepository,
     GetEndDeviceDefinitionRepoInput, GetOrganizationRepoInput, ListEndDeviceDefinitionsRepoInput,
-    OrganizationRepository, UpdateEndDeviceDefinitionRepoInput,
+    OrganizationRepository, PayloadContract, UpdateEndDeviceDefinitionRepoInput,
 };
 use common::jsonschema::validate_json_schema;
 use garde::Validate;
@@ -19,10 +19,8 @@ pub struct CreateEndDeviceDefinitionRequest {
     pub organization_id: String,
     #[garde(length(min = 1))]
     pub name: String,
-    #[garde(skip)] // Validated separately with JSON Schema validator
-    pub json_schema: String,
-    #[garde(skip)] // payload_conversion can be empty
-    pub payload_conversion: String,
+    #[garde(length(min = 1))]
+    pub contracts: Vec<PayloadContract>,
 }
 
 /// Service request for getting a definition
@@ -47,10 +45,8 @@ pub struct UpdateEndDeviceDefinitionRequest {
     pub organization_id: String,
     #[garde(inner(length(min = 1)))]
     pub name: Option<String>,
-    #[garde(skip)] // Validated separately with JSON Schema validator
-    pub json_schema: Option<String>,
-    #[garde(skip)] // payload_conversion can be empty
-    pub payload_conversion: Option<String>,
+    #[garde(skip)] // Contracts validated separately
+    pub contracts: Option<Vec<PayloadContract>>,
 }
 
 /// Service request for deleting a definition
@@ -100,15 +96,17 @@ impl EndDeviceDefinitionService {
     ) -> DomainResult<EndDeviceDefinition> {
         common::garde::validate_struct(&request)?;
 
-        // Validate JSON Schema syntax
-        validate_json_schema(&request.json_schema)?;
+        // Validate each contract's JSON Schema syntax
+        for contract in &request.contracts {
+            validate_json_schema(&contract.json_schema)?;
+        }
 
         // Check authorization
         self.authorization_provider
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device, // Using Device resource for now
+                Resource::Device,
                 Action::Create,
             )
             .await?;
@@ -125,8 +123,7 @@ impl EndDeviceDefinitionService {
             id,
             organization_id: request.organization_id,
             name: request.name,
-            json_schema: request.json_schema,
-            payload_conversion: request.payload_conversion,
+            contracts: request.contracts,
         };
 
         self.definition_repository
@@ -168,9 +165,11 @@ impl EndDeviceDefinitionService {
     ) -> DomainResult<EndDeviceDefinition> {
         common::garde::validate_struct(&request)?;
 
-        // Validate JSON Schema if provided
-        if let Some(ref schema) = request.json_schema {
-            validate_json_schema(schema)?;
+        // Validate each contract's JSON Schema if contracts provided
+        if let Some(ref contracts) = request.contracts {
+            for contract in contracts {
+                validate_json_schema(&contract.json_schema)?;
+            }
         }
 
         self.authorization_provider
@@ -186,8 +185,7 @@ impl EndDeviceDefinitionService {
             id: request.id,
             organization_id: request.organization_id,
             name: request.name,
-            json_schema: request.json_schema,
-            payload_conversion: request.payload_conversion,
+            contracts: request.contracts,
         };
 
         self.definition_repository
@@ -295,7 +293,6 @@ mod tests {
         let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
 
-        // Mock organization exists
         let org = Organization {
             id: "org-456".to_string(),
             name: "Test Org".to_string(),
@@ -313,8 +310,11 @@ mod tests {
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
-            json_schema: r#"{"type": "object"}"#.to_string(),
-            payload_conversion: "cayenne_lpp.decode(payload)".to_string(),
+            contracts: vec![PayloadContract {
+                match_expression: "true".to_string(),
+                transform_expression: "cayenne_lpp_decode(input)".to_string(),
+                json_schema: r#"{"type": "object"}"#.to_string(),
+            }],
             created_at: None,
             updated_at: None,
         };
@@ -334,8 +334,11 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
-            json_schema: r#"{"type": "object"}"#.to_string(),
-            payload_conversion: "cayenne_lpp.decode(payload)".to_string(),
+            contracts: vec![PayloadContract {
+                match_expression: "true".to_string(),
+                transform_expression: "cayenne_lpp_decode(input)".to_string(),
+                json_schema: r#"{"type": "object"}"#.to_string(),
+            }],
         };
 
         let result = service.create_definition(request).await;
@@ -343,7 +346,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_definition_invalid_json_schema() {
+    async fn test_create_definition_invalid_json_schema_in_contract() {
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
@@ -357,8 +360,11 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
-            json_schema: "not valid json".to_string(),
-            payload_conversion: "".to_string(),
+            contracts: vec![PayloadContract {
+                match_expression: "true".to_string(),
+                transform_expression: "cayenne_lpp_decode(input)".to_string(),
+                json_schema: "not valid json".to_string(),
+            }],
         };
 
         let result = service.create_definition(request).await;
@@ -384,8 +390,7 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "".to_string(),
-            json_schema: "{}".to_string(),
-            payload_conversion: "".to_string(),
+            contracts: vec![],
         };
 
         let result = service.create_definition(request).await;
@@ -405,8 +410,7 @@ mod tests {
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
-            json_schema: "{}".to_string(),
-            payload_conversion: "".to_string(),
+            contracts: vec![],
             created_at: None,
             updated_at: None,
         };
@@ -472,8 +476,7 @@ mod tests {
                 id: "def-1".to_string(),
                 organization_id: "org-456".to_string(),
                 name: "Definition 1".to_string(),
-                json_schema: "{}".to_string(),
-                payload_conversion: "".to_string(),
+                contracts: vec![],
                 created_at: None,
                 updated_at: None,
             },
@@ -481,8 +484,7 @@ mod tests {
                 id: "def-2".to_string(),
                 organization_id: "org-456".to_string(),
                 name: "Definition 2".to_string(),
-                json_schema: "{}".to_string(),
-                payload_conversion: "".to_string(),
+                contracts: vec![],
                 created_at: None,
                 updated_at: None,
             },
@@ -510,7 +512,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_definition_with_invalid_schema() {
+    async fn test_update_definition_with_invalid_schema_in_contract() {
         let mock_def_repo = MockEndDeviceDefinitionRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
@@ -525,8 +527,11 @@ mod tests {
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),
             name: None,
-            json_schema: Some("invalid json".to_string()),
-            payload_conversion: None,
+            contracts: Some(vec![PayloadContract {
+                match_expression: "true".to_string(),
+                transform_expression: "cayenne_lpp_decode(input)".to_string(),
+                json_schema: "invalid json".to_string(),
+            }]),
         };
 
         let result = service.update_definition(request).await;

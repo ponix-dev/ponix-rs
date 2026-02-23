@@ -1,16 +1,24 @@
 use crate::domain::result::DomainResult;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+/// A single payload processing contract: match -> transform -> validate
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PayloadContract {
+    pub match_expression: String,
+    pub transform_expression: String,
+    pub json_schema: String,
+}
 
 /// Domain representation of an End Device Definition
-/// Contains JSON Schema for payload validation and payload conversion logic
+/// Contains ordered payload contracts for processing device data
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EndDeviceDefinition {
     pub id: String,
     pub organization_id: String,
     pub name: String,
-    pub json_schema: String,
-    pub payload_conversion: String,
+    pub contracts: Vec<PayloadContract>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
@@ -21,8 +29,7 @@ pub struct CreateEndDeviceDefinitionRepoInput {
     pub id: String,
     pub organization_id: String,
     pub name: String,
-    pub json_schema: String,
-    pub payload_conversion: String,
+    pub contracts: Vec<PayloadContract>,
 }
 
 /// Repository input for retrieving a definition
@@ -38,8 +45,7 @@ pub struct UpdateEndDeviceDefinitionRepoInput {
     pub id: String,
     pub organization_id: String,
     pub name: Option<String>,
-    pub json_schema: Option<String>,
-    pub payload_conversion: Option<String>,
+    pub contracts: Option<Vec<PayloadContract>>,
 }
 
 /// Repository input for deleting a definition

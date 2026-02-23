@@ -1,7 +1,7 @@
 use crate::domain::{
     CreateDeviceRepoInput, Device, DeviceRepository, DeviceWithDefinition, DomainError,
     DomainResult, GetDeviceRepoInput, GetDeviceWithDefinitionRepoInput,
-    ListDevicesByGatewayRepoInput, ListDevicesRepoInput,
+    ListDevicesByGatewayRepoInput, ListDevicesRepoInput, PayloadContract,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -48,28 +48,34 @@ pub struct DeviceWithDefinitionRow {
     pub gateway_id: String,
     pub definition_name: String,
     pub device_name: String,
-    pub payload_conversion: String,
-    pub json_schema: String,
+    pub contracts: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 /// Convert database DeviceWithDefinitionRow to domain DeviceWithDefinition
-impl From<DeviceWithDefinitionRow> for DeviceWithDefinition {
-    fn from(row: DeviceWithDefinitionRow) -> Self {
-        DeviceWithDefinition {
-            device_id: row.device_id,
-            organization_id: row.organization_id,
-            workspace_id: row.workspace_id,
-            definition_id: row.definition_id,
-            gateway_id: row.gateway_id,
-            definition_name: row.definition_name,
-            name: row.device_name,
-            payload_conversion: row.payload_conversion,
-            json_schema: row.json_schema,
-            created_at: Some(row.created_at),
-            updated_at: Some(row.updated_at),
-        }
+impl DeviceWithDefinitionRow {
+    fn into_domain(self) -> Result<DeviceWithDefinition, DomainError> {
+        let contracts: Vec<PayloadContract> =
+            serde_json::from_value(self.contracts).map_err(|e| {
+                DomainError::RepositoryError(anyhow::anyhow!(
+                    "Failed to deserialize contracts: {}",
+                    e
+                ))
+            })?;
+
+        Ok(DeviceWithDefinition {
+            device_id: self.device_id,
+            organization_id: self.organization_id,
+            workspace_id: self.workspace_id,
+            definition_id: self.definition_id,
+            gateway_id: self.gateway_id,
+            definition_name: self.definition_name,
+            name: self.device_name,
+            contracts,
+            created_at: Some(self.created_at),
+            updated_at: Some(self.updated_at),
+        })
     }
 }
 
@@ -239,7 +245,7 @@ impl DeviceRepository for PostgresDeviceRepository {
             .query_opt(
                 "SELECT d.device_id, d.organization_id, d.workspace_id, d.definition_id, d.gateway_id,
                         def.name as definition_name, d.device_name,
-                        def.payload_conversion, def.json_schema,
+                        def.contracts,
                         d.created_at, d.updated_at
                  FROM devices d
                  INNER JOIN end_device_definitions def ON d.definition_id = def.id
@@ -259,13 +265,12 @@ impl DeviceRepository for PostgresDeviceRepository {
                     gateway_id: row.get(4),
                     definition_name: row.get(5),
                     device_name: row.get(6),
-                    payload_conversion: row.get(7),
-                    json_schema: row.get(8),
-                    created_at: row.get(9),
-                    updated_at: row.get(10),
+                    contracts: row.get(7),
+                    created_at: row.get(8),
+                    updated_at: row.get(9),
                 };
                 debug!("found device with definition: {}", joined_row.device_id);
-                Ok(Some(joined_row.into()))
+                joined_row.into_domain().map(Some)
             }
             None => Ok(None),
         }

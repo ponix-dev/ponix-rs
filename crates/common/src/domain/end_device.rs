@@ -1,3 +1,4 @@
+use crate::domain::end_device_definition::PayloadContract;
 use crate::domain::result::DomainResult;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -36,9 +37,7 @@ pub struct DeviceWithDefinition {
     #[garde(skip)]
     pub name: String,
     #[garde(length(min = 1))]
-    pub payload_conversion: String,
-    #[garde(length(min = 1))]
-    pub json_schema: String,
+    pub contracts: Vec<PayloadContract>,
     #[garde(skip)]
     pub created_at: Option<DateTime<Utc>>,
     #[garde(skip)]
@@ -101,7 +100,7 @@ pub trait DeviceRepository: Send + Sync {
     async fn list_devices(&self, input: ListDevicesRepoInput) -> DomainResult<Vec<Device>>;
 
     /// Get a device with its definition data in a single query (JOIN)
-    /// Returns device info plus definition's payload_conversion and json_schema
+    /// Returns device info plus definition's protocol and contracts
     async fn get_device_with_definition(
         &self,
         input: GetDeviceWithDefinitionRepoInput,
