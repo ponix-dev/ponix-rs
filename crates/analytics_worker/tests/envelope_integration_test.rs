@@ -1,9 +1,7 @@
 #![cfg(feature = "integration-tests")]
 
-use analytics_worker::domain::CelCompiler;
-use analytics_worker::domain::CelPayloadConverter;
-use analytics_worker::domain::RawEnvelopeService;
-use common::cel::CelExpressionCompiler;
+use analytics_worker::domain::{CelPayloadConverter, RawEnvelopeService};
+use common::cel::{CelCompiler, CelExpressionCompiler};
 use common::domain::{DomainError, PayloadContract, RawEnvelope};
 use common::jsonschema::JsonSchemaValidator;
 use std::sync::Arc;

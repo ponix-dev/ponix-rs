@@ -71,8 +71,8 @@
 //! - **Execution errors**: Undefined variables, type mismatches, decoder failures
 //! - **Validation errors**: Output is not valid JSON
 
-use crate::domain::cayenne_lpp::CayenneLppDecoder;
-use crate::domain::{PayloadDecoder, PayloadError, Result};
+use crate::cel::cayenne_lpp::CayenneLppDecoder;
+use crate::cel::{PayloadDecoder, PayloadError, Result};
 use cel_core::types::{CelType, FunctionDecl, OverloadDecl};
 use cel_core::{
     Ast, Env, EvalError, EvalErrorKind, MapActivation, MapKey, Value as CelValue, ValueMap,
@@ -359,8 +359,7 @@ fn base64_encode(input: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::CelCompiler;
-    use common::cel::CelExpressionCompiler;
+    use crate::cel::{CelCompiler, CelExpressionCompiler};
 
     fn compile(expr: &str) -> Vec<u8> {
         CelCompiler::new().compile(expr).unwrap()

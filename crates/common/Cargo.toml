@@ -51,6 +51,9 @@ tracing-subscriber.workspace = true
 # Optional
 mockall = { workspace = true, optional = true }
 
+cel-core.workspace = true
+cel-core-proto.workspace = true
+
 ponix-proto-prost.workspace = true
 
 # Authorization

@@ -1,11 +1,15 @@
-use crate::domain::DomainResult;
+mod cayenne_lpp;
+mod compiler;
+mod environment;
+mod error;
+mod expression_compiler;
+mod payload_decoder;
 
-/// Trait for compiling CEL expressions into serialized checked AST bytes.
-///
-/// Implementations parse + type-check the expression against the standard
-/// CEL environment (with `input` variable and custom functions), then serialize
-/// the resulting checked AST to protobuf bytes for efficient runtime execution.
-#[cfg_attr(any(test, feature = "testing"), mockall::automock)]
-pub trait CelExpressionCompiler: Send + Sync {
-    fn compile(&self, expression: &str) -> DomainResult<Vec<u8>>;
-}
+pub use cayenne_lpp::*;
+pub use compiler::*;
+pub use environment::*;
+pub use error::*;
+pub use expression_compiler::*;
+pub use payload_decoder::*;
+
+pub use cel_core::Value as CelValue;

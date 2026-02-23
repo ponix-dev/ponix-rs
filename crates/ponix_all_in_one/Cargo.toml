@@ -38,6 +38,7 @@ ponix-proto-prost.workspace = true
 integration-tests = []
 
 [dev-dependencies]
+common = { path = "../common", features = ["testing"] }
 testcontainers.workspace = true
 testcontainers-modules.workspace = true
 which.workspace = true

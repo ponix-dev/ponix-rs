@@ -1,5 +1,5 @@
-use crate::domain::{CelEnvironment, PayloadConverter};
-use cel_core::Value as CelValue;
+use crate::domain::PayloadConverter;
+use common::cel::{CelEnvironment, CelValue};
 use common::domain::{DomainError, DomainResult};
 use tracing::{debug, error, instrument};
 
@@ -75,8 +75,7 @@ impl PayloadConverter for CelPayloadConverter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::CelCompiler;
-    use common::cel::CelExpressionCompiler;
+    use common::cel::{CelCompiler, CelExpressionCompiler};
 
     fn compile(expr: &str) -> Vec<u8> {
         CelCompiler::new().compile(expr).unwrap()

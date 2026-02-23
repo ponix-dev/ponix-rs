@@ -1,8 +1,8 @@
-use crate::domain::create_cel_env;
+use crate::cel::create_cel_env;
+use crate::cel::CelExpressionCompiler;
+use crate::domain::{DomainError, DomainResult};
 use cel_core::Env;
 use cel_core_proto::AstToProto;
-use common::cel::CelExpressionCompiler;
-use common::domain::{DomainError, DomainResult};
 use prost::Message;
 
 /// Compiles CEL expressions into serialized checked AST bytes.
