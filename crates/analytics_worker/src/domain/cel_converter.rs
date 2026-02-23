@@ -1,5 +1,5 @@
-use crate::domain::{CelEnvironment, PayloadConverter};
-use cel_core::Value as CelValue;
+use crate::domain::PayloadConverter;
+use common::cel::{CelEnvironment, CelValue};
 use common::domain::{DomainError, DomainResult};
 use tracing::{debug, error, instrument};
 
@@ -30,34 +30,41 @@ impl Default for CelPayloadConverter {
 impl PayloadConverter for CelPayloadConverter {
     #[instrument(
         name = "payload_transform",
-        skip(self, payload),
+        skip(self, compiled, payload),
         fields(
-            expression = %expression,
+            source = %source,
             payload_size = payload.len(),
         )
     )]
-    fn transform(&self, expression: &str, payload: &[u8]) -> DomainResult<serde_json::Value> {
-        debug!("transforming payload with CEL expression");
+    fn transform(
+        &self,
+        compiled: &[u8],
+        source: &str,
+        payload: &[u8],
+    ) -> DomainResult<serde_json::Value> {
+        debug!("transforming payload with pre-compiled CEL expression");
 
-        self.cel_env.execute(expression, payload).map_err(|e| {
-            error!(error = %e, "CEL execution failed");
-            DomainError::PayloadConversionError(e.to_string())
-        })
+        self.cel_env
+            .execute(compiled, source, payload)
+            .map_err(|e| {
+                error!(error = %e, "CEL execution failed");
+                DomainError::PayloadConversionError(e.to_string())
+            })
     }
 
     #[instrument(
         name = "payload_evaluate_match",
-        skip(self, payload),
+        skip(self, compiled, payload),
         fields(
-            expression = %expression,
+            source = %source,
             payload_size = payload.len(),
         )
     )]
-    fn evaluate_match(&self, expression: &str, payload: &[u8]) -> DomainResult<bool> {
+    fn evaluate_match(&self, compiled: &[u8], source: &str, payload: &[u8]) -> DomainResult<bool> {
         debug!("evaluating match expression");
 
         self.cel_env
-            .evaluate_bool(expression, CelValue::from(payload.to_vec()))
+            .evaluate_bool(compiled, source, CelValue::from(payload.to_vec()))
             .map_err(|e| {
                 error!(error = %e, "CEL match evaluation failed");
                 DomainError::PayloadConversionError(e.to_string())
@@ -68,11 +75,17 @@ impl PayloadConverter for CelPayloadConverter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use common::cel::{CelCompiler, CelExpressionCompiler};
+
+    fn compile(expr: &str) -> Vec<u8> {
+        CelCompiler::new().compile(expr).unwrap()
+    }
 
     #[test]
     fn test_cel_converter_simple_expression() {
         let converter = CelPayloadConverter::new();
-        let result = converter.transform("{'result': 42}", &[]);
+        let expr = "{'result': 42}";
+        let result = converter.transform(&compile(expr), expr, &[]);
 
         assert!(result.is_ok());
         let json = result.unwrap();
@@ -86,7 +99,8 @@ mod tests {
         // Cayenne LPP payload: channel 1, temperature sensor (0x67), value 27.2°C (0x0110)
         let payload = vec![0x01, 0x67, 0x01, 0x10];
 
-        let result = converter.transform("cayenne_lpp_decode(input)", &payload);
+        let expr = "cayenne_lpp_decode(input)";
+        let result = converter.transform(&compile(expr), expr, &payload);
 
         assert!(result.is_ok());
         let json = result.unwrap();
@@ -95,15 +109,11 @@ mod tests {
     }
 
     #[test]
-    fn test_cel_converter_invalid_expression() {
-        let converter = CelPayloadConverter::new();
-        let result = converter.transform("invalid syntax {[", &[]);
-
+    fn test_cel_converter_invalid_expression_fails_at_compile() {
+        // Invalid expressions now fail at compile time
+        let compiler = CelCompiler::new();
+        let result = compiler.compile("invalid syntax {[");
         assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(DomainError::PayloadConversionError(_))
-        ));
     }
 
     #[test]
@@ -121,7 +131,7 @@ mod tests {
             }
         "#;
 
-        let result = converter.transform(expression, &payload);
+        let result = converter.transform(&compile(expression), expression, &payload);
 
         assert!(result.is_ok());
         let json = result.unwrap();
@@ -133,7 +143,8 @@ mod tests {
     #[test]
     fn test_cel_converter_default_constructor() {
         let converter = CelPayloadConverter::default();
-        let result = converter.transform("{'test': true}", &[]);
+        let expr = "{'test': true}";
+        let result = converter.transform(&compile(expr), expr, &[]);
 
         assert!(result.is_ok());
     }
@@ -141,7 +152,8 @@ mod tests {
     #[test]
     fn test_evaluate_match_true() {
         let converter = CelPayloadConverter::new();
-        let result = converter.evaluate_match("true", &[]);
+        let expr = "true";
+        let result = converter.evaluate_match(&compile(expr), expr, &[]);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -149,7 +161,8 @@ mod tests {
     #[test]
     fn test_evaluate_match_false() {
         let converter = CelPayloadConverter::new();
-        let result = converter.evaluate_match("false", &[]);
+        let expr = "false";
+        let result = converter.evaluate_match(&compile(expr), expr, &[]);
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }
@@ -157,15 +170,16 @@ mod tests {
     #[test]
     fn test_evaluate_match_with_payload_size() {
         let converter = CelPayloadConverter::new();
-        let result = converter.evaluate_match("size(input) > 2", &[1, 2, 3, 4]);
+        let expr = "size(input) > 2";
+        let result = converter.evaluate_match(&compile(expr), expr, &[1, 2, 3, 4]);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
 
     #[test]
-    fn test_evaluate_match_invalid_expression() {
+    fn test_evaluate_match_invalid_compiled_bytes() {
         let converter = CelPayloadConverter::new();
-        let result = converter.evaluate_match("not_a_bool_42", &[]);
+        let result = converter.evaluate_match(&[0xFF, 0xFE], "bad", &[]);
         assert!(result.is_err());
     }
 }

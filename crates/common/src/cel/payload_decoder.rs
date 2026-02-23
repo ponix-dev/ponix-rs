@@ -1,4 +1,4 @@
-use crate::domain::Result;
+use crate::cel::Result;
 
 pub trait PayloadDecoder {
     /// Decode binary payload to JSON value

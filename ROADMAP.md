@@ -16,8 +16,8 @@ Make the existing ingest path multi-protocol and production-grade before buildin
 
 - [x] #36 — Device ownership validation before raw envelope publish
 - [x] #122 — Multi-protocol payload contracts — devices aren't locked to one CEL expression
-- [ ] #119 — Own the CEL runtime — ability to add IoT-specific functions
-- [ ] #120 — Pre-compiled CEL — removes per-message compilation cost at scale
+- [x] #119 — Own the CEL runtime — ability to add IoT-specific functions
+- [x] #120 — Pre-compiled CEL — removes per-message compilation cost at scale
 - [ ] #26 — RAKwireless decoder — broader hardware support
 - [ ] #94 — Gateway deployer abstraction — decouple gateway lifecycle from in-process `tokio::spawn`
 - [ ] #48 — CDC high availability — eliminates single point of failure

@@ -174,9 +174,11 @@ impl RawEnvelopeService {
                 "evaluating contract match expression"
             );
 
-            let matched = self
-                .payload_converter
-                .evaluate_match(&contract.match_expression, payload)?;
+            let matched = self.payload_converter.evaluate_match(
+                &contract.compiled_match,
+                &contract.match_expression,
+                payload,
+            )?;
 
             if !matched {
                 debug!(
@@ -194,9 +196,11 @@ impl RawEnvelopeService {
                 "contract matched, transforming payload"
             );
 
-            let json_value = self
-                .payload_converter
-                .transform(&contract.transform_expression, payload)?;
+            let json_value = self.payload_converter.transform(
+                &contract.compiled_transform,
+                &contract.transform_expression,
+                payload,
+            )?;
 
             // Validate against contract's JSON Schema
             debug!(
@@ -261,6 +265,8 @@ mod tests {
             match_expression: "true".to_string(),
             transform_expression: "cayenne_lpp_decode(input)".to_string(),
             json_schema: "{}".to_string(),
+            compiled_match: vec![],
+            compiled_transform: vec![],
         }]
     }
 
@@ -315,15 +321,17 @@ mod tests {
 
         mock_converter
             .expect_evaluate_match()
-            .withf(|expr: &str, _payload: &[u8]| expr == "true")
+            .withf(|_compiled: &[u8], source: &str, _payload: &[u8]| source == "true")
             .times(1)
-            .return_once(|_, _| Ok(true));
+            .return_once(|_, _, _| Ok(true));
 
         mock_converter
             .expect_transform()
-            .withf(|expr: &str, _payload: &[u8]| expr == "cayenne_lpp_decode(input)")
+            .withf(|_compiled: &[u8], source: &str, _payload: &[u8]| {
+                source == "cayenne_lpp_decode(input)"
+            })
             .times(1)
-            .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
+            .return_once(move |_, _, _| Ok(serde_json::Value::Object(expected_json)));
 
         mock_schema_validator
             .expect_validate()
@@ -430,6 +438,8 @@ mod tests {
             match_expression: "true".to_string(),
             transform_expression: "invalid_expression".to_string(),
             json_schema: "{}".to_string(),
+            compiled_match: vec![],
+            compiled_transform: vec![],
         }]);
 
         mock_device_repo
@@ -445,12 +455,12 @@ mod tests {
         mock_converter
             .expect_evaluate_match()
             .times(1)
-            .return_once(|_, _| Ok(true));
+            .return_once(|_, _, _| Ok(true));
 
         mock_converter
             .expect_transform()
             .times(1)
-            .return_once(|_, _| {
+            .return_once(|_, _, _| {
                 Err(DomainError::PayloadConversionError(
                     "Invalid CEL expression".to_string(),
                 ))
@@ -483,6 +493,8 @@ mod tests {
             match_expression: "true".to_string(),
             transform_expression: "42".to_string(),
             json_schema: "{}".to_string(),
+            compiled_match: vec![],
+            compiled_transform: vec![],
         }]);
 
         mock_device_repo
@@ -498,12 +510,12 @@ mod tests {
         mock_converter
             .expect_evaluate_match()
             .times(1)
-            .return_once(|_, _| Ok(true));
+            .return_once(|_, _, _| Ok(true));
 
         mock_converter
             .expect_transform()
             .times(1)
-            .return_once(|_, _| Ok(serde_json::Value::Number(42.into())));
+            .return_once(|_, _, _| Ok(serde_json::Value::Number(42.into())));
 
         mock_schema_validator
             .expect_validate()
@@ -554,12 +566,12 @@ mod tests {
         mock_converter
             .expect_evaluate_match()
             .times(1)
-            .return_once(|_, _| Ok(true));
+            .return_once(|_, _, _| Ok(true));
 
         mock_converter
             .expect_transform()
             .times(1)
-            .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
+            .return_once(move |_, _, _| Ok(serde_json::Value::Object(expected_json)));
 
         mock_schema_validator
             .expect_validate()
@@ -691,6 +703,8 @@ mod tests {
             match_expression: "true".to_string(),
             transform_expression: "cayenne_lpp_decode(input)".to_string(),
             json_schema: r#"{"type": "object", "required": ["temperature"]}"#.to_string(),
+            compiled_match: vec![],
+            compiled_transform: vec![],
         }]);
 
         mock_device_repo
@@ -709,12 +723,12 @@ mod tests {
         mock_converter
             .expect_evaluate_match()
             .times(1)
-            .return_once(|_, _| Ok(true));
+            .return_once(|_, _, _| Ok(true));
 
         mock_converter
             .expect_transform()
             .times(1)
-            .return_once(move |_, _| Ok(serde_json::Value::Object(json_data)));
+            .return_once(move |_, _, _| Ok(serde_json::Value::Object(json_data)));
 
         mock_schema_validator
             .expect_validate()
@@ -749,6 +763,8 @@ mod tests {
             match_expression: "false".to_string(),
             transform_expression: "cayenne_lpp_decode(input)".to_string(),
             json_schema: "{}".to_string(),
+            compiled_match: vec![],
+            compiled_transform: vec![],
         }]);
 
         mock_device_repo
@@ -763,9 +779,9 @@ mod tests {
 
         mock_converter
             .expect_evaluate_match()
-            .withf(|expr: &str, _| expr == "false")
+            .withf(|_compiled: &[u8], source: &str, _payload: &[u8]| source == "false")
             .times(1)
-            .return_once(|_, _| Ok(false));
+            .return_once(|_, _, _| Ok(false));
 
         let service = RawEnvelopeService::new(
             Arc::new(mock_device_repo),
@@ -792,11 +808,15 @@ mod tests {
                 match_expression: "false".to_string(),
                 transform_expression: "should_not_run".to_string(),
                 json_schema: "{}".to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             },
             PayloadContract {
                 match_expression: "true".to_string(),
                 transform_expression: "cayenne_lpp_decode(input)".to_string(),
                 json_schema: "{}".to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             },
         ]);
 
@@ -813,16 +833,16 @@ mod tests {
         // First contract: match returns false
         mock_converter
             .expect_evaluate_match()
-            .withf(|expr: &str, _| expr == "false")
+            .withf(|_compiled: &[u8], source: &str, _payload: &[u8]| source == "false")
             .times(1)
-            .return_once(|_, _| Ok(false));
+            .return_once(|_, _, _| Ok(false));
 
         // Second contract: match returns true
         mock_converter
             .expect_evaluate_match()
-            .withf(|expr: &str, _| expr == "true")
+            .withf(|_compiled: &[u8], source: &str, _payload: &[u8]| source == "true")
             .times(1)
-            .return_once(|_, _| Ok(true));
+            .return_once(|_, _, _| Ok(true));
 
         let mut expected_json = serde_json::Map::new();
         expected_json.insert(
@@ -832,9 +852,11 @@ mod tests {
 
         mock_converter
             .expect_transform()
-            .withf(|expr: &str, _| expr == "cayenne_lpp_decode(input)")
+            .withf(|_compiled: &[u8], source: &str, _payload: &[u8]| {
+                source == "cayenne_lpp_decode(input)"
+            })
             .times(1)
-            .return_once(move |_, _| Ok(serde_json::Value::Object(expected_json)));
+            .return_once(move |_, _, _| Ok(serde_json::Value::Object(expected_json)));
 
         mock_schema_validator
             .expect_validate()

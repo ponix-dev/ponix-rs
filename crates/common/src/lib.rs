@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod cel;
 pub mod clickhouse;
 pub mod domain;
 pub mod garde;

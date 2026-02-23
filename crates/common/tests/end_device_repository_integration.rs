@@ -115,6 +115,8 @@ async fn create_test_definition(
             match_expression: "true".to_string(),
             transform_expression: "cayenne_lpp_decode(input)".to_string(),
             json_schema: "{}".to_string(),
+            compiled_match: vec![],
+            compiled_transform: vec![],
         }],
     };
     definition_repo.create_definition(input).await.unwrap();
@@ -366,6 +368,8 @@ async fn test_get_device_with_wrong_organization_returns_none() {
             match_expression: "true".to_string(),
             transform_expression: "test".to_string(),
             json_schema: "{}".to_string(),
+            compiled_match: vec![],
+            compiled_transform: vec![],
         }],
     };
     definition_repo.create_definition(def_input).await.unwrap();

@@ -1,4 +1,5 @@
 use common::auth::{Action, AuthorizationProvider, Resource};
+use common::cel::CelExpressionCompiler;
 use common::domain::{
     CreateEndDeviceDefinitionRepoInput, DeleteEndDeviceDefinitionRepoInput, DomainError,
     DomainResult, EndDeviceDefinition, EndDeviceDefinitionRepository,
@@ -74,6 +75,7 @@ pub struct EndDeviceDefinitionService {
     definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
     authorization_provider: Arc<dyn AuthorizationProvider>,
+    cel_compiler: Arc<dyn CelExpressionCompiler>,
 }
 
 impl EndDeviceDefinitionService {
@@ -81,11 +83,13 @@ impl EndDeviceDefinitionService {
         definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
         organization_repository: Arc<dyn OrganizationRepository>,
         authorization_provider: Arc<dyn AuthorizationProvider>,
+        cel_compiler: Arc<dyn CelExpressionCompiler>,
     ) -> Self {
         Self {
             definition_repository,
             organization_repository,
             authorization_provider,
+            cel_compiler,
         }
     }
 
@@ -100,6 +104,9 @@ impl EndDeviceDefinitionService {
         for contract in &request.contracts {
             validate_json_schema(&contract.json_schema)?;
         }
+
+        // Compile CEL expressions for each contract
+        let contracts = self.compile_contracts(request.contracts)?;
 
         // Check authorization
         self.authorization_provider
@@ -123,7 +130,7 @@ impl EndDeviceDefinitionService {
             id,
             organization_id: request.organization_id,
             name: request.name,
-            contracts: request.contracts,
+            contracts,
         };
 
         self.definition_repository
@@ -172,6 +179,12 @@ impl EndDeviceDefinitionService {
             }
         }
 
+        // Compile CEL expressions if contracts provided
+        let contracts = match request.contracts {
+            Some(contracts) => Some(self.compile_contracts(contracts)?),
+            None => None,
+        };
+
         self.authorization_provider
             .require_permission(
                 &request.user_id,
@@ -185,7 +198,7 @@ impl EndDeviceDefinitionService {
             id: request.id,
             organization_id: request.organization_id,
             name: request.name,
-            contracts: request.contracts,
+            contracts,
         };
 
         self.definition_repository
@@ -244,6 +257,21 @@ impl EndDeviceDefinitionService {
             .await
     }
 
+    fn compile_contracts(
+        &self,
+        contracts: Vec<PayloadContract>,
+    ) -> DomainResult<Vec<PayloadContract>> {
+        contracts
+            .into_iter()
+            .map(|mut contract| {
+                contract.compiled_match = self.cel_compiler.compile(&contract.match_expression)?;
+                contract.compiled_transform =
+                    self.cel_compiler.compile(&contract.transform_expression)?;
+                Ok(contract)
+            })
+            .collect()
+    }
+
     async fn validate_organization(&self, organization_id: &str) -> DomainResult<()> {
         let org_input = GetOrganizationRepoInput {
             organization_id: organization_id.to_string(),
@@ -275,6 +303,7 @@ impl EndDeviceDefinitionService {
 mod tests {
     use super::*;
     use common::auth::MockAuthorizationProvider;
+    use common::cel::MockCelExpressionCompiler;
     use common::domain::{
         MockEndDeviceDefinitionRepository, MockOrganizationRepository, Organization,
     };
@@ -285,6 +314,13 @@ mod tests {
         let mut mock = MockAuthorizationProvider::new();
         mock.expect_require_permission()
             .returning(|_, _, _, _| Box::pin(async { Ok(()) }));
+        Arc::new(mock)
+    }
+
+    fn create_mock_cel_compiler() -> Arc<MockCelExpressionCompiler> {
+        let mut mock = MockCelExpressionCompiler::new();
+        mock.expect_compile()
+            .returning(|_| Ok(vec![0x01, 0x02, 0x03]));
         Arc::new(mock)
     }
 
@@ -314,6 +350,8 @@ mod tests {
                 match_expression: "true".to_string(),
                 transform_expression: "cayenne_lpp_decode(input)".to_string(),
                 json_schema: r#"{"type": "object"}"#.to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             }],
             created_at: None,
             updated_at: None,
@@ -328,6 +366,7 @@ mod tests {
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
+            create_mock_cel_compiler(),
         );
 
         let request = CreateEndDeviceDefinitionRequest {
@@ -338,6 +377,8 @@ mod tests {
                 match_expression: "true".to_string(),
                 transform_expression: "cayenne_lpp_decode(input)".to_string(),
                 json_schema: r#"{"type": "object"}"#.to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             }],
         };
 
@@ -354,6 +395,7 @@ mod tests {
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
+            create_mock_cel_compiler(),
         );
 
         let request = CreateEndDeviceDefinitionRequest {
@@ -364,6 +406,8 @@ mod tests {
                 match_expression: "true".to_string(),
                 transform_expression: "cayenne_lpp_decode(input)".to_string(),
                 json_schema: "not valid json".to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             }],
         };
 
@@ -384,6 +428,7 @@ mod tests {
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
+            create_mock_cel_compiler(),
         );
 
         let request = CreateEndDeviceDefinitionRequest {
@@ -424,6 +469,7 @@ mod tests {
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
+            create_mock_cel_compiler(),
         );
 
         let request = GetEndDeviceDefinitionRequest {
@@ -450,6 +496,7 @@ mod tests {
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
+            create_mock_cel_compiler(),
         );
 
         let request = GetEndDeviceDefinitionRequest {
@@ -499,6 +546,7 @@ mod tests {
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
+            create_mock_cel_compiler(),
         );
 
         let request = ListEndDeviceDefinitionsRequest {
@@ -520,6 +568,7 @@ mod tests {
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
+            create_mock_cel_compiler(),
         );
 
         let request = UpdateEndDeviceDefinitionRequest {
@@ -531,6 +580,8 @@ mod tests {
                 match_expression: "true".to_string(),
                 transform_expression: "cayenne_lpp_decode(input)".to_string(),
                 json_schema: "invalid json".to_string(),
+                compiled_match: vec![],
+                compiled_transform: vec![],
             }]),
         };
 

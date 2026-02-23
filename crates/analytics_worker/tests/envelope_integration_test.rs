@@ -1,10 +1,26 @@
 #![cfg(feature = "integration-tests")]
 
-use analytics_worker::domain::CelPayloadConverter;
-use analytics_worker::domain::RawEnvelopeService;
-use common::domain::{DomainError, RawEnvelope};
+use analytics_worker::domain::{CelPayloadConverter, RawEnvelopeService};
+use common::cel::{CelCompiler, CelExpressionCompiler};
+use common::domain::{DomainError, PayloadContract, RawEnvelope};
 use common::jsonschema::JsonSchemaValidator;
 use std::sync::Arc;
+
+/// Helper: compile match + transform expressions into a PayloadContract with real compiled bytes
+fn compiled_contract(match_expr: &str, transform_expr: &str, json_schema: &str) -> PayloadContract {
+    let compiler = CelCompiler::new();
+    PayloadContract {
+        match_expression: match_expr.to_string(),
+        transform_expression: transform_expr.to_string(),
+        json_schema: json_schema.to_string(),
+        compiled_match: compiler
+            .compile(match_expr)
+            .expect("match compilation failed"),
+        compiled_transform: compiler
+            .compile(transform_expr)
+            .expect("transform compilation failed"),
+    }
+}
 
 // Mock implementations for integration testing
 mod mocks {
@@ -180,11 +196,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Temperature Sensor Def".to_string(),
         name: "Temperature Sensor".to_string(),
-        contracts: vec![common::domain::PayloadContract {
-            match_expression: "true".to_string(),
-            transform_expression: "cayenne_lpp_decode(input)".to_string(),
-            json_schema: "{}".to_string(),
-        }],
+        contracts: vec![compiled_contract("true", "cayenne_lpp_decode(input)", "{}")],
         created_at: None,
         updated_at: None,
     };
@@ -250,19 +262,18 @@ async fn test_full_conversion_flow_custom_transformation() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Multi Sensor Def".to_string(),
         name: "Multi Sensor".to_string(),
-        contracts: vec![common::domain::PayloadContract {
-            match_expression: "true".to_string(),
-            transform_expression: r#"
+        contracts: vec![compiled_contract(
+            "true",
+            r#"
             {
                 'temp_c': cayenne_lpp_decode(input).temperature_1,
                 'temp_f': cayenne_lpp_decode(input).temperature_1 * 9.0 / 5.0 + 32.0,
                 'humidity': cayenne_lpp_decode(input).humidity_2,
                 'status': 'active'
             }
-        "#
-            .to_string(),
-            json_schema: "{}".to_string(),
-        }],
+            "#,
+            "{}",
+        )],
         created_at: None,
         updated_at: None,
     };
@@ -358,8 +369,10 @@ async fn test_device_not_found() {
 }
 
 #[tokio::test]
-async fn test_invalid_cel_expression() {
-    // Arrange: Device with definition containing invalid CEL expression
+async fn test_invalid_compiled_bytes() {
+    // Arrange: Device with definition containing corrupt compiled bytes
+    // (simulates data corruption or schema migration issues)
+    let compiler = CelCompiler::new();
     let device = common::domain::DeviceWithDefinition {
         device_id: "sensor-bad".to_string(),
         organization_id: "org-789".to_string(),
@@ -368,10 +381,12 @@ async fn test_invalid_cel_expression() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Broken Definition".to_string(),
         name: "Broken Sensor".to_string(),
-        contracts: vec![common::domain::PayloadContract {
+        contracts: vec![PayloadContract {
             match_expression: "true".to_string(),
             transform_expression: "invalid{[syntax".to_string(),
             json_schema: "{}".to_string(),
+            compiled_match: compiler.compile("true").unwrap(),
+            compiled_transform: vec![0xFF, 0xFE, 0xFD], // corrupt bytes
         }],
         created_at: None,
         updated_at: None,
@@ -494,11 +509,7 @@ async fn test_cel_expression_returns_non_object() {
         gateway_id: "gw-001".to_string(),
         definition_name: "Scalar Definition".to_string(),
         name: "Scalar Sensor".to_string(),
-        contracts: vec![common::domain::PayloadContract {
-            match_expression: "true".to_string(),
-            transform_expression: "42".to_string(), // Returns number, not object
-            json_schema: "{}".to_string(),
-        }],
+        contracts: vec![compiled_contract("true", "42", "{}")],
         created_at: None,
         updated_at: None,
     };
@@ -546,4 +557,184 @@ async fn test_cel_expression_returns_non_object() {
         DomainError::PayloadConversionError(_)
     ));
     assert_eq!(producer.get_published().len(), 0);
+}
+
+#[tokio::test]
+async fn test_multi_contract_routing_with_compiled_match() {
+    // Arrange: Two contracts with different match expressions based on payload size.
+    // Only the second contract should match a 4-byte payload.
+    let device = common::domain::DeviceWithDefinition {
+        device_id: "sensor-multi".to_string(),
+        organization_id: "org-multi".to_string(),
+        workspace_id: "ws-multi".to_string(),
+        definition_id: "def-multi".to_string(),
+        gateway_id: "gw-001".to_string(),
+        definition_name: "Multi Contract Def".to_string(),
+        name: "Multi Contract Sensor".to_string(),
+        contracts: vec![
+            // Contract 0: only matches payloads > 10 bytes (won't match our 4-byte payload)
+            compiled_contract("size(input) > 10", "{'source': 'large_payload'}", "{}"),
+            // Contract 1: matches payloads <= 10 bytes (will match our 4-byte payload)
+            compiled_contract("size(input) <= 10", "cayenne_lpp_decode(input)", "{}"),
+        ],
+        created_at: None,
+        updated_at: None,
+    };
+
+    let org = common::domain::Organization {
+        id: "org-multi".to_string(),
+        name: "Test Org".to_string(),
+        deleted_at: None,
+        created_at: None,
+        updated_at: None,
+    };
+
+    let device_repo = mocks::InMemoryDeviceRepository::new();
+    device_repo.add_device(device);
+
+    let org_repo = mocks::InMemoryOrganizationRepository::new();
+    org_repo.add_organization(org);
+
+    let payload_converter = CelPayloadConverter::new();
+    let producer = mocks::InMemoryProducer::new();
+    let schema_validator = JsonSchemaValidator::new();
+
+    let service = RawEnvelopeService::new(
+        Arc::new(device_repo),
+        Arc::new(org_repo),
+        Arc::new(payload_converter),
+        Arc::new(producer.clone()),
+        Arc::new(schema_validator),
+    );
+
+    // 4-byte Cayenne LPP payload: temperature 27.2°C
+    let raw_envelope = RawEnvelope {
+        organization_id: "org-multi".to_string(),
+        end_device_id: "sensor-multi".to_string(),
+        received_at: chrono::Utc::now(),
+        payload: vec![0x01, 0x67, 0x01, 0x10],
+    };
+
+    // Act
+    let result = service.process_raw_envelope(raw_envelope).await;
+
+    // Assert: second contract matched, so we get cayenne_lpp_decode output (not 'large_payload')
+    assert!(result.is_ok());
+
+    let published = producer.get_published();
+    assert_eq!(published.len(), 1);
+
+    let processed = &published[0];
+    assert!(
+        processed.data.contains_key("temperature_1"),
+        "Expected cayenne_lpp_decode output from second contract, got: {:?}",
+        processed.data
+    );
+    assert!(
+        !processed.data.contains_key("source"),
+        "First contract should not have matched"
+    );
+}
+
+#[tokio::test]
+async fn test_compile_time_rejection_of_invalid_cel() {
+    // Verify that invalid CEL expressions are caught at compile time (write path),
+    // not at runtime (read path). This is the core value proposition of pre-compilation.
+    let compiler = CelCompiler::new();
+
+    let invalid_expressions = vec![
+        "invalid{[syntax",
+        "undefined_function(input)",
+        "input + 'string'", // type error: bytes + string
+    ];
+
+    for expr in invalid_expressions {
+        let result = compiler.compile(expr);
+        assert!(
+            result.is_err(),
+            "Expected compile error for '{}', but got Ok",
+            expr
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_compiled_bytes_roundtrip_through_service() {
+    // Verify that compiled bytes survive the full path:
+    // compile → store in PayloadContract → evaluate_match → transform → publish
+    // This uses a non-trivial transform expression to ensure the compiled AST is meaningful.
+    let device = common::domain::DeviceWithDefinition {
+        device_id: "sensor-roundtrip".to_string(),
+        organization_id: "org-roundtrip".to_string(),
+        workspace_id: "ws-roundtrip".to_string(),
+        definition_id: "def-roundtrip".to_string(),
+        gateway_id: "gw-001".to_string(),
+        definition_name: "Roundtrip Def".to_string(),
+        name: "Roundtrip Sensor".to_string(),
+        contracts: vec![compiled_contract(
+            "size(input) == 4",
+            r#"
+            {
+                'temp_c': cayenne_lpp_decode(input).temperature_1,
+                'temp_f': cayenne_lpp_decode(input).temperature_1 * 9.0 / 5.0 + 32.0
+            }
+            "#,
+            "{}",
+        )],
+        created_at: None,
+        updated_at: None,
+    };
+
+    let org = common::domain::Organization {
+        id: "org-roundtrip".to_string(),
+        name: "Test Org".to_string(),
+        deleted_at: None,
+        created_at: None,
+        updated_at: None,
+    };
+
+    let device_repo = mocks::InMemoryDeviceRepository::new();
+    device_repo.add_device(device);
+
+    let org_repo = mocks::InMemoryOrganizationRepository::new();
+    org_repo.add_organization(org);
+
+    let payload_converter = CelPayloadConverter::new();
+    let producer = mocks::InMemoryProducer::new();
+    let schema_validator = JsonSchemaValidator::new();
+
+    let service = RawEnvelopeService::new(
+        Arc::new(device_repo),
+        Arc::new(org_repo),
+        Arc::new(payload_converter),
+        Arc::new(producer.clone()),
+        Arc::new(schema_validator),
+    );
+
+    // Cayenne LPP: temperature 27.2°C (exactly 4 bytes, matching our size(input) == 4)
+    let raw_envelope = RawEnvelope {
+        organization_id: "org-roundtrip".to_string(),
+        end_device_id: "sensor-roundtrip".to_string(),
+        received_at: chrono::Utc::now(),
+        payload: vec![0x01, 0x67, 0x01, 0x10],
+    };
+
+    // Act
+    let result = service.process_raw_envelope(raw_envelope).await;
+
+    // Assert
+    assert!(result.is_ok());
+
+    let published = producer.get_published();
+    assert_eq!(published.len(), 1);
+
+    let processed = &published[0];
+    assert_eq!(processed.data["temp_c"], 27.2);
+    // 27.2 * 9/5 + 32 = 80.96
+    let temp_f = processed.data["temp_f"].as_f64().unwrap();
+    assert!(
+        (temp_f - 80.96).abs() < 0.01,
+        "Expected ~80.96, got {}",
+        temp_f
+    );
 }

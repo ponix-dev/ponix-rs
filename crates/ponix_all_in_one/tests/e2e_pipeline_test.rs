@@ -8,6 +8,7 @@ use analytics_worker::nats::{
     ProcessedEnvelopeConsumerService, ProcessedEnvelopeProducer, RawEnvelopeConsumerService,
 };
 use anyhow::Result;
+use common::cel::{CelCompiler, CelExpressionCompiler};
 use goose::MigrationRunner;
 use tower::ServiceBuilder;
 
@@ -327,13 +328,19 @@ async fn create_test_device(
     .await?;
 
     // CEL expression that decodes Cayenne LPP and renames fields
-    let cel_expression = r#"{
+    let match_expression = "true";
+    let transform_expression = r#"{
         'sensor_data': cayenne_lpp_decode(input),
         'device_type': 'environmental_sensor',
         'reading_temp_celsius': cayenne_lpp_decode(input).temperature_0,
         'reading_humidity_percent': cayenne_lpp_decode(input).humidity_1,
         'reading_pressure_hpa': cayenne_lpp_decode(input).barometer_2
     }"#;
+
+    // Pre-compile CEL expressions
+    let compiler = CelCompiler::new();
+    let compiled_match = compiler.compile(match_expression)?;
+    let compiled_transform = compiler.compile(transform_expression)?;
 
     // Create the end device definition first
     let definition_id = format!(
@@ -346,9 +353,11 @@ async fn create_test_device(
             organization_id: "test-org-123".to_string(),
             name: "Environmental Sensor Definition".to_string(),
             contracts: vec![common::domain::PayloadContract {
-                match_expression: "true".to_string(),
-                transform_expression: cel_expression.to_string(),
+                match_expression: match_expression.to_string(),
+                transform_expression: transform_expression.to_string(),
                 json_schema: "{}".to_string(),
+                compiled_match,
+                compiled_transform,
             }],
         })
         .await?;

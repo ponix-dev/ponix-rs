@@ -21,8 +21,6 @@ futures.workspace = true
 async-nats.workspace = true
 tower.workspace = true
 clickhouse.workspace = true
-cel-core.workspace = true
-
 ponix-proto-prost.workspace = true
 
 [dev-dependencies]
