@@ -1,3 +1,9 @@
+## [1.18.0](https://github.com/ponix-dev/ponix-rs/compare/v1.17.0...v1.18.0) (2026-02-23)
+
+### Features
+
+* multi-protocol payload contracts with match/transform/validate ([#154](https://github.com/ponix-dev/ponix-rs/issues/154)) ([abafd30](https://github.com/ponix-dev/ponix-rs/commit/abafd30033ee2777024c1cdd73b9c1b3dfd05813)), closes [#122](https://github.com/ponix-dev/ponix-rs/issues/122)
+
 ## [1.17.0](https://github.com/ponix-dev/ponix-rs/compare/v1.16.0...v1.17.0) (2026-02-22)
 
 ### Features
