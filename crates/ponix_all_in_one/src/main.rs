@@ -21,6 +21,7 @@ use common::postgres::{
 };
 use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
+use gateway_orchestrator::domain::DeployerType;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
 use ponix_api::domain::{
@@ -185,6 +186,11 @@ async fn main() {
     // Create orchestrator shutdown token - owned by main for lifecycle coordination
     let orchestrator_shutdown_token = tokio_util::sync::CancellationToken::new();
 
+    let deployer_type: DeployerType = config.gateway_deployer_type.parse().unwrap_or_else(|e| {
+        error!("Invalid PONIX_GATEWAY_DEPLOYER_TYPE: {}, using default", e);
+        DeployerType::default()
+    });
+
     let gateway_orchestrator = match GatewayOrchestrator::new(
         postgres_repos.gateway.clone(),
         nats_client.clone(),
@@ -194,6 +200,7 @@ async fn main() {
             gateway_consumer_name: config.gateway_consumer_name.clone(),
             gateway_filter_subject: config.gateway_filter_subject.clone(),
             raw_envelopes_stream: config.nats_raw_stream.clone(),
+            deployer_type,
         },
     )
     .await

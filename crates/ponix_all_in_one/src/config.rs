@@ -242,6 +242,10 @@ pub struct ServiceConfig {
     #[serde(default = "default_gateway_filter_subject")]
     pub gateway_filter_subject: String,
 
+    /// Gateway deployer type (in_process)
+    #[serde(default = "default_gateway_deployer_type")]
+    pub gateway_deployer_type: String,
+
     // OpenTelemetry configuration
     /// OpenTelemetry OTLP endpoint (gRPC)
     #[serde(default = "default_otel_endpoint")]
@@ -498,6 +502,10 @@ fn default_gateway_consumer_name() -> String {
 
 fn default_gateway_filter_subject() -> String {
     "gateways.>".to_string()
+}
+
+fn default_gateway_deployer_type() -> String {
+    "in_process".to_string()
 }
 
 // OpenTelemetry defaults

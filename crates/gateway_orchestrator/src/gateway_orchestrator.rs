@@ -1,6 +1,6 @@
 use crate::domain::{
-    GatewayOrchestrationService, GatewayOrchestrationServiceConfig, GatewayRunnerFactory,
-    InMemoryGatewayProcessStore,
+    DeployerType, GatewayDeployer, GatewayOrchestrationService, GatewayOrchestrationServiceConfig,
+    GatewayRunnerFactory, InMemoryDeploymentHandleStore, InProcessDeployer,
 };
 use crate::mqtt::EmqxGatewayRunner;
 use crate::nats::{GatewayCdcConsumer, RawEnvelopeProducer};
@@ -8,13 +8,14 @@ use common::nats::NatsClient;
 use common::postgres::PostgresGatewayRepository;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tracing::debug;
+use tracing::{debug, info};
 
 pub struct GatewayOrchestratorConfig {
     pub gateway_stream: String,
     pub gateway_consumer_name: String,
     pub gateway_filter_subject: String,
     pub raw_envelopes_stream: String,
+    pub deployer_type: DeployerType,
 }
 
 pub struct GatewayOrchestrator {
@@ -40,12 +41,20 @@ impl GatewayOrchestrator {
         let mut runner_factory = GatewayRunnerFactory::new();
         runner_factory.register_emqx(|| Arc::new(EmqxGatewayRunner::new()));
 
+        // Resolve deployer from configuration
+        let deployer: Arc<dyn GatewayDeployer> = match &config.deployer_type {
+            DeployerType::InProcess => Arc::new(InProcessDeployer),
+        };
+        info!(deployer_type = %config.deployer_type, "using gateway deployer");
+
+        let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
+
         // Initialize orchestrator
         let orchestrator_config = GatewayOrchestrationServiceConfig::default();
-        let process_store = Arc::new(InMemoryGatewayProcessStore::new());
         let orchestrator = Arc::new(GatewayOrchestrationService::new(
             gateway_repository,
-            process_store,
+            handle_store,
+            deployer,
             orchestrator_config,
             orchestrator_shutdown_token,
             raw_envelope_producer,

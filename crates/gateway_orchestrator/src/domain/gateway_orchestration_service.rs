@@ -1,18 +1,19 @@
 use crate::domain::{
-    GatewayOrchestrationServiceConfig, GatewayProcessHandle, GatewayProcessStore,
-    GatewayRunnerFactory,
+    DeploymentHandleStore, GatewayDeployer, GatewayOrchestrationServiceConfig, GatewayRunnerFactory,
 };
 use common::domain::{
     DomainResult, Gateway, GatewayRepository, GetGatewayRepoInput, RawEnvelopeProducer,
 };
 
 use std::sync::Arc;
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
 pub struct GatewayOrchestrationService {
     gateway_repository: Arc<dyn GatewayRepository>,
-    process_store: Arc<dyn GatewayProcessStore>,
+    handle_store: Arc<dyn DeploymentHandleStore>,
+    deployer: Arc<dyn GatewayDeployer>,
     config: GatewayOrchestrationServiceConfig,
     shutdown_token: CancellationToken,
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
@@ -22,7 +23,8 @@ pub struct GatewayOrchestrationService {
 impl GatewayOrchestrationService {
     pub fn new(
         gateway_repository: Arc<dyn GatewayRepository>,
-        process_store: Arc<dyn GatewayProcessStore>,
+        handle_store: Arc<dyn DeploymentHandleStore>,
+        deployer: Arc<dyn GatewayDeployer>,
         config: GatewayOrchestrationServiceConfig,
         shutdown_token: CancellationToken,
         raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
@@ -30,7 +32,8 @@ impl GatewayOrchestrationService {
     ) -> Self {
         Self {
             gateway_repository,
-            process_store,
+            handle_store,
+            deployer,
             config,
             shutdown_token,
             raw_envelope_producer,
@@ -129,7 +132,7 @@ impl GatewayOrchestrationService {
     pub async fn shutdown(&self) -> DomainResult<()> {
         info!("shutting down GatewayOrchestrator");
 
-        let gateway_ids = self.process_store.list_gateway_ids().await?;
+        let gateway_ids = self.handle_store.list_gateway_ids().await?;
         info!("stopping {} gateway processes", gateway_ids.len());
 
         for gateway_id in gateway_ids {
@@ -147,7 +150,7 @@ impl GatewayOrchestrationService {
     #[instrument(skip(self), fields(gateway_id = %gateway.gateway_id))]
     async fn start_gateway_process(&self, gateway: &Gateway) -> DomainResult<()> {
         // Check if process already exists
-        if self.process_store.exists(&gateway.gateway_id).await? {
+        if self.handle_store.exists(&gateway.gateway_id).await? {
             warn!(
                 "process already exists for gateway {}, skipping",
                 gateway.gateway_id
@@ -161,29 +164,20 @@ impl GatewayOrchestrationService {
             .runner_factory
             .gateway_type_name(&gateway.gateway_config);
 
-        let gateway_clone = gateway.clone();
-        let config = self.config.clone();
-        let process_token = CancellationToken::new();
-        let process_token_clone = process_token.clone();
-        let shutdown_token = self.shutdown_token.clone();
-        let producer = Arc::clone(&self.raw_envelope_producer);
-
-        // Spawn gateway process using the appropriate runner
-        let join_handle = tokio::spawn(async move {
-            runner
-                .run(
-                    gateway_clone,
-                    config,
-                    process_token_clone,
-                    shutdown_token,
-                    producer,
-                )
-                .await;
-        });
+        // Delegate to the deployer
+        let handle = self
+            .deployer
+            .deploy(
+                gateway,
+                runner,
+                self.config.clone(),
+                self.shutdown_token.clone(),
+                Arc::clone(&self.raw_envelope_producer),
+            )
+            .await?;
 
         // Store handle
-        let handle = GatewayProcessHandle::new(join_handle, process_token, gateway.clone());
-        self.process_store
+        self.handle_store
             .upsert(gateway.gateway_id.clone(), handle)
             .await?;
 
@@ -197,29 +191,13 @@ impl GatewayOrchestrationService {
     /// Stop a gateway process
     #[instrument(skip(self), fields(gateway_id = %gateway_id))]
     async fn stop_gateway_process(&self, gateway_id: &str) -> DomainResult<()> {
-        match self.process_store.remove(gateway_id).await? {
-            Some(handle) => {
+        match self.handle_store.remove(gateway_id).await? {
+            Some(mut handle) => {
                 info!("stopping process for gateway {}", gateway_id);
                 handle.cancel();
-
-                // Wait for process to complete with timeout
-                let timeout = tokio::time::Duration::from_secs(5);
-                match tokio::time::timeout(timeout, handle.join_handle).await {
-                    Ok(Ok(())) => {
-                        debug!("process for gateway {} stopped gracefully", gateway_id);
-                    }
-                    Ok(Err(e)) => {
-                        error!("process for gateway {} panicked: {:?}", gateway_id, e);
-                    }
-                    Err(_) => {
-                        warn!(
-                            "process for gateway {} did not stop within timeout",
-                            gateway_id
-                        );
-                        // Process will be dropped and cleaned up by tokio
-                    }
+                if let Err(e) = handle.wait_for_stop(Duration::from_secs(5)).await {
+                    error!("error waiting for gateway {} to stop: {}", gateway_id, e);
                 }
-
                 Ok(())
             }
             None => {
@@ -233,7 +211,7 @@ impl GatewayOrchestrationService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{GatewayProcessStore, GatewayRunner, InMemoryGatewayProcessStore};
+    use crate::domain::{GatewayRunner, InMemoryDeploymentHandleStore, InProcessDeployer};
     use async_trait::async_trait;
     use common::domain::{
         EmqxGatewayConfig, GatewayConfig, GetGatewayRepoInput, MockGatewayRepository,
@@ -295,6 +273,21 @@ mod tests {
         }
     }
 
+    fn create_test_service(
+        mock_repo: MockGatewayRepository,
+        store: Arc<InMemoryDeploymentHandleStore>,
+    ) -> GatewayOrchestrationService {
+        GatewayOrchestrationService::new(
+            Arc::new(mock_repo),
+            store,
+            Arc::new(InProcessDeployer),
+            GatewayOrchestrationServiceConfig::default(),
+            CancellationToken::new(),
+            create_mock_producer(),
+            create_test_factory(),
+        )
+    }
+
     #[tokio::test]
     async fn test_start_loads_all_gateways() {
         let mut mock_repo = MockGatewayRepository::new();
@@ -309,15 +302,8 @@ mod tests {
             .times(1)
             .returning(move || Ok(gateways.clone()));
 
-        let store = Arc::new(InMemoryGatewayProcessStore::new());
-        let orchestrator = GatewayOrchestrationService::new(
-            Arc::new(mock_repo),
-            store.clone(),
-            GatewayOrchestrationServiceConfig::default(),
-            CancellationToken::new(),
-            create_mock_producer(),
-            create_test_factory(),
-        );
+        let store = Arc::new(InMemoryDeploymentHandleStore::new());
+        let orchestrator = create_test_service(mock_repo, store.clone());
 
         let result = orchestrator.launch_gateways().await;
         assert!(result.is_ok());
@@ -329,16 +315,8 @@ mod tests {
     #[tokio::test]
     async fn test_handle_gateway_created_starts_process() {
         let mock_repo = MockGatewayRepository::new();
-        let store = Arc::new(InMemoryGatewayProcessStore::new());
-
-        let orchestrator = GatewayOrchestrationService::new(
-            Arc::new(mock_repo),
-            store.clone(),
-            GatewayOrchestrationServiceConfig::default(),
-            CancellationToken::new(),
-            create_mock_producer(),
-            create_test_factory(),
-        );
+        let store = Arc::new(InMemoryDeploymentHandleStore::new());
+        let orchestrator = create_test_service(mock_repo, store.clone());
 
         let gateway = create_test_gateway("gw1", "org1");
         let result = orchestrator.handle_gateway_created(gateway).await;
@@ -352,16 +330,8 @@ mod tests {
     #[tokio::test]
     async fn test_handle_gateway_deleted_stops_process() {
         let mock_repo = MockGatewayRepository::new();
-        let store = Arc::new(InMemoryGatewayProcessStore::new());
-
-        let orchestrator = GatewayOrchestrationService::new(
-            Arc::new(mock_repo),
-            store.clone(),
-            GatewayOrchestrationServiceConfig::default(),
-            CancellationToken::new(),
-            create_mock_producer(),
-            create_test_factory(),
-        );
+        let store = Arc::new(InMemoryDeploymentHandleStore::new());
+        let orchestrator = create_test_service(mock_repo, store.clone());
 
         // Start a process
         let gateway = create_test_gateway("gw1", "org1");
@@ -395,16 +365,8 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(Some(old_gateway_clone.clone())));
 
-        let store = Arc::new(InMemoryGatewayProcessStore::new());
-
-        let orchestrator = GatewayOrchestrationService::new(
-            Arc::new(mock_repo),
-            store.clone(),
-            GatewayOrchestrationServiceConfig::default(),
-            CancellationToken::new(),
-            create_mock_producer(),
-            create_test_factory(),
-        );
+        let store = Arc::new(InMemoryDeploymentHandleStore::new());
+        let orchestrator = create_test_service(mock_repo, store.clone());
 
         // Start a process
         orchestrator
@@ -431,16 +393,8 @@ mod tests {
     #[tokio::test]
     async fn test_handle_gateway_updated_with_soft_delete() {
         let mock_repo = MockGatewayRepository::new();
-        let store = Arc::new(InMemoryGatewayProcessStore::new());
-
-        let orchestrator = GatewayOrchestrationService::new(
-            Arc::new(mock_repo),
-            store.clone(),
-            GatewayOrchestrationServiceConfig::default(),
-            CancellationToken::new(),
-            create_mock_producer(),
-            create_test_factory(),
-        );
+        let store = Arc::new(InMemoryDeploymentHandleStore::new());
+        let orchestrator = create_test_service(mock_repo, store.clone());
 
         // Start a process
         let old_gateway = create_test_gateway("gw1", "org1");

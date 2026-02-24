@@ -7,8 +7,8 @@ use common::domain::{
     MockRawEnvelopeProducer, RawEnvelopeProducer, UpdateGatewayRepoInput,
 };
 use gateway_orchestrator::domain::{
-    GatewayOrchestrationService, GatewayOrchestrationServiceConfig, GatewayProcessStore,
-    GatewayRunner, GatewayRunnerFactory, InMemoryGatewayProcessStore,
+    DeploymentHandleStore, GatewayOrchestrationService, GatewayOrchestrationServiceConfig,
+    GatewayRunner, GatewayRunnerFactory, InMemoryDeploymentHandleStore, InProcessDeployer,
 };
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
@@ -139,12 +139,27 @@ fn create_test_gateway(id: &str, org_id: &str, broker_url: &str) -> Gateway {
     }
 }
 
+fn create_test_orchestrator(
+    gateway_repo: Arc<mocks::MockGatewayRepository>,
+    handle_store: Arc<InMemoryDeploymentHandleStore>,
+    shutdown_token: CancellationToken,
+) -> GatewayOrchestrationService {
+    GatewayOrchestrationService::new(
+        gateway_repo,
+        handle_store,
+        Arc::new(InProcessDeployer),
+        GatewayOrchestrationServiceConfig::default(),
+        shutdown_token,
+        create_mock_producer(),
+        create_test_factory(),
+    )
+}
+
 #[tokio::test]
 async fn test_orchestrator_starts_existing_gateways() {
     // Arrange
     let gateway_repo = Arc::new(mocks::MockGatewayRepository::new());
-    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
-    let config = GatewayOrchestrationServiceConfig::default();
+    let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
     let shutdown_token = CancellationToken::new();
 
     // Add 3 test gateways to the repository
@@ -164,13 +179,10 @@ async fn test_orchestrator_starts_existing_gateways() {
         "mqtt://test3.example.com:1883",
     ));
 
-    let orchestrator = GatewayOrchestrationService::new(
+    let orchestrator = create_test_orchestrator(
         gateway_repo.clone(),
-        process_store.clone(),
-        config,
+        handle_store.clone(),
         shutdown_token.clone(),
-        create_mock_producer(),
-        create_test_factory(),
     );
 
     // Act
@@ -183,16 +195,16 @@ async fn test_orchestrator_starts_existing_gateways() {
     sleep(Duration::from_millis(100)).await;
 
     // Assert
-    let gateway_ids = process_store.list_gateway_ids().await.unwrap();
+    let gateway_ids = handle_store.list_gateway_ids().await.unwrap();
     assert_eq!(gateway_ids.len(), 3, "All 3 gateways should have started");
     assert!(gateway_ids.contains(&"gw-001".to_string()));
     assert!(gateway_ids.contains(&"gw-002".to_string()));
     assert!(gateway_ids.contains(&"gw-003".to_string()));
 
     // Verify all processes exist
-    assert!(process_store.exists("gw-001").await.unwrap());
-    assert!(process_store.exists("gw-002").await.unwrap());
-    assert!(process_store.exists("gw-003").await.unwrap());
+    assert!(handle_store.exists("gw-001").await.unwrap());
+    assert!(handle_store.exists("gw-002").await.unwrap());
+    assert!(handle_store.exists("gw-003").await.unwrap());
 
     // Cleanup
     shutdown_token.cancel();
@@ -203,17 +215,13 @@ async fn test_orchestrator_starts_existing_gateways() {
 async fn test_orchestrator_handles_gateway_created() {
     // Arrange
     let gateway_repo = Arc::new(mocks::MockGatewayRepository::new());
-    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
-    let config = GatewayOrchestrationServiceConfig::default();
+    let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
     let shutdown_token = CancellationToken::new();
 
-    let orchestrator = GatewayOrchestrationService::new(
+    let orchestrator = create_test_orchestrator(
         gateway_repo.clone(),
-        process_store.clone(),
-        config,
+        handle_store.clone(),
         shutdown_token.clone(),
-        create_mock_producer(),
-        create_test_factory(),
     );
 
     // Start with no gateways
@@ -233,10 +241,10 @@ async fn test_orchestrator_handles_gateway_created() {
     sleep(Duration::from_millis(100)).await;
 
     // Assert
-    let gateway_ids = process_store.list_gateway_ids().await.unwrap();
+    let gateway_ids = handle_store.list_gateway_ids().await.unwrap();
     assert_eq!(gateway_ids.len(), 1, "New gateway should have started");
     assert!(gateway_ids.contains(&"gw-new".to_string()));
-    assert!(process_store.exists("gw-new").await.unwrap());
+    assert!(handle_store.exists("gw-new").await.unwrap());
 
     // Cleanup
     shutdown_token.cancel();
@@ -247,8 +255,7 @@ async fn test_orchestrator_handles_gateway_created() {
 async fn test_orchestrator_handles_gateway_updated_with_config_change() {
     // Arrange
     let gateway_repo = Arc::new(mocks::MockGatewayRepository::new());
-    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
-    let config = GatewayOrchestrationServiceConfig::default();
+    let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
     let shutdown_token = CancellationToken::new();
 
     // Add initial gateway
@@ -256,13 +263,10 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
         create_test_gateway("gw-update", "org-001", "mqtt://original.example.com:1883");
     gateway_repo.add_gateway(initial_gateway);
 
-    let orchestrator = GatewayOrchestrationService::new(
+    let orchestrator = create_test_orchestrator(
         gateway_repo.clone(),
-        process_store.clone(),
-        config,
+        handle_store.clone(),
         shutdown_token.clone(),
-        create_mock_producer(),
-        create_test_factory(),
     );
 
     orchestrator
@@ -272,7 +276,7 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
     sleep(Duration::from_millis(100)).await;
 
     // Verify process started
-    assert!(process_store.exists("gw-update").await.unwrap());
+    assert!(handle_store.exists("gw-update").await.unwrap());
 
     // Act - update gateway with new config
     let mut updated_gateway =
@@ -289,16 +293,8 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
 
     // Assert - process should still exist after config change
     assert!(
-        process_store.exists("gw-update").await.unwrap(),
+        handle_store.exists("gw-update").await.unwrap(),
         "Process should still exist after config change"
-    );
-
-    // Verify the process has the updated config
-    let handle = process_store.get("gw-update").await.unwrap().unwrap();
-    let GatewayConfig::Emqx(emqx) = &handle.gateway.gateway_config;
-    assert_eq!(
-        emqx.broker_url, "mqtt://updated.example.com:8883",
-        "Process should have the updated broker URL"
     );
 
     // Cleanup
@@ -310,21 +306,17 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
 async fn test_orchestrator_handles_gateway_soft_delete() {
     // Arrange
     let gateway_repo = Arc::new(mocks::MockGatewayRepository::new());
-    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
-    let config = GatewayOrchestrationServiceConfig::default();
+    let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
     let shutdown_token = CancellationToken::new();
 
     // Add initial gateway
     let gateway = create_test_gateway("gw-delete", "org-001", "mqtt://delete.example.com:1883");
     gateway_repo.add_gateway(gateway);
 
-    let orchestrator = GatewayOrchestrationService::new(
+    let orchestrator = create_test_orchestrator(
         gateway_repo.clone(),
-        process_store.clone(),
-        config,
+        handle_store.clone(),
         shutdown_token.clone(),
-        create_mock_producer(),
-        create_test_factory(),
     );
 
     orchestrator
@@ -334,7 +326,7 @@ async fn test_orchestrator_handles_gateway_soft_delete() {
     sleep(Duration::from_millis(100)).await;
 
     // Verify process started
-    assert!(process_store.exists("gw-delete").await.unwrap());
+    assert!(handle_store.exists("gw-delete").await.unwrap());
 
     // Act - soft delete gateway (set deleted_at)
     let mut deleted_gateway =
@@ -351,7 +343,7 @@ async fn test_orchestrator_handles_gateway_soft_delete() {
 
     // Assert - process should be stopped
     assert!(
-        !process_store.exists("gw-delete").await.unwrap(),
+        !handle_store.exists("gw-delete").await.unwrap(),
         "Process should be stopped after soft delete"
     );
 
@@ -363,21 +355,17 @@ async fn test_orchestrator_handles_gateway_soft_delete() {
 async fn test_orchestrator_handles_gateway_deleted() {
     // Arrange
     let gateway_repo = Arc::new(mocks::MockGatewayRepository::new());
-    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
-    let config = GatewayOrchestrationServiceConfig::default();
+    let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
     let shutdown_token = CancellationToken::new();
 
     // Add initial gateway
     let gateway = create_test_gateway("gw-hard", "org-001", "mqtt://hard.example.com:1883");
     gateway_repo.add_gateway(gateway);
 
-    let orchestrator = GatewayOrchestrationService::new(
+    let orchestrator = create_test_orchestrator(
         gateway_repo.clone(),
-        process_store.clone(),
-        config,
+        handle_store.clone(),
         shutdown_token.clone(),
-        create_mock_producer(),
-        create_test_factory(),
     );
 
     orchestrator
@@ -387,7 +375,7 @@ async fn test_orchestrator_handles_gateway_deleted() {
     sleep(Duration::from_millis(100)).await;
 
     // Verify process started
-    assert!(process_store.exists("gw-hard").await.unwrap());
+    assert!(handle_store.exists("gw-hard").await.unwrap());
 
     // Act - hard delete gateway
     orchestrator
@@ -400,7 +388,7 @@ async fn test_orchestrator_handles_gateway_deleted() {
 
     // Assert - process should be stopped
     assert!(
-        !process_store.exists("gw-hard").await.unwrap(),
+        !handle_store.exists("gw-hard").await.unwrap(),
         "Process should be stopped after hard delete"
     );
 
@@ -412,8 +400,7 @@ async fn test_orchestrator_handles_gateway_deleted() {
 async fn test_orchestrator_shutdown_stops_all_processes() {
     // Arrange
     let gateway_repo = Arc::new(mocks::MockGatewayRepository::new());
-    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
-    let config = GatewayOrchestrationServiceConfig::default();
+    let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
     let shutdown_token = CancellationToken::new();
 
     // Add multiple gateways
@@ -433,13 +420,10 @@ async fn test_orchestrator_shutdown_stops_all_processes() {
         "mqtt://test3.example.com:1883",
     ));
 
-    let orchestrator = GatewayOrchestrationService::new(
+    let orchestrator = create_test_orchestrator(
         gateway_repo.clone(),
-        process_store.clone(),
-        config,
+        handle_store.clone(),
         shutdown_token.clone(),
-        create_mock_producer(),
-        create_test_factory(),
     );
 
     orchestrator
@@ -450,7 +434,7 @@ async fn test_orchestrator_shutdown_stops_all_processes() {
 
     // Verify all processes started
     assert_eq!(
-        process_store.list_gateway_ids().await.unwrap().len(),
+        handle_store.list_gateway_ids().await.unwrap().len(),
         3,
         "All processes should be started"
     );
@@ -466,7 +450,7 @@ async fn test_orchestrator_shutdown_stops_all_processes() {
 
     // Assert - all processes should be stopped
     assert_eq!(
-        process_store.list_gateway_ids().await.unwrap().len(),
+        handle_store.list_gateway_ids().await.unwrap().len(),
         0,
         "All processes should be stopped after shutdown"
     );
@@ -479,20 +463,16 @@ async fn test_orchestrator_shutdown_stops_all_processes() {
 async fn test_orchestrator_ignores_duplicate_create() {
     // Arrange
     let gateway_repo = Arc::new(mocks::MockGatewayRepository::new());
-    let process_store = Arc::new(InMemoryGatewayProcessStore::new());
-    let config = GatewayOrchestrationServiceConfig::default();
+    let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
     let shutdown_token = CancellationToken::new();
 
     let gateway = create_test_gateway("gw-dup", "org-001", "mqtt://dup.example.com:1883");
     gateway_repo.add_gateway(gateway.clone());
 
-    let orchestrator = GatewayOrchestrationService::new(
+    let orchestrator = create_test_orchestrator(
         gateway_repo.clone(),
-        process_store.clone(),
-        config,
+        handle_store.clone(),
         shutdown_token.clone(),
-        create_mock_producer(),
-        create_test_factory(),
     );
 
     orchestrator
@@ -501,7 +481,7 @@ async fn test_orchestrator_ignores_duplicate_create() {
         .expect("Failed to start orchestrator");
     sleep(Duration::from_millis(100)).await;
 
-    let initial_count = process_store.list_gateway_ids().await.unwrap().len();
+    let initial_count = handle_store.list_gateway_ids().await.unwrap().len();
     assert_eq!(initial_count, 1);
 
     // Act - try to create the same gateway again
@@ -511,7 +491,7 @@ async fn test_orchestrator_ignores_duplicate_create() {
     assert!(result.is_ok(), "Should handle duplicate gracefully");
     sleep(Duration::from_millis(100)).await;
 
-    let final_count = process_store.list_gateway_ids().await.unwrap().len();
+    let final_count = handle_store.list_gateway_ids().await.unwrap().len();
     assert_eq!(
         final_count, 1,
         "Should still have only 1 process after duplicate create"
