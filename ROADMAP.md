@@ -19,8 +19,9 @@ Make the existing ingest path multi-protocol and production-grade before buildin
 - [x] #119 — Own the CEL runtime — ability to add IoT-specific functions
 - [x] #120 — Pre-compiled CEL — removes per-message compilation cost at scale
 - [ ] #26 — RAKwireless decoder — broader hardware support
-- [ ] #94 — Gateway deployer abstraction — decouple gateway lifecycle from in-process `tokio::spawn`
+- [x] #94 — Gateway deployer abstraction — decouple gateway lifecycle from in-process `tokio::spawn`
 - [ ] #48 — CDC high availability — eliminates single point of failure
+- [ ] #157 — Rename End Device to Data Stream — align naming with the platform's evolving multi-source model
 
 > **Why first:** Everything downstream depends on reliable, validated data flowing in. Protocol-agnostic contracts (#122) are especially important — agents will eventually need to reason about devices speaking different protocols, and the downlink path will need protocol-aware encoding.
 
