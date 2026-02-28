@@ -1,3 +1,9 @@
+## [1.20.0](https://github.com/ponix-dev/ponix-rs/compare/v1.19.0...v1.20.0) (2026-02-28)
+
+### Features
+
+* gateway deployer abstraction ([#94](https://github.com/ponix-dev/ponix-rs/issues/94)) ([#156](https://github.com/ponix-dev/ponix-rs/issues/156)) ([77bd888](https://github.com/ponix-dev/ponix-rs/commit/77bd888474901e7a39dee9e1411f109ff3b433d2)), closes [#157](https://github.com/ponix-dev/ponix-rs/issues/157)
+
 ## [1.19.0](https://github.com/ponix-dev/ponix-rs/compare/v1.18.0...v1.19.0) (2026-02-23)
 
 ### Features
