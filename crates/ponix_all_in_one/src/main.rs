@@ -186,10 +186,13 @@ async fn main() {
     // Create orchestrator shutdown token - owned by main for lifecycle coordination
     let orchestrator_shutdown_token = tokio_util::sync::CancellationToken::new();
 
-    let deployer_type: DeployerType = config.gateway_deployer_type.parse().unwrap_or_else(|e| {
-        error!("Invalid PONIX_GATEWAY_DEPLOYER_TYPE: {}, using default", e);
-        DeployerType::default()
-    });
+    let deployer_type: DeployerType = match config.gateway_deployer_type.parse() {
+        Ok(dt) => dt,
+        Err(e) => {
+            error!("Invalid PONIX_GATEWAY_DEPLOYER_TYPE: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let gateway_orchestrator = match GatewayOrchestrator::new(
         postgres_repos.gateway.clone(),

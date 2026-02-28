@@ -7,8 +7,9 @@ use common::domain::{
     MockRawEnvelopeProducer, RawEnvelopeProducer, UpdateGatewayRepoInput,
 };
 use gateway_orchestrator::domain::{
-    DeploymentHandleStore, GatewayOrchestrationService, GatewayOrchestrationServiceConfig,
-    GatewayRunner, GatewayRunnerFactory, InMemoryDeploymentHandleStore, InProcessDeployer,
+    hash_gateway_config, DeploymentHandleStore, GatewayOrchestrationService,
+    GatewayOrchestrationServiceConfig, GatewayRunner, GatewayRunnerFactory,
+    InMemoryDeploymentHandleStore, InProcessDeployer,
 };
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
@@ -295,6 +296,17 @@ async fn test_orchestrator_handles_gateway_updated_with_config_change() {
     assert!(
         handle_store.exists("gw-update").await.unwrap(),
         "Process should still exist after config change"
+    );
+
+    // Verify the restarted handle has the new config hash
+    let expected_hash = hash_gateway_config(&GatewayConfig::Emqx(EmqxGatewayConfig {
+        broker_url: "mqtt://updated.example.com:8883".to_string(),
+    }));
+    let stored_hash = handle_store.get_config_hash("gw-update").await.unwrap();
+    assert_eq!(
+        stored_hash,
+        Some(expected_hash),
+        "Handle should have updated config hash"
     );
 
     // Cleanup

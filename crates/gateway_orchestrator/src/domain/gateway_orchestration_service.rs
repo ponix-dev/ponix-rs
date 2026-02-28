@@ -1,9 +1,8 @@
 use crate::domain::{
-    DeploymentHandleStore, GatewayDeployer, GatewayOrchestrationServiceConfig, GatewayRunnerFactory,
+    hash_gateway_config, DeploymentHandleStore, GatewayDeployer, GatewayOrchestrationServiceConfig,
+    GatewayRunnerFactory,
 };
-use common::domain::{
-    DomainResult, Gateway, GatewayRepository, GetGatewayRepoInput, RawEnvelopeProducer,
-};
+use common::domain::{DomainResult, Gateway, GatewayRepository, RawEnvelopeProducer};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -84,21 +83,15 @@ impl GatewayOrchestrationService {
         }
 
         let config_changed = match self
-            .gateway_repository
-            .get_gateway(GetGatewayRepoInput {
-                gateway_id: gateway.gateway_id.clone(),
-                organization_id: gateway.organization_id.clone(),
-            })
+            .handle_store
+            .get_config_hash(&gateway.gateway_id)
             .await?
         {
-            Some(old_gateway) => old_gateway.gateway_config != gateway.gateway_config,
-            None => {
-                warn!(
-                    "old gateway state not found for {}, starting new process",
-                    gateway.gateway_id
-                );
-                true
+            Some(old_hash) => {
+                let new_hash = hash_gateway_config(&gateway.gateway_config);
+                old_hash != new_hash
             }
+            None => true,
         };
 
         if config_changed {
@@ -214,8 +207,7 @@ mod tests {
     use crate::domain::{GatewayRunner, InMemoryDeploymentHandleStore, InProcessDeployer};
     use async_trait::async_trait;
     use common::domain::{
-        EmqxGatewayConfig, GatewayConfig, GetGatewayRepoInput, MockGatewayRepository,
-        MockRawEnvelopeProducer,
+        EmqxGatewayConfig, GatewayConfig, MockGatewayRepository, MockRawEnvelopeProducer,
     };
 
     // Mock runner for testing - immediately completes
@@ -351,19 +343,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_gateway_updated_with_config_change() {
-        let mut mock_repo = MockGatewayRepository::new();
+        let mock_repo = MockGatewayRepository::new();
 
-        // Setup mock to return the old gateway when get_gateway is called
         let old_gateway = create_test_gateway("gw1", "org1");
-        let old_gateway_clone = old_gateway.clone();
-
-        mock_repo
-            .expect_get_gateway()
-            .withf(|input: &GetGatewayRepoInput| {
-                input.gateway_id == "gw1" && input.organization_id == "org1"
-            })
-            .times(1)
-            .returning(move |_| Ok(Some(old_gateway_clone.clone())));
 
         let store = Arc::new(InMemoryDeploymentHandleStore::new());
         let orchestrator = create_test_service(mock_repo, store.clone());
@@ -380,6 +362,8 @@ mod tests {
             broker_url: "mqtt://mqtt.newhost.com:8883".to_string(),
         });
 
+        let expected_config_hash = hash_gateway_config(&new_gateway.gateway_config);
+
         let result = orchestrator.handle_gateway_updated(new_gateway).await;
         assert!(result.is_ok());
 
@@ -388,6 +372,14 @@ mod tests {
 
         // Process should still exist (restarted)
         assert!(store.exists("gw1").await.unwrap());
+
+        // Verify the restarted handle has the new config hash
+        let stored_hash = store.get_config_hash("gw1").await.unwrap();
+        assert_eq!(
+            stored_hash,
+            Some(expected_config_hash),
+            "Handle should have the updated config hash"
+        );
     }
 
     #[tokio::test]

@@ -54,6 +54,13 @@ impl DeploymentHandleStore for InMemoryDeploymentHandleStore {
         let handles = self.handles.read().await;
         Ok(handles.len())
     }
+
+    async fn get_config_hash(&self, gateway_id: &str) -> DomainResult<Option<String>> {
+        let handles = self.handles.read().await;
+        Ok(handles
+            .get(gateway_id)
+            .map(|handle| handle.config_hash().to_string()))
+    }
 }
 
 #[cfg(test)]

@@ -48,6 +48,9 @@ pub trait DeploymentHandleStore: Send + Sync {
 
     /// Get count of active deployments
     async fn count(&self) -> DomainResult<usize>;
+
+    /// Get the config hash for a deployed gateway, if it exists
+    async fn get_config_hash(&self, gateway_id: &str) -> DomainResult<Option<String>>;
 }
 
 /// The type of deployer to use for running gateway processes.
