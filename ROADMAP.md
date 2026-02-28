@@ -21,6 +21,7 @@ Make the existing ingest path multi-protocol and production-grade before buildin
 - [ ] #26 — RAKwireless decoder — broader hardware support
 - [x] #94 — Gateway deployer abstraction — decouple gateway lifecycle from in-process `tokio::spawn`
 - [ ] #48 — CDC high availability — eliminates single point of failure
+- [ ] #157 — Rename End Device to Data Stream — align naming with the platform's evolving multi-source model
 
 > **Why first:** Everything downstream depends on reliable, validated data flowing in. Protocol-agnostic contracts (#122) are especially important — agents will eventually need to reason about devices speaking different protocols, and the downlink path will need protocol-aware encoding.
 
