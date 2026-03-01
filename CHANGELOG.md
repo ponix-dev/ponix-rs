@@ -1,3 +1,9 @@
+## [1.25.0](https://github.com/ponix-dev/ponix-rs/compare/v1.24.0...v1.25.0) (2026-03-01)
+
+### Features
+
+* document entity, repository, and PostgreSQL persistence ([#106](https://github.com/ponix-dev/ponix-rs/issues/106)) ([#166](https://github.com/ponix-dev/ponix-rs/issues/166)) ([c57fd0d](https://github.com/ponix-dev/ponix-rs/commit/c57fd0d68943f96deb1d38f346ab0030659c1144))
+
 ## [1.24.0](https://github.com/ponix-dev/ponix-rs/compare/v1.23.0...v1.24.0) (2026-03-01)
 
 ### Features
