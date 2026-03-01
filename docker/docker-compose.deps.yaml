@@ -40,9 +40,7 @@ services:
         hard: 262144
 
   postgres:
-    build:
-      context: ./postgres
-      dockerfile: Dockerfile
+    image: ghcr.io/ponix-dev/ponix-postgres:latest
     container_name: ponix-postgres
     environment:
       POSTGRES_USER: ponix

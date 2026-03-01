@@ -18,7 +18,7 @@ async fn setup_test_db() -> (
     PostgresDataStreamDefinitionRepository,
     PostgresClient,
 ) {
-    let postgres = GenericImage::new("ponix-postgres", "latest")
+    let postgres = GenericImage::new("ghcr.io/ponix-dev/ponix-postgres", "latest")
         .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
             "database system is ready to accept connections",
         ))
