@@ -30,7 +30,7 @@ Make the existing ingest path multi-protocol and production-grade before buildin
 Give the platform memory beyond raw time-series. Documents, entity relationships, and a graph that represents how the physical world is connected.
 
 - [x] #102 — AGE + pgvector extensions — graph traversal and vector similarity in PostgreSQL
-- [ ] #107 — NATS Object Storage — binary document content storage
+- [x] #107 — NATS Object Storage — binary document content storage
 - [ ] #106 — Document entity + repository — metadata for manuals, datasheets, config files
 - [ ] #108 — Document service + upload — gRPC metadata + HTTP file upload
 - [ ] #109 — Document CDC — document lifecycle events in the event stream
