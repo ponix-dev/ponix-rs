@@ -385,6 +385,12 @@ async fn initialize_shared_dependencies(
     );
     ensure_nats_streams(&nats_client, config).await?;
 
+    // Initialize NATS Object Store for document storage
+    info!("Initializing NATS Object Store...");
+    let _object_store_client = nats_client
+        .create_object_store_client(&config.nats_object_store_bucket)
+        .await?;
+
     Ok((
         postgres_repos,
         postgres_client,

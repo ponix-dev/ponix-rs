@@ -1,3 +1,9 @@
+## [1.24.0](https://github.com/ponix-dev/ponix-rs/compare/v1.23.0...v1.24.0) (2026-03-01)
+
+### Features
+
+* NATS Object Store client for document storage ([#107](https://github.com/ponix-dev/ponix-rs/issues/107)) ([#165](https://github.com/ponix-dev/ponix-rs/issues/165)) ([ead2a6a](https://github.com/ponix-dev/ponix-rs/commit/ead2a6acbbd71595351bc84c8f50db0b6013bf02)), closes [#106](https://github.com/ponix-dev/ponix-rs/issues/106) [#108](https://github.com/ponix-dev/ponix-rs/issues/108)
+
 ## [1.23.0](https://github.com/ponix-dev/ponix-rs/compare/v1.22.0...v1.23.0) (2026-03-01)
 
 ### Features
