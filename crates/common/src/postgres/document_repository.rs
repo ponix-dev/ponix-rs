@@ -188,6 +188,24 @@ impl DocumentRepository for PostgresDocumentRepository {
             param_idx += 1;
         }
 
+        if let Some(ref mime_type) = input.mime_type {
+            query.push_str(&format!(", mime_type = ${}", param_idx));
+            params.push(mime_type);
+            param_idx += 1;
+        }
+
+        if let Some(ref size_bytes) = input.size_bytes {
+            query.push_str(&format!(", size_bytes = ${}", param_idx));
+            params.push(size_bytes);
+            param_idx += 1;
+        }
+
+        if let Some(ref checksum) = input.checksum {
+            query.push_str(&format!(", checksum = ${}", param_idx));
+            params.push(checksum);
+            param_idx += 1;
+        }
+
         if let Some(ref metadata) = input.metadata {
             query.push_str(&format!(", metadata = ${}", param_idx));
             params.push(metadata);

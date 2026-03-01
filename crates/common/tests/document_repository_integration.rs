@@ -135,15 +135,21 @@ async fn test_document_crud_operations() {
     assert_eq!(doc.document_id, "doc-crud-001");
     assert_eq!(doc.checksum, "sha256-abc123");
 
-    // Update name and metadata
+    // Update name, file metadata, and custom metadata
     let update_input = UpdateDocumentRepoInput {
         document_id: "doc-crud-001".to_string(),
         organization_id: "org-crud-001".to_string(),
         name: Some("Updated Manual.pdf".to_string()),
+        mime_type: Some("application/octet-stream".to_string()),
+        size_bytes: Some(2048),
+        checksum: Some("sha256-updated".to_string()),
         metadata: Some(serde_json::json!({"author": "test", "version": 2})),
     };
     let updated = doc_repo.update_document(update_input).await.unwrap();
     assert_eq!(updated.name, "Updated Manual.pdf");
+    assert_eq!(updated.mime_type, "application/octet-stream");
+    assert_eq!(updated.size_bytes, 2048);
+    assert_eq!(updated.checksum, "sha256-updated");
     assert_eq!(
         updated.metadata,
         serde_json::json!({"author": "test", "version": 2})
@@ -309,6 +315,9 @@ async fn test_update_document_with_wrong_organization_returns_not_found() {
         document_id: "doc-update-001".to_string(),
         organization_id: "org-update-2".to_string(),
         name: Some("Hacked Name".to_string()),
+        mime_type: None,
+        size_bytes: None,
+        checksum: None,
         metadata: None,
     };
     let result = doc_repo.update_document(wrong_update).await;

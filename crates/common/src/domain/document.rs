@@ -44,6 +44,9 @@ pub struct UpdateDocumentRepoInput {
     pub document_id: String,
     pub organization_id: String,
     pub name: Option<String>,
+    pub mime_type: Option<String>,
+    pub size_bytes: Option<i64>,
+    pub checksum: Option<String>,
     pub metadata: Option<serde_json::Value>,
 }
 
