@@ -1,3 +1,9 @@
+## [1.22.0](https://github.com/ponix-dev/ponix-rs/compare/v1.21.0...v1.22.0) (2026-03-01)
+
+### Features
+
+* AGE + pgvector PostgreSQL extensions ([#102](https://github.com/ponix-dev/ponix-rs/issues/102)) ([#160](https://github.com/ponix-dev/ponix-rs/issues/160)) ([58f80a6](https://github.com/ponix-dev/ponix-rs/commit/58f80a6d95ce4f34b963ddc9093abf907dc8c825))
+
 ## [1.21.0](https://github.com/ponix-dev/ponix-rs/compare/v1.20.0...v1.21.0) (2026-03-01)
 
 ### Features
