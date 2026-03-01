@@ -40,7 +40,9 @@ services:
         hard: 262144
 
   postgres:
-    image: postgres:16
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
     container_name: ponix-postgres
     environment:
       POSTGRES_USER: ponix

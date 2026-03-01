@@ -33,5 +33,8 @@ jobs:
           shared-key: "rust-cache"
           cache-on-failure: true
 
+      - name: Build ponix-postgres image
+        run: docker build -t ponix-postgres:latest docker/postgres/
+
       - name: Run integration tests
         run: mise run test:integration

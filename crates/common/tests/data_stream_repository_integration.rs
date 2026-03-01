@@ -10,16 +10,23 @@ use common::postgres::{
 };
 use goose::MigrationRunner;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::ContainerAsync;
-use testcontainers_modules::postgres::Postgres;
+use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 
 async fn setup_test_db() -> (
-    ContainerAsync<Postgres>,
+    ContainerAsync<GenericImage>,
     PostgresDataStreamRepository,
     PostgresDataStreamDefinitionRepository,
     PostgresClient,
 ) {
-    let postgres = Postgres::default().start().await.unwrap();
+    let postgres = GenericImage::new("ponix-postgres", "latest")
+        .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
+            "database system is ready to accept connections",
+        ))
+        .with_exposed_port(5432.into())
+        .with_env_var("POSTGRES_PASSWORD", "postgres")
+        .start()
+        .await
+        .unwrap();
     let host = postgres.get_host().await.unwrap();
     let port = postgres.get_host_port_ipv4(5432).await.unwrap();
 

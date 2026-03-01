@@ -20,7 +20,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
-use testcontainers_modules::postgres::Postgres;
 use tokio::time::{sleep, timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
@@ -33,7 +32,7 @@ const SUBJECT_PREFIX: &str = "test_gateways";
 const TEST_USER_ID: &str = "test-user-001";
 
 struct TestEnvironment {
-    _postgres_container: ContainerAsync<Postgres>,
+    _postgres_container: ContainerAsync<GenericImage>,
     _nats_container: ContainerAsync<GenericImage>,
     gateway_repo: PostgresGatewayRepository,
     organization_repo: PostgresOrganizationRepository,
@@ -48,9 +47,12 @@ async fn setup_test_env() -> TestEnvironment {
         .try_init();
 
     // Start PostgreSQL container with logical replication enabled
-    // Using PostgreSQL 15 as it includes the pubviaroot column required by the ETL library
-    let postgres = Postgres::default()
-        .with_tag("15-alpine")
+    let postgres = GenericImage::new("ponix-postgres", "latest")
+        .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
+            "database system is ready to accept connections",
+        ))
+        .with_exposed_port(5432.into())
+        .with_env_var("POSTGRES_PASSWORD", "postgres")
         .with_cmd([
             "postgres",
             "-c",
