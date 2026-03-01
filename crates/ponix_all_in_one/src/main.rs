@@ -13,11 +13,12 @@ use common::auth::{
 use common::clickhouse::ClickHouseClient;
 use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
+use common::nats::NatsObjectStoreClient;
 use common::postgres::create_postgres_authorization_adapter;
 use common::postgres::{
     PostgresClient, PostgresDataStreamDefinitionRepository, PostgresDataStreamRepository,
-    PostgresGatewayRepository, PostgresOrganizationRepository, PostgresRefreshTokenRepository,
-    PostgresUserRepository, PostgresWorkspaceRepository,
+    PostgresDocumentRepository, PostgresGatewayRepository, PostgresOrganizationRepository,
+    PostgresRefreshTokenRepository, PostgresUserRepository, PostgresWorkspaceRepository,
 };
 use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
@@ -25,8 +26,8 @@ use gateway_orchestrator::domain::DeployerType;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
 use ponix_api::domain::{
-    DataStreamDefinitionService, DataStreamService, GatewayService, OrganizationService,
-    UserService, WorkspaceService,
+    DataStreamDefinitionService, DataStreamService, DocumentService, GatewayService,
+    OrganizationService, UserService, WorkspaceService,
 };
 use ponix_api::grpc::PonixApiServices;
 use ponix_api::ponix_api::PonixApi;
@@ -68,7 +69,7 @@ async fn main() {
     debug!("Configuration: {:?}", config);
 
     // Initialize shared dependencies
-    let (postgres_repos, postgres_client, clickhouse_client, nats_client) =
+    let (postgres_repos, postgres_client, clickhouse_client, nats_client, object_store_client) =
         match initialize_shared_dependencies(&config).await {
             Ok(deps) => deps,
             Err(e) => {
@@ -140,6 +141,12 @@ async fn main() {
         postgres_repos.organization.clone(),
         authorization_service.clone(),
     ));
+    let document_service = Arc::new(DocumentService::new(
+        postgres_repos.document.clone(),
+        Arc::new(object_store_client),
+        postgres_repos.organization.clone(),
+        authorization_service.clone(),
+    ));
 
     // Parse ignored paths from config (comma-separated)
     let ignored_paths: Vec<String> = config
@@ -158,6 +165,7 @@ async fn main() {
             tracing_config: GrpcTracingConfig::new(ignored_paths),
             enable_grpc_web: config.grpc_web_enabled,
             cors_config: None,
+            ..Default::default()
         };
         if config.grpc_web_enabled {
             cfg.cors_config = Some(CorsConfig::from_comma_separated(
@@ -172,6 +180,7 @@ async fn main() {
         PonixApiServices {
             data_stream_service: data_stream_service.clone(),
             definition_service,
+            document_service,
             organization_service,
             gateway_service,
             user_service,
@@ -338,6 +347,7 @@ async fn main() {
 struct PostgresRepositories {
     data_stream: Arc<PostgresDataStreamRepository>,
     data_stream_definition: Arc<PostgresDataStreamDefinitionRepository>,
+    document: Arc<PostgresDocumentRepository>,
     organization: Arc<PostgresOrganizationRepository>,
     gateway: Arc<PostgresGatewayRepository>,
     user: Arc<PostgresUserRepository>,
@@ -352,6 +362,7 @@ async fn initialize_shared_dependencies(
     PostgresClient,
     ClickHouseClient,
     Arc<NatsClient>,
+    NatsObjectStoreClient,
 )> {
     // PostgreSQL initialization
     info!("Initializing PostgreSQL...");
@@ -362,6 +373,7 @@ async fn initialize_shared_dependencies(
         data_stream_definition: Arc::new(PostgresDataStreamDefinitionRepository::new(
             postgres_client.clone(),
         )),
+        document: Arc::new(PostgresDocumentRepository::new(postgres_client.clone())),
         organization: Arc::new(PostgresOrganizationRepository::new(postgres_client.clone())),
         gateway: Arc::new(PostgresGatewayRepository::new(postgres_client.clone())),
         user: Arc::new(PostgresUserRepository::new(postgres_client.clone())),
@@ -387,7 +399,7 @@ async fn initialize_shared_dependencies(
 
     // Initialize NATS Object Store for document storage
     info!("Initializing NATS Object Store...");
-    let _object_store_client = nats_client
+    let object_store_client = nats_client
         .create_object_store_client(&config.nats_object_store_bucket)
         .await?;
 
@@ -396,6 +408,7 @@ async fn initialize_shared_dependencies(
         postgres_client,
         clickhouse_client,
         nats_client,
+        object_store_client,
     ))
 }
 

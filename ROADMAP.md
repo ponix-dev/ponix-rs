@@ -32,12 +32,10 @@ Give the platform memory beyond raw time-series. Documents, entity relationships
 - [x] #102 — AGE + pgvector extensions — graph traversal and vector similarity in PostgreSQL
 - [x] #107 — NATS Object Storage — binary document content storage
 - [x] #106 — Document entity + repository — metadata for manuals, datasheets, config files
-- [ ] #108 — Document service + upload — gRPC metadata + HTTP file upload
-- [ ] #109 — Document CDC — document lifecycle events in the event stream
+- [ ] #108 — Document service + upload + associations — gRPC metadata + HTTP file upload + document association RPCs (link documents to data streams, definitions, workspaces) with dedicated junction tables and transactional AGE graph writes (subsumes #110/#111 for document relationships)
+- [ ] #109 — Document CDC — document change events in the event stream (feeds embedding pipeline #124, not graph sync — graph writes are transactional in #108)
 - [ ] #112 — Ollama + embedding service — local LLM inference and embedding generation
-- [ ] #124 — Document embedding pipeline — when a document reaches `ready` status (via CDC), chunk it, embed chunks with `nomic-embed-text`, store vectors in pgvector. Low-volume — documents are created occasionally, not thousands per second
-- [ ] #110 — Entity relationships — polymorphic links between devices, documents, assets, orgs
-- [ ] #111 — Graph sync — CDC events materialize relationships into AGE for traversal
+- [ ] #124 — Document embedding pipeline — when a document is created (via CDC), chunk it, embed chunks with `nomic-embed-text`, store vectors in pgvector. Low-volume — documents are created occasionally, not thousands per second
 
 > **Why second:** An agent making device decisions needs context. "Device X is in Building 3, which has HVAC system Y, and the manufacturer's datasheet says the operating range is 10–40°C." That context lives in documents and relationships, not in the time-series. By setting up Ollama and the embedding pipeline here, documents are searchable by meaning as soon as they enter the system — no need to wait for the full agent runtime.
 

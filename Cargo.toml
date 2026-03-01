@@ -48,8 +48,8 @@ http = "1.0"
 protoc-wkt = "1.0"
 
 # Protobuf (BSR registry)
-ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.5.0-20260228234535-5d13f6c08c29.2", registry = "buf" }
-ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.5.0-20260228234535-5d13f6c08c29.4", registry = "buf" }
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.5.0-20260301212117-62fb0f451571.2", registry = "buf" }
+ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.5.0-20260301212117-62fb0f451571.4", registry = "buf" }
 
 # Database clients
 clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
@@ -81,6 +81,11 @@ opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "trace", "log
 opentelemetry-semantic-conventions = "0.27"
 tracing-opentelemetry = "0.28"
 opentelemetry-appender-tracing = "0.27"
+
+# HTTP / Axum
+axum = "0.8"
+axum-extra = { version = "0.10", features = ["multipart"] }
+tokio-stream = "0.1"
 
 # Tower middleware
 tower = "0.5"
