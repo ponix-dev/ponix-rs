@@ -1,3 +1,9 @@
+## [1.23.0](https://github.com/ponix-dev/ponix-rs/compare/v1.22.0...v1.23.0) (2026-03-01)
+
+### Features
+
+* use GHCR ponix-postgres image in tests, CI, and local dev ([#164](https://github.com/ponix-dev/ponix-rs/issues/164)) ([0d2ff59](https://github.com/ponix-dev/ponix-rs/commit/0d2ff59eaf074147119ea560354b133c1470b969)), closes [#162](https://github.com/ponix-dev/ponix-rs/issues/162)
+
 ## [1.22.0](https://github.com/ponix-dev/ponix-rs/compare/v1.21.0...v1.22.0) (2026-03-01)
 
 ### Features
