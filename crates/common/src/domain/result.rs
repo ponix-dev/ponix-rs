@@ -67,6 +67,12 @@ pub enum DomainError {
     #[error("Gateway already exists: {0}")]
     GatewayAlreadyExists(String),
 
+    #[error("Document not found: {0}")]
+    DocumentNotFound(String),
+
+    #[error("Document already exists: {0}")]
+    DocumentAlreadyExists(String),
+
     #[error("Invalid gateway ID: {0}")]
     InvalidGatewayId(String),
 
