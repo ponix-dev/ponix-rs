@@ -17,7 +17,7 @@ async fn setup_test_db() -> (
     CasbinAuthorizationService,
     PostgresClient,
 ) {
-    let postgres = GenericImage::new("ponix-postgres", "latest")
+    let postgres = GenericImage::new("ghcr.io/ponix-dev/ponix-postgres", "latest")
         .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
             "database system is ready to accept connections",
         ))
@@ -664,7 +664,7 @@ async fn test_member_cannot_update_organization() {
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_role_persisted_in_database() {
-    let postgres = GenericImage::new("ponix-postgres", "latest")
+    let postgres = GenericImage::new("ghcr.io/ponix-dev/ponix-postgres", "latest")
         .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
             "database system is ready to accept connections",
         ))

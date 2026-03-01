@@ -32,6 +32,7 @@ jobs:
         with:
           context: docker/postgres
           file: docker/postgres/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: ${{ inputs.push }}
           tags: |
             ghcr.io/ponix-dev/ponix-postgres:latest
