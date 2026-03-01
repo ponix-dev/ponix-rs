@@ -1210,7 +1210,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1948,7 +1948,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -3182,9 +3182,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-prost"
-version = "0.5.0-20260222230759-321a9c11336c.2"
+version = "0.5.0-20260228234535-5d13f6c08c29.2"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "2ba489295c7a7b35e1a084e4bdf2c2ebf2ad0d3f283b6be2216bef120c6a91af"
+checksum = "189661d4fe40c4111864c40772fdf903bb521a1172b49ed7e2405db04c9148e3"
 dependencies = [
  "prost 0.14.1",
  "prost-types",
@@ -3192,9 +3192,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-tonic"
-version = "0.5.0-20260222230759-321a9c11336c.4"
+version = "0.5.0-20260228234535-5d13f6c08c29.4"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "dcd37794732d05be469ee12c047a0f4b0cc174b41c9907252feafdd0a6fbf10d"
+checksum = "afbe49557b95b4ad540e67d77a7bf742a1bda133f982c966c48da69530a1a787"
 dependencies = [
  "ponix_ponix_community_neoeinstein-prost",
  "tonic 0.14.2",
@@ -3443,7 +3443,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.35",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -3480,9 +3480,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3829,7 +3829,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5616,7 +5616,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

@@ -50,14 +50,14 @@ mod tests {
         let envelopes = vec![
             ProcessedEnvelope {
                 organization_id: "org-123".to_string(),
-                end_device_id: "device-456".to_string(),
+                data_stream_id: "ds-456".to_string(),
                 received_at: Utc::now(),
                 processed_at: Utc::now(),
                 data: serde_json::Map::new(),
             },
             ProcessedEnvelope {
                 organization_id: "org-123".to_string(),
-                end_device_id: "device-789".to_string(),
+                data_stream_id: "ds-789".to_string(),
                 received_at: Utc::now(),
                 processed_at: Utc::now(),
                 data: serde_json::Map::new(),

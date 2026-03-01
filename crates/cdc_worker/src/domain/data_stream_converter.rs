@@ -1,28 +1,28 @@
 use crate::domain::CdcConverter;
 use async_trait::async_trait;
 use bytes::Bytes;
-use ponix_proto_prost::end_device::v1::EndDevice;
+use ponix_proto_prost::data_stream::v1::DataStream;
 use prost::Message;
 use serde_json::Value;
 
-pub struct DeviceConverter;
+pub struct DataStreamConverter;
 
-impl Default for DeviceConverter {
+impl Default for DataStreamConverter {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl DeviceConverter {
+impl DataStreamConverter {
     pub fn new() -> Self {
         Self
     }
 
-    fn value_to_proto(&self, data: &Value) -> anyhow::Result<EndDevice> {
-        let device_id = data
-            .get("device_id")
+    fn value_to_proto(&self, data: &Value) -> anyhow::Result<DataStream> {
+        let data_stream_id = data
+            .get("data_stream_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing device_id"))?
+            .ok_or_else(|| anyhow::anyhow!("Missing data_stream_id"))?
             .to_string();
 
         let organization_id = data
@@ -50,11 +50,11 @@ impl DeviceConverter {
             .ok_or_else(|| anyhow::anyhow!("Missing gateway_id"))?
             .to_string();
 
-        // DB column is device_name, proto field is name
+        // DB column is name, proto field is name
         let name = data
-            .get("device_name")
+            .get("name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing device_name"))?
+            .ok_or_else(|| anyhow::anyhow!("Missing name"))?
             .to_string();
 
         let created_at = data
@@ -67,8 +67,8 @@ impl DeviceConverter {
             .and_then(|v| v.as_str())
             .and_then(|s| parse_timestamp(s).ok());
 
-        Ok(EndDevice {
-            device_id,
+        Ok(DataStream {
+            data_stream_id,
             organization_id,
             workspace_id,
             definition_id,
@@ -81,7 +81,7 @@ impl DeviceConverter {
 }
 
 #[async_trait]
-impl CdcConverter for DeviceConverter {
+impl CdcConverter for DataStreamConverter {
     async fn convert_insert(&self, data: Value) -> anyhow::Result<Bytes> {
         let proto = self.value_to_proto(&data)?;
         Ok(Bytes::from(proto.encode_to_vec()))
@@ -115,14 +115,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_insert() {
-        let converter = DeviceConverter::new();
+        let converter = DataStreamConverter::new();
         let data = json!({
-            "device_id": "device-123",
+            "data_stream_id": "ds-123",
             "organization_id": "org-1",
             "workspace_id": "ws-1",
             "definition_id": "def-1",
             "gateway_id": "gw-1",
-            "device_name": "Test Device",
+            "name": "Test Data Stream",
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z"
         });
@@ -133,25 +133,25 @@ mod tests {
         let bytes = result.unwrap();
         assert!(!bytes.is_empty());
 
-        let decoded = EndDevice::decode(bytes).unwrap();
-        assert_eq!(decoded.device_id, "device-123");
+        let decoded = DataStream::decode(bytes).unwrap();
+        assert_eq!(decoded.data_stream_id, "ds-123");
         assert_eq!(decoded.organization_id, "org-1");
         assert_eq!(decoded.workspace_id, "ws-1");
         assert_eq!(decoded.definition_id, "def-1");
         assert_eq!(decoded.gateway_id, "gw-1");
-        assert_eq!(decoded.name, "Test Device");
+        assert_eq!(decoded.name, "Test Data Stream");
     }
 
     #[tokio::test]
     async fn test_convert_insert_with_null_definition() {
-        let converter = DeviceConverter::new();
+        let converter = DataStreamConverter::new();
         let data = json!({
-            "device_id": "device-123",
+            "data_stream_id": "ds-123",
             "organization_id": "org-1",
             "workspace_id": "ws-1",
             "definition_id": null,
             "gateway_id": "gw-1",
-            "device_name": "Test Device",
+            "name": "Test Data Stream",
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z"
         });
@@ -160,26 +160,26 @@ mod tests {
         assert!(result.is_ok());
 
         let bytes = result.unwrap();
-        let decoded = EndDevice::decode(bytes).unwrap();
+        let decoded = DataStream::decode(bytes).unwrap();
         assert_eq!(decoded.definition_id, "");
     }
 
     #[tokio::test]
     async fn test_convert_update() {
-        let converter = DeviceConverter::new();
+        let converter = DataStreamConverter::new();
         let old = json!({
-            "device_id": "device-123",
+            "data_stream_id": "ds-123",
             "organization_id": "org-1",
             "workspace_id": "ws-1",
             "gateway_id": "gw-1",
-            "device_name": "Old Name"
+            "name": "Old Name"
         });
         let new = json!({
-            "device_id": "device-123",
+            "data_stream_id": "ds-123",
             "organization_id": "org-1",
             "workspace_id": "ws-1",
             "gateway_id": "gw-1",
-            "device_name": "Updated Device",
+            "name": "Updated Data Stream",
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-02T00:00:00Z"
         });
@@ -188,27 +188,27 @@ mod tests {
         assert!(result.is_ok());
 
         let bytes = result.unwrap();
-        let decoded = EndDevice::decode(bytes).unwrap();
-        assert_eq!(decoded.name, "Updated Device");
+        let decoded = DataStream::decode(bytes).unwrap();
+        assert_eq!(decoded.name, "Updated Data Stream");
     }
 
     #[tokio::test]
     async fn test_convert_delete() {
-        let converter = DeviceConverter::new();
+        let converter = DataStreamConverter::new();
         let data = json!({
-            "device_id": "device-123",
+            "data_stream_id": "ds-123",
             "organization_id": "org-1",
             "workspace_id": "ws-1",
             "gateway_id": "gw-1",
-            "device_name": "Deleted Device"
+            "name": "Deleted Data Stream"
         });
 
         let result = converter.convert_delete(data).await;
         assert!(result.is_ok());
 
         let bytes = result.unwrap();
-        let decoded = EndDevice::decode(bytes).unwrap();
-        assert_eq!(decoded.device_id, "device-123");
+        let decoded = DataStream::decode(bytes).unwrap();
+        assert_eq!(decoded.data_stream_id, "ds-123");
     }
 
     #[test]

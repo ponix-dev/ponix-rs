@@ -26,42 +26,48 @@ fn compiled_contract(match_expr: &str, transform_expr: &str, json_schema: &str) 
 mod mocks {
     use async_trait::async_trait;
     use common::domain::{
-        CreateDeviceRepoInput, CreateOrganizationRepoInputWithId, DeleteOrganizationRepoInput,
-        Device, DeviceRepository, DeviceWithDefinition, DomainResult, GetDeviceRepoInput,
-        GetDeviceWithDefinitionRepoInput, GetOrganizationRepoInput, GetUserOrganizationsRepoInput,
-        ListDevicesByGatewayRepoInput, ListDevicesRepoInput, ListOrganizationsRepoInput,
-        Organization, OrganizationRepository, ProcessedEnvelope, ProcessedEnvelopeProducer,
-        UpdateOrganizationRepoInput,
+        CreateDataStreamRepoInput, CreateOrganizationRepoInputWithId, DataStream,
+        DataStreamRepository, DataStreamWithDefinition, DeleteOrganizationRepoInput, DomainResult,
+        GetDataStreamRepoInput, GetDataStreamWithDefinitionRepoInput, GetOrganizationRepoInput,
+        GetUserOrganizationsRepoInput, ListDataStreamsByGatewayRepoInput, ListDataStreamsRepoInput,
+        ListOrganizationsRepoInput, Organization, OrganizationRepository, ProcessedEnvelope,
+        ProcessedEnvelopeProducer, UpdateOrganizationRepoInput,
     };
     use std::sync::{Arc, Mutex};
 
-    pub struct InMemoryDeviceRepository {
-        devices: Mutex<std::collections::HashMap<String, DeviceWithDefinition>>,
+    pub struct InMemoryDataStreamRepository {
+        data_streams: Mutex<std::collections::HashMap<String, DataStreamWithDefinition>>,
     }
 
-    impl InMemoryDeviceRepository {
+    impl InMemoryDataStreamRepository {
         pub fn new() -> Self {
             Self {
-                devices: Mutex::new(std::collections::HashMap::new()),
+                data_streams: Mutex::new(std::collections::HashMap::new()),
             }
         }
 
-        pub fn add_device(&self, device: DeviceWithDefinition) {
-            let mut devices = self.devices.lock().unwrap();
-            devices.insert(device.device_id.clone(), device);
+        pub fn add_data_stream(&self, data_stream: DataStreamWithDefinition) {
+            let mut data_streams = self.data_streams.lock().unwrap();
+            data_streams.insert(data_stream.data_stream_id.clone(), data_stream);
         }
     }
 
     #[async_trait]
-    impl DeviceRepository for InMemoryDeviceRepository {
-        async fn create_device(&self, _input: CreateDeviceRepoInput) -> DomainResult<Device> {
+    impl DataStreamRepository for InMemoryDataStreamRepository {
+        async fn create_data_stream(
+            &self,
+            _input: CreateDataStreamRepoInput,
+        ) -> DomainResult<DataStream> {
             unimplemented!("Not needed for envelope tests")
         }
 
-        async fn get_device(&self, input: GetDeviceRepoInput) -> DomainResult<Option<Device>> {
-            let devices = self.devices.lock().unwrap();
-            Ok(devices.get(&input.device_id).map(|d| Device {
-                device_id: d.device_id.clone(),
+        async fn get_data_stream(
+            &self,
+            input: GetDataStreamRepoInput,
+        ) -> DomainResult<Option<DataStream>> {
+            let data_streams = self.data_streams.lock().unwrap();
+            Ok(data_streams.get(&input.data_stream_id).map(|d| DataStream {
+                data_stream_id: d.data_stream_id.clone(),
                 organization_id: d.organization_id.clone(),
                 definition_id: d.definition_id.clone(),
                 workspace_id: d.workspace_id.clone(),
@@ -72,23 +78,26 @@ mod mocks {
             }))
         }
 
-        async fn list_devices(&self, _input: ListDevicesRepoInput) -> DomainResult<Vec<Device>> {
+        async fn list_data_streams(
+            &self,
+            _input: ListDataStreamsRepoInput,
+        ) -> DomainResult<Vec<DataStream>> {
             unimplemented!("Not needed for envelope tests")
         }
 
-        async fn list_devices_by_gateway(
+        async fn list_data_streams_by_gateway(
             &self,
-            _input: ListDevicesByGatewayRepoInput,
-        ) -> DomainResult<Vec<Device>> {
+            _input: ListDataStreamsByGatewayRepoInput,
+        ) -> DomainResult<Vec<DataStream>> {
             unimplemented!("Not needed for envelope tests")
         }
 
-        async fn get_device_with_definition(
+        async fn get_data_stream_with_definition(
             &self,
-            input: GetDeviceWithDefinitionRepoInput,
-        ) -> DomainResult<Option<DeviceWithDefinition>> {
-            let devices = self.devices.lock().unwrap();
-            Ok(devices.get(&input.device_id).cloned())
+            input: GetDataStreamWithDefinitionRepoInput,
+        ) -> DomainResult<Option<DataStreamWithDefinition>> {
+            let data_streams = self.data_streams.lock().unwrap();
+            Ok(data_streams.get(&input.data_stream_id).cloned())
         }
     }
 
@@ -187,9 +196,9 @@ mod mocks {
 
 #[tokio::test]
 async fn test_full_conversion_flow_cayenne_lpp() {
-    // Arrange: Create device with definition containing Cayenne LPP CEL expression
-    let device = common::domain::DeviceWithDefinition {
-        device_id: "sensor-001".to_string(),
+    // Arrange: Create data stream with definition containing Cayenne LPP CEL expression
+    let data_stream = common::domain::DataStreamWithDefinition {
+        data_stream_id: "sensor-001".to_string(),
         organization_id: "org-123".to_string(),
         workspace_id: "ws-123".to_string(),
         definition_id: "def-001".to_string(),
@@ -209,8 +218,8 @@ async fn test_full_conversion_flow_cayenne_lpp() {
         updated_at: None,
     };
 
-    let device_repo = mocks::InMemoryDeviceRepository::new();
-    device_repo.add_device(device);
+    let data_stream_repo = mocks::InMemoryDataStreamRepository::new();
+    data_stream_repo.add_data_stream(data_stream);
 
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     org_repo.add_organization(org);
@@ -220,7 +229,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
     let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
-        Arc::new(device_repo),
+        Arc::new(data_stream_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -230,7 +239,7 @@ async fn test_full_conversion_flow_cayenne_lpp() {
     // Cayenne LPP payload: channel 1, temperature 27.2°C
     let raw_envelope = RawEnvelope {
         organization_id: "org-123".to_string(),
-        end_device_id: "sensor-001".to_string(),
+        data_stream_id: "sensor-001".to_string(),
         received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
@@ -246,16 +255,16 @@ async fn test_full_conversion_flow_cayenne_lpp() {
 
     let processed = &published[0];
     assert_eq!(processed.organization_id, "org-123");
-    assert_eq!(processed.end_device_id, "sensor-001");
+    assert_eq!(processed.data_stream_id, "sensor-001");
     assert_eq!(processed.received_at, raw_envelope.received_at);
     assert!(processed.data.contains_key("temperature_1"));
 }
 
 #[tokio::test]
 async fn test_full_conversion_flow_custom_transformation() {
-    // Arrange: Create device with definition containing custom CEL transformation
-    let device = common::domain::DeviceWithDefinition {
-        device_id: "sensor-002".to_string(),
+    // Arrange: Create data stream with definition containing custom CEL transformation
+    let data_stream = common::domain::DataStreamWithDefinition {
+        data_stream_id: "sensor-002".to_string(),
         organization_id: "org-456".to_string(),
         workspace_id: "ws-456".to_string(),
         definition_id: "def-002".to_string(),
@@ -286,8 +295,8 @@ async fn test_full_conversion_flow_custom_transformation() {
         updated_at: None,
     };
 
-    let device_repo = mocks::InMemoryDeviceRepository::new();
-    device_repo.add_device(device);
+    let data_stream_repo = mocks::InMemoryDataStreamRepository::new();
+    data_stream_repo.add_data_stream(data_stream);
 
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     org_repo.add_organization(org);
@@ -297,7 +306,7 @@ async fn test_full_conversion_flow_custom_transformation() {
     let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
-        Arc::new(device_repo),
+        Arc::new(data_stream_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -307,7 +316,7 @@ async fn test_full_conversion_flow_custom_transformation() {
     // Cayenne LPP payload: temperature + humidity
     let raw_envelope = RawEnvelope {
         organization_id: "org-456".to_string(),
-        end_device_id: "sensor-002".to_string(),
+        data_stream_id: "sensor-002".to_string(),
         received_at: chrono::Utc::now(),
         payload: vec![
             0x01, 0x67, 0x01, 0x10, // Channel 1: temperature 27.2°C
@@ -333,16 +342,16 @@ async fn test_full_conversion_flow_custom_transformation() {
 }
 
 #[tokio::test]
-async fn test_device_not_found() {
-    // Arrange: Empty device repository
-    let device_repo = mocks::InMemoryDeviceRepository::new();
+async fn test_data_stream_not_found() {
+    // Arrange: Empty data stream repository
+    let data_stream_repo = mocks::InMemoryDataStreamRepository::new();
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     let payload_converter = CelPayloadConverter::new();
     let producer = mocks::InMemoryProducer::new();
     let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
-        Arc::new(device_repo),
+        Arc::new(data_stream_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -351,7 +360,7 @@ async fn test_device_not_found() {
 
     let raw_envelope = RawEnvelope {
         organization_id: "org-999".to_string(),
-        end_device_id: "nonexistent-device".to_string(),
+        data_stream_id: "nonexistent-data-stream".to_string(),
         received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
@@ -363,18 +372,18 @@ async fn test_device_not_found() {
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        DomainError::DeviceNotFound(_)
+        DomainError::DataStreamNotFound(_)
     ));
     assert_eq!(producer.get_published().len(), 0);
 }
 
 #[tokio::test]
 async fn test_invalid_compiled_bytes() {
-    // Arrange: Device with definition containing corrupt compiled bytes
+    // Arrange: Data stream with definition containing corrupt compiled bytes
     // (simulates data corruption or schema migration issues)
     let compiler = CelCompiler::new();
-    let device = common::domain::DeviceWithDefinition {
-        device_id: "sensor-bad".to_string(),
+    let data_stream = common::domain::DataStreamWithDefinition {
+        data_stream_id: "sensor-bad".to_string(),
         organization_id: "org-789".to_string(),
         workspace_id: "ws-789".to_string(),
         definition_id: "def-bad".to_string(),
@@ -400,8 +409,8 @@ async fn test_invalid_compiled_bytes() {
         updated_at: None,
     };
 
-    let device_repo = mocks::InMemoryDeviceRepository::new();
-    device_repo.add_device(device);
+    let data_stream_repo = mocks::InMemoryDataStreamRepository::new();
+    data_stream_repo.add_data_stream(data_stream);
 
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     org_repo.add_organization(org);
@@ -411,7 +420,7 @@ async fn test_invalid_compiled_bytes() {
     let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
-        Arc::new(device_repo),
+        Arc::new(data_stream_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -420,7 +429,7 @@ async fn test_invalid_compiled_bytes() {
 
     let raw_envelope = RawEnvelope {
         organization_id: "org-789".to_string(),
-        end_device_id: "sensor-bad".to_string(),
+        data_stream_id: "sensor-bad".to_string(),
         received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
@@ -439,9 +448,9 @@ async fn test_invalid_compiled_bytes() {
 
 #[tokio::test]
 async fn test_empty_cel_expression() {
-    // Arrange: Device with definition containing empty CEL expression
-    let device = common::domain::DeviceWithDefinition {
-        device_id: "sensor-empty".to_string(),
+    // Arrange: Data stream with definition containing empty CEL expression
+    let data_stream = common::domain::DataStreamWithDefinition {
+        data_stream_id: "sensor-empty".to_string(),
         organization_id: "org-000".to_string(),
         workspace_id: "ws-000".to_string(),
         definition_id: "def-empty".to_string(),
@@ -461,8 +470,8 @@ async fn test_empty_cel_expression() {
         updated_at: None,
     };
 
-    let device_repo = mocks::InMemoryDeviceRepository::new();
-    device_repo.add_device(device);
+    let data_stream_repo = mocks::InMemoryDataStreamRepository::new();
+    data_stream_repo.add_data_stream(data_stream);
 
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     org_repo.add_organization(org);
@@ -472,7 +481,7 @@ async fn test_empty_cel_expression() {
     let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
-        Arc::new(device_repo),
+        Arc::new(data_stream_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -481,7 +490,7 @@ async fn test_empty_cel_expression() {
 
     let raw_envelope = RawEnvelope {
         organization_id: "org-000".to_string(),
-        end_device_id: "sensor-empty".to_string(),
+        data_stream_id: "sensor-empty".to_string(),
         received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
@@ -500,9 +509,9 @@ async fn test_empty_cel_expression() {
 
 #[tokio::test]
 async fn test_cel_expression_returns_non_object() {
-    // Arrange: Device with definition containing CEL expression that returns a non-object
-    let device = common::domain::DeviceWithDefinition {
-        device_id: "sensor-scalar".to_string(),
+    // Arrange: Data stream with definition containing CEL expression that returns a non-object
+    let data_stream = common::domain::DataStreamWithDefinition {
+        data_stream_id: "sensor-scalar".to_string(),
         organization_id: "org-scalar".to_string(),
         workspace_id: "ws-scalar".to_string(),
         definition_id: "def-scalar".to_string(),
@@ -522,8 +531,8 @@ async fn test_cel_expression_returns_non_object() {
         updated_at: None,
     };
 
-    let device_repo = mocks::InMemoryDeviceRepository::new();
-    device_repo.add_device(device);
+    let data_stream_repo = mocks::InMemoryDataStreamRepository::new();
+    data_stream_repo.add_data_stream(data_stream);
 
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     org_repo.add_organization(org);
@@ -533,7 +542,7 @@ async fn test_cel_expression_returns_non_object() {
     let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
-        Arc::new(device_repo),
+        Arc::new(data_stream_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -542,7 +551,7 @@ async fn test_cel_expression_returns_non_object() {
 
     let raw_envelope = RawEnvelope {
         organization_id: "org-scalar".to_string(),
-        end_device_id: "sensor-scalar".to_string(),
+        data_stream_id: "sensor-scalar".to_string(),
         received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
@@ -563,8 +572,8 @@ async fn test_cel_expression_returns_non_object() {
 async fn test_multi_contract_routing_with_compiled_match() {
     // Arrange: Two contracts with different match expressions based on payload size.
     // Only the second contract should match a 4-byte payload.
-    let device = common::domain::DeviceWithDefinition {
-        device_id: "sensor-multi".to_string(),
+    let data_stream = common::domain::DataStreamWithDefinition {
+        data_stream_id: "sensor-multi".to_string(),
         organization_id: "org-multi".to_string(),
         workspace_id: "ws-multi".to_string(),
         definition_id: "def-multi".to_string(),
@@ -589,8 +598,8 @@ async fn test_multi_contract_routing_with_compiled_match() {
         updated_at: None,
     };
 
-    let device_repo = mocks::InMemoryDeviceRepository::new();
-    device_repo.add_device(device);
+    let data_stream_repo = mocks::InMemoryDataStreamRepository::new();
+    data_stream_repo.add_data_stream(data_stream);
 
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     org_repo.add_organization(org);
@@ -600,7 +609,7 @@ async fn test_multi_contract_routing_with_compiled_match() {
     let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
-        Arc::new(device_repo),
+        Arc::new(data_stream_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -610,7 +619,7 @@ async fn test_multi_contract_routing_with_compiled_match() {
     // 4-byte Cayenne LPP payload: temperature 27.2°C
     let raw_envelope = RawEnvelope {
         organization_id: "org-multi".to_string(),
-        end_device_id: "sensor-multi".to_string(),
+        data_stream_id: "sensor-multi".to_string(),
         received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };
@@ -663,8 +672,8 @@ async fn test_compiled_bytes_roundtrip_through_service() {
     // Verify that compiled bytes survive the full path:
     // compile → store in PayloadContract → evaluate_match → transform → publish
     // This uses a non-trivial transform expression to ensure the compiled AST is meaningful.
-    let device = common::domain::DeviceWithDefinition {
-        device_id: "sensor-roundtrip".to_string(),
+    let data_stream = common::domain::DataStreamWithDefinition {
+        data_stream_id: "sensor-roundtrip".to_string(),
         organization_id: "org-roundtrip".to_string(),
         workspace_id: "ws-roundtrip".to_string(),
         definition_id: "def-roundtrip".to_string(),
@@ -693,8 +702,8 @@ async fn test_compiled_bytes_roundtrip_through_service() {
         updated_at: None,
     };
 
-    let device_repo = mocks::InMemoryDeviceRepository::new();
-    device_repo.add_device(device);
+    let data_stream_repo = mocks::InMemoryDataStreamRepository::new();
+    data_stream_repo.add_data_stream(data_stream);
 
     let org_repo = mocks::InMemoryOrganizationRepository::new();
     org_repo.add_organization(org);
@@ -704,7 +713,7 @@ async fn test_compiled_bytes_roundtrip_through_service() {
     let schema_validator = JsonSchemaValidator::new();
 
     let service = RawEnvelopeService::new(
-        Arc::new(device_repo),
+        Arc::new(data_stream_repo),
         Arc::new(org_repo),
         Arc::new(payload_converter),
         Arc::new(producer.clone()),
@@ -714,7 +723,7 @@ async fn test_compiled_bytes_roundtrip_through_service() {
     // Cayenne LPP: temperature 27.2°C (exactly 4 bytes, matching our size(input) == 4)
     let raw_envelope = RawEnvelope {
         organization_id: "org-roundtrip".to_string(),
-        end_device_id: "sensor-roundtrip".to_string(),
+        data_stream_id: "sensor-roundtrip".to_string(),
         received_at: chrono::Utc::now(),
         payload: vec![0x01, 0x67, 0x01, 0x10],
     };

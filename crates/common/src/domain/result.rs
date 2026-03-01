@@ -4,41 +4,41 @@ pub type DomainResult<T> = Result<T, DomainError>;
 
 #[derive(Error, Debug)]
 pub enum DomainError {
-    #[error("Device not found: {0}")]
-    DeviceNotFound(String),
+    #[error("Data stream not found: {0}")]
+    DataStreamNotFound(String),
 
-    #[error("Device {0} not owned by organization {1}")]
-    DeviceNotOwnedByOrganization(String, String),
+    #[error("Data stream {0} not owned by organization {1}")]
+    DataStreamNotOwnedByOrganization(String, String),
 
-    #[error("Device already exists: {0}")]
-    DeviceAlreadyExists(String),
+    #[error("Data stream already exists: {0}")]
+    DataStreamAlreadyExists(String),
 
-    #[error("Invalid device ID: {0}")]
-    InvalidDeviceId(String),
+    #[error("Invalid data stream ID: {0}")]
+    InvalidDataStreamId(String),
 
     #[error("Invalid organization ID: {0}")]
     InvalidOrganizationId(String),
 
-    #[error("Invalid device name: {0}")]
-    InvalidDeviceName(String),
+    #[error("Invalid data stream name: {0}")]
+    InvalidDataStreamName(String),
 
     #[error("Payload conversion error: {0}")]
     PayloadConversionError(String),
 
-    #[error("End device definition not found: {0}")]
-    EndDeviceDefinitionNotFound(String),
+    #[error("Data stream definition not found: {0}")]
+    DataStreamDefinitionNotFound(String),
 
-    #[error("End device definition already exists: {0}")]
-    EndDeviceDefinitionAlreadyExists(String),
+    #[error("Data stream definition already exists: {0}")]
+    DataStreamDefinitionAlreadyExists(String),
 
     #[error("Invalid JSON Schema: {0}")]
     InvalidJsonSchema(String),
 
-    #[error("Schema validation failed for device {0}: {1}")]
+    #[error("Schema validation failed for data stream {0}: {1}")]
     SchemaValidationFailed(String, String),
 
-    #[error("End device definition in use: {0}")]
-    EndDeviceDefinitionInUse(String),
+    #[error("Data stream definition in use: {0}")]
+    DataStreamDefinitionInUse(String),
 
     #[error("Organization not found: {0}")]
     OrganizationNotFound(String),

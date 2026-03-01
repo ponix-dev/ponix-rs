@@ -1,17 +1,17 @@
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
-    CreateDeviceRepoInput, Device, DeviceRepository, DomainError, DomainResult,
-    EndDeviceDefinitionRepository, GatewayRepository, GetDeviceRepoInput,
-    GetEndDeviceDefinitionRepoInput, GetGatewayRepoInput, GetOrganizationRepoInput,
-    ListDevicesByGatewayRepoInput, ListDevicesRepoInput, OrganizationRepository,
+    CreateDataStreamRepoInput, DataStream, DataStreamDefinitionRepository, DataStreamRepository,
+    DomainError, DomainResult, GatewayRepository, GetDataStreamDefinitionRepoInput,
+    GetDataStreamRepoInput, GetGatewayRepoInput, GetOrganizationRepoInput,
+    ListDataStreamsByGatewayRepoInput, ListDataStreamsRepoInput, OrganizationRepository,
 };
 use garde::Validate;
 use std::sync::Arc;
 use tracing::{debug, instrument};
 
-/// Service request for creating a device
+/// Service request for creating a data stream
 #[derive(Debug, Clone, Validate)]
-pub struct CreateDeviceRequest {
+pub struct CreateDataStreamRequest {
     #[garde(skip)] // user_id validated by auth layer
     pub user_id: String,
     #[garde(length(min = 1))]
@@ -26,22 +26,22 @@ pub struct CreateDeviceRequest {
     pub name: String,
 }
 
-/// Service request for getting a device
+/// Service request for getting a data stream
 #[derive(Debug, Clone, Validate)]
-pub struct GetDeviceRequest {
+pub struct GetDataStreamRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
-    pub device_id: String,
+    pub data_stream_id: String,
     #[garde(length(min = 1))]
     pub organization_id: String,
     #[garde(length(min = 1))]
     pub workspace_id: String,
 }
 
-/// Service request for listing devices in a workspace
+/// Service request for listing data streams in a workspace
 #[derive(Debug, Clone, Validate)]
-pub struct ListDevicesRequest {
+pub struct ListDataStreamsRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
@@ -50,9 +50,9 @@ pub struct ListDevicesRequest {
     pub workspace_id: String,
 }
 
-/// Service request for listing devices by gateway
+/// Service request for listing data streams by gateway
 #[derive(Debug, Clone, Validate)]
-pub struct ListDevicesByGatewayRequest {
+pub struct ListDataStreamsByGatewayRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
@@ -61,26 +61,26 @@ pub struct ListDevicesByGatewayRequest {
     pub gateway_id: String,
 }
 
-/// Domain service for device management business logic
+/// Domain service for data stream management business logic
 /// This is the orchestration layer that handlers call
-pub struct DeviceService {
-    device_repository: Arc<dyn DeviceRepository>,
+pub struct DataStreamService {
+    data_stream_repository: Arc<dyn DataStreamRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
-    definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
+    definition_repository: Arc<dyn DataStreamDefinitionRepository>,
     gateway_repository: Arc<dyn GatewayRepository>,
     authorization_provider: Arc<dyn AuthorizationProvider>,
 }
 
-impl DeviceService {
+impl DataStreamService {
     pub fn new(
-        device_repository: Arc<dyn DeviceRepository>,
+        data_stream_repository: Arc<dyn DataStreamRepository>,
         organization_repository: Arc<dyn OrganizationRepository>,
-        definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
+        definition_repository: Arc<dyn DataStreamDefinitionRepository>,
         gateway_repository: Arc<dyn GatewayRepository>,
         authorization_provider: Arc<dyn AuthorizationProvider>,
     ) -> Self {
         Self {
-            device_repository,
+            data_stream_repository,
             organization_repository,
             definition_repository,
             gateway_repository,
@@ -88,13 +88,16 @@ impl DeviceService {
         }
     }
 
-    /// Create a new device with business logic validation
-    /// Generates a unique device_id using xid
+    /// Create a new data stream with business logic validation
+    /// Generates a unique data_stream_id using xid
     /// Validates that the organization exists and is not deleted
     /// Validates that the definition exists and belongs to the same organization
     /// Validates that the gateway exists and belongs to the same organization
-    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, gateway_id = %request.gateway_id, device_name = %request.name))]
-    pub async fn create_device(&self, request: CreateDeviceRequest) -> DomainResult<Device> {
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, gateway_id = %request.gateway_id, data_stream_name = %request.name))]
+    pub async fn create_data_stream(
+        &self,
+        request: CreateDataStreamRequest,
+    ) -> DomainResult<DataStream> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
 
@@ -103,7 +106,7 @@ impl DeviceService {
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Create,
             )
             .await?;
@@ -122,7 +125,7 @@ impl DeviceService {
             Some(org) => {
                 if org.deleted_at.is_some() {
                     return Err(DomainError::OrganizationDeleted(format!(
-                        "Cannot create device for deleted organization: {}",
+                        "Cannot create data stream for deleted organization: {}",
                         request.organization_id
                     )));
                 }
@@ -137,7 +140,7 @@ impl DeviceService {
 
         // Validate definition exists and belongs to the same organization
         debug!(definition_id = %request.definition_id, "validating definition exists");
-        let def_input = GetEndDeviceDefinitionRepoInput {
+        let def_input = GetDataStreamDefinitionRepoInput {
             id: request.definition_id.clone(),
             organization_id: request.organization_id.clone(),
         };
@@ -146,7 +149,7 @@ impl DeviceService {
             .get_definition(def_input)
             .await?
             .ok_or_else(|| {
-                DomainError::EndDeviceDefinitionNotFound(request.definition_id.clone())
+                DomainError::DataStreamDefinitionNotFound(request.definition_id.clone())
             })?;
 
         // Validate gateway exists and belongs to the same organization
@@ -166,14 +169,14 @@ impl DeviceService {
                 ))
             })?;
 
-        // Generate unique device ID
-        let device_id = xid::new().to_string();
+        // Generate unique data stream ID
+        let data_stream_id = xid::new().to_string();
 
-        debug!(device_id = %device_id, organization_id = %request.organization_id, gateway_id = %request.gateway_id, "creating device");
+        debug!(data_stream_id = %data_stream_id, organization_id = %request.organization_id, gateway_id = %request.gateway_id, "creating data stream");
 
         // Create input with generated ID for repository
-        let repo_input = CreateDeviceRepoInput {
-            device_id,
+        let repo_input = CreateDataStreamRepoInput {
+            data_stream_id,
             organization_id: request.organization_id,
             workspace_id: request.workspace_id,
             definition_id: request.definition_id,
@@ -181,14 +184,17 @@ impl DeviceService {
             name: request.name,
         };
 
-        let device = self.device_repository.create_device(repo_input).await?;
+        let data_stream = self
+            .data_stream_repository
+            .create_data_stream(repo_input)
+            .await?;
 
-        Ok(device)
+        Ok(data_stream)
     }
 
-    /// Get a device by ID, organization, and workspace
-    #[instrument(skip(self, request), fields(user_id = %request.user_id, device_id = %request.device_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id))]
-    pub async fn get_device(&self, request: GetDeviceRequest) -> DomainResult<Device> {
+    /// Get a data stream by ID, organization, and workspace
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, data_stream_id = %request.data_stream_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id))]
+    pub async fn get_data_stream(&self, request: GetDataStreamRequest) -> DomainResult<DataStream> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
 
@@ -197,31 +203,34 @@ impl DeviceService {
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Read,
             )
             .await?;
 
-        debug!(device_id = %request.device_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id, "getting device");
+        debug!(data_stream_id = %request.data_stream_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id, "getting data stream");
 
-        let repo_input = GetDeviceRepoInput {
-            device_id: request.device_id,
+        let repo_input = GetDataStreamRepoInput {
+            data_stream_id: request.data_stream_id,
             organization_id: request.organization_id,
             workspace_id: request.workspace_id,
         };
 
-        let device = self
-            .device_repository
-            .get_device(repo_input)
+        let data_stream = self
+            .data_stream_repository
+            .get_data_stream(repo_input)
             .await?
-            .ok_or_else(|| DomainError::DeviceNotFound("Device not found".to_string()))?;
+            .ok_or_else(|| DomainError::DataStreamNotFound("Data stream not found".to_string()))?;
 
-        Ok(device)
+        Ok(data_stream)
     }
 
-    /// List devices for a workspace
+    /// List data streams for a workspace
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, workspace_id = %request.workspace_id))]
-    pub async fn list_devices(&self, request: ListDevicesRequest) -> DomainResult<Vec<Device>> {
+    pub async fn list_data_streams(
+        &self,
+        request: ListDataStreamsRequest,
+    ) -> DomainResult<Vec<DataStream>> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
 
@@ -230,39 +239,45 @@ impl DeviceService {
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Read,
             )
             .await?;
 
-        debug!(organization_id = %request.organization_id, workspace_id = %request.workspace_id, "listing devices for workspace");
+        debug!(organization_id = %request.organization_id, workspace_id = %request.workspace_id, "listing data streams for workspace");
 
-        let repo_input = ListDevicesRepoInput {
+        let repo_input = ListDataStreamsRepoInput {
             organization_id: request.organization_id,
             workspace_id: request.workspace_id,
         };
 
-        let devices = self.device_repository.list_devices(repo_input).await?;
+        let data_streams = self
+            .data_stream_repository
+            .list_data_streams(repo_input)
+            .await?;
 
-        debug!(count = devices.len(), "listed devices for workspace");
-        Ok(devices)
+        debug!(
+            count = data_streams.len(),
+            "listed data streams for workspace"
+        );
+        Ok(data_streams)
     }
 
-    /// List devices for a gateway
+    /// List data streams for a gateway
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, gateway_id = %request.gateway_id))]
-    pub async fn list_devices_by_gateway(
+    pub async fn list_data_streams_by_gateway(
         &self,
-        request: ListDevicesByGatewayRequest,
-    ) -> DomainResult<Vec<Device>> {
+        request: ListDataStreamsByGatewayRequest,
+    ) -> DomainResult<Vec<DataStream>> {
         // Validate request using garde
         common::garde::validate_struct(&request)?;
 
-        // Check authorization (at org level for device read)
+        // Check authorization (at org level for data stream read)
         self.authorization_provider
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Read,
             )
             .await?;
@@ -284,20 +299,23 @@ impl DeviceService {
                 ))
             })?;
 
-        debug!(organization_id = %request.organization_id, gateway_id = %request.gateway_id, "listing devices for gateway");
+        debug!(organization_id = %request.organization_id, gateway_id = %request.gateway_id, "listing data streams for gateway");
 
-        let repo_input = ListDevicesByGatewayRepoInput {
+        let repo_input = ListDataStreamsByGatewayRepoInput {
             organization_id: request.organization_id,
             gateway_id: request.gateway_id,
         };
 
-        let devices = self
-            .device_repository
-            .list_devices_by_gateway(repo_input)
+        let data_streams = self
+            .data_stream_repository
+            .list_data_streams_by_gateway(repo_input)
             .await?;
 
-        debug!(count = devices.len(), "listed devices for gateway");
-        Ok(devices)
+        debug!(
+            count = data_streams.len(),
+            "listed data streams for gateway"
+        );
+        Ok(data_streams)
     }
 }
 
@@ -306,9 +324,8 @@ mod tests {
     use super::*;
     use common::auth::MockAuthorizationProvider;
     use common::domain::{
-        EndDeviceDefinition, Gateway, GatewayConfig, MockDeviceRepository,
-        MockEndDeviceDefinitionRepository, MockGatewayRepository, MockOrganizationRepository,
-        Organization,
+        DataStreamDefinition, Gateway, GatewayConfig, MockDataStreamDefinitionRepository,
+        MockDataStreamRepository, MockGatewayRepository, MockOrganizationRepository, Organization,
     };
 
     const TEST_USER_ID: &str = "user-123";
@@ -341,10 +358,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_device_success() {
-        let mut mock_device_repo = MockDeviceRepository::new();
+    async fn test_create_data_stream_success() {
+        let mut mock_data_stream_repo = MockDataStreamRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
-        let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mut mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = create_mock_gateway_repo();
 
         // Mock organization exists and is active
@@ -363,7 +380,7 @@ mod tests {
             .return_once(move |_| Ok(Some(org)));
 
         // Mock definition exists
-        let def = EndDeviceDefinition {
+        let def = DataStreamDefinition {
             id: "def-789".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
@@ -374,79 +391,79 @@ mod tests {
 
         mock_def_repo
             .expect_get_definition()
-            .withf(|input: &GetEndDeviceDefinitionRepoInput| {
+            .withf(|input: &GetDataStreamDefinitionRepoInput| {
                 input.id == "def-789" && input.organization_id == "org-456"
             })
             .times(1)
             .return_once(move |_| Ok(Some(def)));
 
-        let expected_device = Device {
-            device_id: "device-123".to_string(),
+        let expected_data_stream = DataStream {
+            data_stream_id: "ds-123".to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             gateway_id: TEST_GATEWAY_ID.to_string(),
-            name: "Test Device".to_string(),
+            name: "Test Data Stream".to_string(),
             created_at: None,
             updated_at: None,
         };
 
-        mock_device_repo
-            .expect_create_device()
-            .withf(|input: &CreateDeviceRepoInput| {
-                !input.device_id.is_empty() // ID is generated
+        mock_data_stream_repo
+            .expect_create_data_stream()
+            .withf(|input: &CreateDataStreamRepoInput| {
+                !input.data_stream_id.is_empty() // ID is generated
                     && input.organization_id == "org-456"
                     && input.workspace_id == "ws-123"
                     && input.definition_id == "def-789"
                     && input.gateway_id == TEST_GATEWAY_ID
-                    && input.name == "Test Device"
+                    && input.name == "Test Data Stream"
             })
             .times(1)
-            .return_once(move |_| Ok(expected_device.clone()));
+            .return_once(move |_| Ok(expected_data_stream.clone()));
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = CreateDeviceRequest {
+        let request = CreateDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             gateway_id: TEST_GATEWAY_ID.to_string(),
-            name: "Test Device".to_string(),
+            name: "Test Data Stream".to_string(),
         };
 
-        let result = service.create_device(request).await;
+        let result = service.create_data_stream(request).await;
         assert!(result.is_ok());
 
-        let device = result.unwrap();
-        assert!(!device.device_id.is_empty()); // ID was generated
-        assert_eq!(device.name, "Test Device");
-        assert_eq!(device.definition_id, "def-789");
-        assert_eq!(device.gateway_id, TEST_GATEWAY_ID);
+        let data_stream = result.unwrap();
+        assert!(!data_stream.data_stream_id.is_empty()); // ID was generated
+        assert_eq!(data_stream.name, "Test Data Stream");
+        assert_eq!(data_stream.definition_id, "def-789");
+        assert_eq!(data_stream.gateway_id, TEST_GATEWAY_ID);
     }
 
     #[tokio::test]
-    async fn test_create_device_empty_name() {
-        let mock_device_repo = MockDeviceRepository::new();
+    async fn test_create_data_stream_empty_name() {
+        let mock_data_stream_repo = MockDataStreamRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = CreateDeviceRequest {
+        let request = CreateDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
@@ -455,7 +472,7 @@ mod tests {
             name: "".to_string(),
         };
 
-        let result = service.create_device(request).await;
+        let result = service.create_data_stream(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -464,10 +481,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_device_organization_not_found() {
-        let mock_device_repo = MockDeviceRepository::new();
+    async fn test_create_data_stream_organization_not_found() {
+        let mock_data_stream_repo = MockDataStreamRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
         // Mock organization not found
@@ -476,24 +493,24 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = CreateDeviceRequest {
+        let request = CreateDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "nonexistent-org".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             gateway_id: TEST_GATEWAY_ID.to_string(),
-            name: "Test Device".to_string(),
+            name: "Test Data Stream".to_string(),
         };
 
-        let result = service.create_device(request).await;
+        let result = service.create_data_stream(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -502,10 +519,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_device_organization_deleted() {
-        let mock_device_repo = MockDeviceRepository::new();
+    async fn test_create_data_stream_organization_deleted() {
+        let mock_data_stream_repo = MockDataStreamRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
         // Mock deleted organization
@@ -522,24 +539,24 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(Some(deleted_org)));
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = CreateDeviceRequest {
+        let request = CreateDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-deleted".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             gateway_id: TEST_GATEWAY_ID.to_string(),
-            name: "Test Device".to_string(),
+            name: "Test Data Stream".to_string(),
         };
 
-        let result = service.create_device(request).await;
+        let result = service.create_data_stream(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -548,10 +565,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_device_definition_not_found() {
-        let mock_device_repo = MockDeviceRepository::new();
+    async fn test_create_data_stream_definition_not_found() {
+        let mock_data_stream_repo = MockDataStreamRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
-        let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mut mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
         // Mock organization exists
@@ -574,136 +591,136 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = CreateDeviceRequest {
+        let request = CreateDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "nonexistent-def".to_string(),
             gateway_id: TEST_GATEWAY_ID.to_string(),
-            name: "Test Device".to_string(),
+            name: "Test Data Stream".to_string(),
         };
 
-        let result = service.create_device(request).await;
+        let result = service.create_data_stream(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            DomainError::EndDeviceDefinitionNotFound(_)
+            DomainError::DataStreamDefinitionNotFound(_)
         ));
     }
 
     #[tokio::test]
-    async fn test_get_device_success() {
-        let mut mock_device_repo = MockDeviceRepository::new();
+    async fn test_get_data_stream_success() {
+        let mut mock_data_stream_repo = MockDataStreamRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
-        let expected_device = Device {
-            device_id: "device-123".to_string(),
+        let expected_data_stream = DataStream {
+            data_stream_id: "ds-123".to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             gateway_id: TEST_GATEWAY_ID.to_string(),
-            name: "Test Device".to_string(),
+            name: "Test Data Stream".to_string(),
             created_at: None,
             updated_at: None,
         };
 
-        mock_device_repo
-            .expect_get_device()
-            .withf(|input: &GetDeviceRepoInput| {
-                input.device_id == "device-123"
+        mock_data_stream_repo
+            .expect_get_data_stream()
+            .withf(|input: &GetDataStreamRepoInput| {
+                input.data_stream_id == "ds-123"
                     && input.organization_id == "org-456"
                     && input.workspace_id == "ws-123"
             })
             .times(1)
-            .return_once(move |_| Ok(Some(expected_device)));
+            .return_once(move |_| Ok(Some(expected_data_stream)));
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = GetDeviceRequest {
+        let request = GetDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
-            device_id: "device-123".to_string(),
+            data_stream_id: "ds-123".to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
         };
 
-        let result = service.get_device(request).await;
+        let result = service.get_data_stream(request).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_get_device_not_found() {
-        let mut mock_device_repo = MockDeviceRepository::new();
+    async fn test_get_data_stream_not_found() {
+        let mut mock_data_stream_repo = MockDataStreamRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
-        mock_device_repo
-            .expect_get_device()
+        mock_data_stream_repo
+            .expect_get_data_stream()
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = GetDeviceRequest {
+        let request = GetDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
-            device_id: "nonexistent".to_string(),
+            data_stream_id: "nonexistent".to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
         };
 
-        let result = service.get_device(request).await;
+        let result = service.get_data_stream(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            DomainError::DeviceNotFound(_)
+            DomainError::DataStreamNotFound(_)
         ));
     }
 
     #[tokio::test]
-    async fn test_get_device_empty_organization_id_fails() {
-        let mock_device_repo = MockDeviceRepository::new();
+    async fn test_get_data_stream_empty_organization_id_fails() {
+        let mock_data_stream_repo = MockDataStreamRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = GetDeviceRequest {
+        let request = GetDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
-            device_id: "device-123".to_string(),
+            data_stream_id: "ds-123".to_string(),
             organization_id: "".to_string(),
             workspace_id: "ws-123".to_string(),
         };
 
-        let result = service.get_device(request).await;
+        let result = service.get_data_stream(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -712,67 +729,67 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_list_devices_success() {
-        let mut mock_device_repo = MockDeviceRepository::new();
+    async fn test_list_data_streams_success() {
+        let mut mock_data_stream_repo = MockDataStreamRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
-        let devices = vec![
-            Device {
-                device_id: "device-1".to_string(),
+        let data_streams = vec![
+            DataStream {
+                data_stream_id: "ds-1".to_string(),
                 organization_id: "org-456".to_string(),
                 workspace_id: "ws-123".to_string(),
                 definition_id: "def-789".to_string(),
                 gateway_id: TEST_GATEWAY_ID.to_string(),
-                name: "Device 1".to_string(),
+                name: "Data Stream 1".to_string(),
                 created_at: None,
                 updated_at: None,
             },
-            Device {
-                device_id: "device-2".to_string(),
+            DataStream {
+                data_stream_id: "ds-2".to_string(),
                 organization_id: "org-456".to_string(),
                 workspace_id: "ws-123".to_string(),
                 definition_id: "def-789".to_string(),
                 gateway_id: TEST_GATEWAY_ID.to_string(),
-                name: "Device 2".to_string(),
+                name: "Data Stream 2".to_string(),
                 created_at: None,
                 updated_at: None,
             },
         ];
 
-        mock_device_repo
-            .expect_list_devices()
-            .withf(|input: &ListDevicesRepoInput| {
+        mock_data_stream_repo
+            .expect_list_data_streams()
+            .withf(|input: &ListDataStreamsRepoInput| {
                 input.organization_id == "org-456" && input.workspace_id == "ws-123"
             })
             .times(1)
-            .return_once(move |_| Ok(devices));
+            .return_once(move |_| Ok(data_streams));
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             create_mock_auth_provider(),
         );
 
-        let request = ListDevicesRequest {
+        let request = ListDataStreamsRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
         };
 
-        let result = service.list_devices(request).await;
+        let result = service.list_data_streams(request).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
     }
 
     #[tokio::test]
-    async fn test_create_device_permission_denied() {
-        let mock_device_repo = MockDeviceRepository::new();
+    async fn test_create_data_stream_permission_denied() {
+        let mock_data_stream_repo = MockDataStreamRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_gateway_repo = MockGatewayRepository::new();
 
         let mut mock_auth = MockAuthorizationProvider::new();
@@ -786,24 +803,24 @@ mod tests {
                 })
             });
 
-        let service = DeviceService::new(
-            Arc::new(mock_device_repo),
+        let service = DataStreamService::new(
+            Arc::new(mock_data_stream_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_def_repo),
             Arc::new(mock_gateway_repo),
             Arc::new(mock_auth),
         );
 
-        let request = CreateDeviceRequest {
+        let request = CreateDataStreamRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             gateway_id: TEST_GATEWAY_ID.to_string(),
-            name: "Test Device".to_string(),
+            name: "Test Data Stream".to_string(),
         };
 
-        let result = service.create_device(request).await;
+        let result = service.create_data_stream(request).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),

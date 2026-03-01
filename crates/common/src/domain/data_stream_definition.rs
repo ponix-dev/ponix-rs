@@ -29,10 +29,10 @@ pub struct PayloadContract {
     pub compiled_transform: Vec<u8>,
 }
 
-/// Domain representation of an End Device Definition
-/// Contains ordered payload contracts for processing device data
+/// Domain representation of a Data Stream Definition
+/// Contains ordered payload contracts for processing data stream data
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EndDeviceDefinition {
+pub struct DataStreamDefinition {
     pub id: String,
     pub organization_id: String,
     pub name: String,
@@ -43,7 +43,7 @@ pub struct EndDeviceDefinition {
 
 /// Repository input for creating a definition (domain service -> repository)
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateEndDeviceDefinitionRepoInput {
+pub struct CreateDataStreamDefinitionRepoInput {
     pub id: String,
     pub organization_id: String,
     pub name: String,
@@ -52,14 +52,14 @@ pub struct CreateEndDeviceDefinitionRepoInput {
 
 /// Repository input for retrieving a definition
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GetEndDeviceDefinitionRepoInput {
+pub struct GetDataStreamDefinitionRepoInput {
     pub id: String,
     pub organization_id: String,
 }
 
 /// Repository input for updating a definition
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UpdateEndDeviceDefinitionRepoInput {
+pub struct UpdateDataStreamDefinitionRepoInput {
     pub id: String,
     pub organization_id: String,
     pub name: Option<String>,
@@ -68,48 +68,48 @@ pub struct UpdateEndDeviceDefinitionRepoInput {
 
 /// Repository input for deleting a definition
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeleteEndDeviceDefinitionRepoInput {
+pub struct DeleteDataStreamDefinitionRepoInput {
     pub id: String,
     pub organization_id: String,
 }
 
 /// Repository input for listing definitions by organization
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ListEndDeviceDefinitionsRepoInput {
+pub struct ListDataStreamDefinitionsRepoInput {
     pub organization_id: String,
 }
 
-/// Repository trait for end device definition storage operations
+/// Repository trait for data stream definition storage operations
 #[cfg_attr(any(test, feature = "testing"), mockall::automock)]
 #[async_trait]
-pub trait EndDeviceDefinitionRepository: Send + Sync {
+pub trait DataStreamDefinitionRepository: Send + Sync {
     /// Create a new definition
     async fn create_definition(
         &self,
-        input: CreateEndDeviceDefinitionRepoInput,
-    ) -> DomainResult<EndDeviceDefinition>;
+        input: CreateDataStreamDefinitionRepoInput,
+    ) -> DomainResult<DataStreamDefinition>;
 
     /// Get a definition by ID
     async fn get_definition(
         &self,
-        input: GetEndDeviceDefinitionRepoInput,
-    ) -> DomainResult<Option<EndDeviceDefinition>>;
+        input: GetDataStreamDefinitionRepoInput,
+    ) -> DomainResult<Option<DataStreamDefinition>>;
 
     /// Update an existing definition
     async fn update_definition(
         &self,
-        input: UpdateEndDeviceDefinitionRepoInput,
-    ) -> DomainResult<EndDeviceDefinition>;
+        input: UpdateDataStreamDefinitionRepoInput,
+    ) -> DomainResult<DataStreamDefinition>;
 
-    /// Delete a definition (will fail if devices reference it)
+    /// Delete a definition (will fail if data streams reference it)
     async fn delete_definition(
         &self,
-        input: DeleteEndDeviceDefinitionRepoInput,
+        input: DeleteDataStreamDefinitionRepoInput,
     ) -> DomainResult<()>;
 
     /// List all definitions for an organization
     async fn list_definitions(
         &self,
-        input: ListEndDeviceDefinitionsRepoInput,
-    ) -> DomainResult<Vec<EndDeviceDefinition>>;
+        input: ListDataStreamDefinitionsRepoInput,
+    ) -> DomainResult<Vec<DataStreamDefinition>>;
 }

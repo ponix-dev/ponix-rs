@@ -1,10 +1,10 @@
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::cel::CelExpressionCompiler;
 use common::domain::{
-    CreateEndDeviceDefinitionRepoInput, DeleteEndDeviceDefinitionRepoInput, DomainError,
-    DomainResult, EndDeviceDefinition, EndDeviceDefinitionRepository,
-    GetEndDeviceDefinitionRepoInput, GetOrganizationRepoInput, ListEndDeviceDefinitionsRepoInput,
-    OrganizationRepository, PayloadContract, UpdateEndDeviceDefinitionRepoInput,
+    CreateDataStreamDefinitionRepoInput, DataStreamDefinition, DataStreamDefinitionRepository,
+    DeleteDataStreamDefinitionRepoInput, DomainError, DomainResult,
+    GetDataStreamDefinitionRepoInput, GetOrganizationRepoInput, ListDataStreamDefinitionsRepoInput,
+    OrganizationRepository, PayloadContract, UpdateDataStreamDefinitionRepoInput,
 };
 use common::jsonschema::validate_json_schema;
 use garde::Validate;
@@ -13,7 +13,7 @@ use tracing::{debug, instrument};
 
 /// Service request for creating a definition
 #[derive(Debug, Clone, Validate)]
-pub struct CreateEndDeviceDefinitionRequest {
+pub struct CreateDataStreamDefinitionRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
@@ -26,7 +26,7 @@ pub struct CreateEndDeviceDefinitionRequest {
 
 /// Service request for getting a definition
 #[derive(Debug, Clone, Validate)]
-pub struct GetEndDeviceDefinitionRequest {
+pub struct GetDataStreamDefinitionRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
@@ -37,7 +37,7 @@ pub struct GetEndDeviceDefinitionRequest {
 
 /// Service request for updating a definition
 #[derive(Debug, Clone, Validate)]
-pub struct UpdateEndDeviceDefinitionRequest {
+pub struct UpdateDataStreamDefinitionRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
@@ -52,7 +52,7 @@ pub struct UpdateEndDeviceDefinitionRequest {
 
 /// Service request for deleting a definition
 #[derive(Debug, Clone, Validate)]
-pub struct DeleteEndDeviceDefinitionRequest {
+pub struct DeleteDataStreamDefinitionRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
@@ -63,24 +63,24 @@ pub struct DeleteEndDeviceDefinitionRequest {
 
 /// Service request for listing definitions
 #[derive(Debug, Clone, Validate)]
-pub struct ListEndDeviceDefinitionsRequest {
+pub struct ListDataStreamDefinitionsRequest {
     #[garde(skip)]
     pub user_id: String,
     #[garde(length(min = 1))]
     pub organization_id: String,
 }
 
-/// Domain service for end device definition management
-pub struct EndDeviceDefinitionService {
-    definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
+/// Domain service for data stream definition management
+pub struct DataStreamDefinitionService {
+    definition_repository: Arc<dyn DataStreamDefinitionRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
     authorization_provider: Arc<dyn AuthorizationProvider>,
     cel_compiler: Arc<dyn CelExpressionCompiler>,
 }
 
-impl EndDeviceDefinitionService {
+impl DataStreamDefinitionService {
     pub fn new(
-        definition_repository: Arc<dyn EndDeviceDefinitionRepository>,
+        definition_repository: Arc<dyn DataStreamDefinitionRepository>,
         organization_repository: Arc<dyn OrganizationRepository>,
         authorization_provider: Arc<dyn AuthorizationProvider>,
         cel_compiler: Arc<dyn CelExpressionCompiler>,
@@ -96,8 +96,8 @@ impl EndDeviceDefinitionService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, name = %request.name))]
     pub async fn create_definition(
         &self,
-        request: CreateEndDeviceDefinitionRequest,
-    ) -> DomainResult<EndDeviceDefinition> {
+        request: CreateDataStreamDefinitionRequest,
+    ) -> DomainResult<DataStreamDefinition> {
         common::garde::validate_struct(&request)?;
 
         // Validate each contract's JSON Schema syntax
@@ -113,7 +113,7 @@ impl EndDeviceDefinitionService {
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Create,
             )
             .await?;
@@ -124,9 +124,9 @@ impl EndDeviceDefinitionService {
         // Generate unique ID
         let id = xid::new().to_string();
 
-        debug!(id = %id, "creating end device definition");
+        debug!(id = %id, "creating data stream definition");
 
-        let repo_input = CreateEndDeviceDefinitionRepoInput {
+        let repo_input = CreateDataStreamDefinitionRepoInput {
             id,
             organization_id: request.organization_id,
             name: request.name,
@@ -141,20 +141,20 @@ impl EndDeviceDefinitionService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, id = %request.id, organization_id = %request.organization_id))]
     pub async fn get_definition(
         &self,
-        request: GetEndDeviceDefinitionRequest,
-    ) -> DomainResult<EndDeviceDefinition> {
+        request: GetDataStreamDefinitionRequest,
+    ) -> DomainResult<DataStreamDefinition> {
         common::garde::validate_struct(&request)?;
 
         self.authorization_provider
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Read,
             )
             .await?;
 
-        let repo_input = GetEndDeviceDefinitionRepoInput {
+        let repo_input = GetDataStreamDefinitionRepoInput {
             id: request.id.clone(),
             organization_id: request.organization_id,
         };
@@ -162,14 +162,14 @@ impl EndDeviceDefinitionService {
         self.definition_repository
             .get_definition(repo_input)
             .await?
-            .ok_or_else(|| DomainError::EndDeviceDefinitionNotFound(request.id))
+            .ok_or_else(|| DomainError::DataStreamDefinitionNotFound(request.id))
     }
 
     #[instrument(skip(self, request), fields(user_id = %request.user_id, id = %request.id, organization_id = %request.organization_id))]
     pub async fn update_definition(
         &self,
-        request: UpdateEndDeviceDefinitionRequest,
-    ) -> DomainResult<EndDeviceDefinition> {
+        request: UpdateDataStreamDefinitionRequest,
+    ) -> DomainResult<DataStreamDefinition> {
         common::garde::validate_struct(&request)?;
 
         // Validate each contract's JSON Schema if contracts provided
@@ -189,12 +189,12 @@ impl EndDeviceDefinitionService {
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Update,
             )
             .await?;
 
-        let repo_input = UpdateEndDeviceDefinitionRepoInput {
+        let repo_input = UpdateDataStreamDefinitionRepoInput {
             id: request.id,
             organization_id: request.organization_id,
             name: request.name,
@@ -209,7 +209,7 @@ impl EndDeviceDefinitionService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, id = %request.id, organization_id = %request.organization_id))]
     pub async fn delete_definition(
         &self,
-        request: DeleteEndDeviceDefinitionRequest,
+        request: DeleteDataStreamDefinitionRequest,
     ) -> DomainResult<()> {
         common::garde::validate_struct(&request)?;
 
@@ -217,12 +217,12 @@ impl EndDeviceDefinitionService {
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Delete,
             )
             .await?;
 
-        let repo_input = DeleteEndDeviceDefinitionRepoInput {
+        let repo_input = DeleteDataStreamDefinitionRepoInput {
             id: request.id,
             organization_id: request.organization_id,
         };
@@ -235,20 +235,20 @@ impl EndDeviceDefinitionService {
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
     pub async fn list_definitions(
         &self,
-        request: ListEndDeviceDefinitionsRequest,
-    ) -> DomainResult<Vec<EndDeviceDefinition>> {
+        request: ListDataStreamDefinitionsRequest,
+    ) -> DomainResult<Vec<DataStreamDefinition>> {
         common::garde::validate_struct(&request)?;
 
         self.authorization_provider
             .require_permission(
                 &request.user_id,
                 &request.organization_id,
-                Resource::Device,
+                Resource::DataStream,
                 Action::Read,
             )
             .await?;
 
-        let repo_input = ListEndDeviceDefinitionsRepoInput {
+        let repo_input = ListDataStreamDefinitionsRepoInput {
             organization_id: request.organization_id,
         };
 
@@ -305,7 +305,7 @@ mod tests {
     use common::auth::MockAuthorizationProvider;
     use common::cel::MockCelExpressionCompiler;
     use common::domain::{
-        MockEndDeviceDefinitionRepository, MockOrganizationRepository, Organization,
+        MockDataStreamDefinitionRepository, MockOrganizationRepository, Organization,
     };
 
     const TEST_USER_ID: &str = "user-123";
@@ -326,7 +326,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_definition_success() {
-        let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mut mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
 
         let org = Organization {
@@ -342,7 +342,7 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(Some(org)));
 
-        let expected_def = EndDeviceDefinition {
+        let expected_def = DataStreamDefinition {
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
@@ -362,14 +362,14 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(expected_def));
 
-        let service = EndDeviceDefinitionService::new(
+        let service = DataStreamDefinitionService::new(
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
             create_mock_cel_compiler(),
         );
 
-        let request = CreateEndDeviceDefinitionRequest {
+        let request = CreateDataStreamDefinitionRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
@@ -388,17 +388,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_definition_invalid_json_schema_in_contract() {
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
-        let service = EndDeviceDefinitionService::new(
+        let service = DataStreamDefinitionService::new(
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
             create_mock_cel_compiler(),
         );
 
-        let request = CreateEndDeviceDefinitionRequest {
+        let request = CreateDataStreamDefinitionRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
@@ -421,17 +421,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_definition_empty_name() {
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
-        let service = EndDeviceDefinitionService::new(
+        let service = DataStreamDefinitionService::new(
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
             create_mock_cel_compiler(),
         );
 
-        let request = CreateEndDeviceDefinitionRequest {
+        let request = CreateDataStreamDefinitionRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
             name: "".to_string(),
@@ -448,10 +448,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_definition_success() {
-        let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mut mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
-        let expected_def = EndDeviceDefinition {
+        let expected_def = DataStreamDefinition {
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
@@ -465,14 +465,14 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(Some(expected_def)));
 
-        let service = EndDeviceDefinitionService::new(
+        let service = DataStreamDefinitionService::new(
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
             create_mock_cel_compiler(),
         );
 
-        let request = GetEndDeviceDefinitionRequest {
+        let request = GetDataStreamDefinitionRequest {
             user_id: TEST_USER_ID.to_string(),
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),
@@ -484,7 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_definition_not_found() {
-        let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mut mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
         mock_def_repo
@@ -492,14 +492,14 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(None));
 
-        let service = EndDeviceDefinitionService::new(
+        let service = DataStreamDefinitionService::new(
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
             create_mock_cel_compiler(),
         );
 
-        let request = GetEndDeviceDefinitionRequest {
+        let request = GetDataStreamDefinitionRequest {
             user_id: TEST_USER_ID.to_string(),
             id: "nonexistent".to_string(),
             organization_id: "org-456".to_string(),
@@ -509,17 +509,17 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            DomainError::EndDeviceDefinitionNotFound(_)
+            DomainError::DataStreamDefinitionNotFound(_)
         ));
     }
 
     #[tokio::test]
     async fn test_list_definitions_success() {
-        let mut mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mut mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
         let definitions = vec![
-            EndDeviceDefinition {
+            DataStreamDefinition {
                 id: "def-1".to_string(),
                 organization_id: "org-456".to_string(),
                 name: "Definition 1".to_string(),
@@ -527,7 +527,7 @@ mod tests {
                 created_at: None,
                 updated_at: None,
             },
-            EndDeviceDefinition {
+            DataStreamDefinition {
                 id: "def-2".to_string(),
                 organization_id: "org-456".to_string(),
                 name: "Definition 2".to_string(),
@@ -542,14 +542,14 @@ mod tests {
             .times(1)
             .return_once(move |_| Ok(definitions));
 
-        let service = EndDeviceDefinitionService::new(
+        let service = DataStreamDefinitionService::new(
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
             create_mock_cel_compiler(),
         );
 
-        let request = ListEndDeviceDefinitionsRequest {
+        let request = ListDataStreamDefinitionsRequest {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-456".to_string(),
         };
@@ -561,17 +561,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_definition_with_invalid_schema_in_contract() {
-        let mock_def_repo = MockEndDeviceDefinitionRepository::new();
+        let mock_def_repo = MockDataStreamDefinitionRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
-        let service = EndDeviceDefinitionService::new(
+        let service = DataStreamDefinitionService::new(
             Arc::new(mock_def_repo),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
             create_mock_cel_compiler(),
         );
 
-        let request = UpdateEndDeviceDefinitionRequest {
+        let request = UpdateDataStreamDefinitionRequest {
             user_id: TEST_USER_ID.to_string(),
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),

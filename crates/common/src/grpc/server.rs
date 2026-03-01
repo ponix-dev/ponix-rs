@@ -16,14 +16,14 @@
 //!
 //! // Build routes with all services
 //! let routes = Routes::builder()
-//!     .add_service(EndDeviceServiceServer::new(device_handler))
+//!     .add_service(DataStreamServiceServer::new(data_stream_handler))
 //!     .add_service(OrganizationServiceServer::new(org_handler))
 //!     .routes();
 //!
 //! run_grpc_server(
 //!     config,
 //!     routes,
-//!     &[ponix_proto_prost::end_device::v1::FILE_DESCRIPTOR_SET],
+//!     &[ponix_proto_prost::data_stream::v1::FILE_DESCRIPTOR_SET],
 //!     cancellation_token,
 //! ).await?;
 //! ```

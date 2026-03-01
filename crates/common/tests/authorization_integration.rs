@@ -79,7 +79,7 @@ async fn setup_test_db() -> (
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_admin_can_create_device() {
+async fn test_admin_can_create_data_stream() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     // Assign admin role
@@ -90,7 +90,12 @@ async fn test_admin_can_create_device() {
 
     // Check permission
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Create,
+        )
         .await
         .unwrap();
 
@@ -99,7 +104,7 @@ async fn test_admin_can_create_device() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_admin_can_read_device() {
+async fn test_admin_can_read_data_stream() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     auth_service
@@ -108,7 +113,12 @@ async fn test_admin_can_read_device() {
         .unwrap();
 
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Read)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Read,
+        )
         .await
         .unwrap();
 
@@ -117,7 +127,7 @@ async fn test_admin_can_read_device() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_admin_can_update_device() {
+async fn test_admin_can_update_data_stream() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     auth_service
@@ -126,7 +136,12 @@ async fn test_admin_can_update_device() {
         .unwrap();
 
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Update)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Update,
+        )
         .await
         .unwrap();
 
@@ -135,7 +150,7 @@ async fn test_admin_can_update_device() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_admin_can_delete_device() {
+async fn test_admin_can_delete_data_stream() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     auth_service
@@ -144,7 +159,12 @@ async fn test_admin_can_delete_device() {
         .unwrap();
 
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Delete)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Delete,
+        )
         .await
         .unwrap();
 
@@ -153,7 +173,7 @@ async fn test_admin_can_delete_device() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_member_can_create_device() {
+async fn test_member_can_create_data_stream() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     auth_service
@@ -162,7 +182,12 @@ async fn test_member_can_create_device() {
         .unwrap();
 
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Create,
+        )
         .await
         .unwrap();
 
@@ -199,7 +224,12 @@ async fn test_user_without_role_denied() {
 
     // No role assigned
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Create,
+        )
         .await
         .unwrap();
 
@@ -213,7 +243,12 @@ async fn test_require_permission_denied_returns_error() {
 
     // No role assigned - require_permission should return error
     let result = auth_service
-        .require_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+        .require_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Create,
+        )
         .await;
 
     assert!(result.is_err());
@@ -236,7 +271,12 @@ async fn test_require_permission_allowed_succeeds() {
         .unwrap();
 
     let result = auth_service
-        .require_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+        .require_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Create,
+        )
         .await;
 
     assert!(result.is_ok());
@@ -251,7 +291,12 @@ async fn test_super_admin_cross_org_access() {
 
     // Should have access to any org
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, "any-org-id", Resource::Device, Action::Create)
+        .check_permission(
+            TEST_USER_ID,
+            "any-org-id",
+            Resource::DataStream,
+            Action::Create,
+        )
         .await
         .unwrap();
 
@@ -266,7 +311,11 @@ async fn test_super_admin_can_access_any_resource() {
     auth_service.assign_super_admin(TEST_USER_ID).await.unwrap();
 
     // Check all resources and actions
-    for resource in [Resource::Device, Resource::Gateway, Resource::Organization] {
+    for resource in [
+        Resource::DataStream,
+        Resource::Gateway,
+        Resource::Organization,
+    ] {
         for action in [Action::Create, Action::Read, Action::Update, Action::Delete] {
             let allowed = auth_service
                 .check_permission(TEST_USER_ID, "random-org", resource, action)
@@ -314,7 +363,7 @@ async fn test_user_cannot_access_other_org() {
         .check_permission(
             TEST_USER_ID,
             "other-org-id",
-            Resource::Device,
+            Resource::DataStream,
             Action::Create,
         )
         .await
@@ -362,7 +411,12 @@ async fn test_remove_role() {
 
     // Verify access
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Create,
+        )
         .await
         .unwrap();
     assert!(allowed);
@@ -375,7 +429,12 @@ async fn test_remove_role() {
 
     // Verify no access
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Create,
+        )
         .await
         .unwrap();
     assert!(!allowed);
@@ -408,26 +467,36 @@ async fn test_multiple_users_in_same_org() {
         .await
         .unwrap();
 
-    // Both should have access to read devices
+    // Both should have access to read data streams
     let allowed1 = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Read)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Read,
+        )
         .await
         .unwrap();
     let allowed2 = auth_service
-        .check_permission("user-2", TEST_ORG_ID, Resource::Device, Action::Read)
+        .check_permission("user-2", TEST_ORG_ID, Resource::DataStream, Action::Read)
         .await
         .unwrap();
 
     assert!(allowed1);
     assert!(allowed2);
 
-    // Both should have device create access (member has same perms as admin for now)
+    // Both should have data stream create access (member has same perms as admin for now)
     let allowed1 = auth_service
-        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+        .check_permission(
+            TEST_USER_ID,
+            TEST_ORG_ID,
+            Resource::DataStream,
+            Action::Create,
+        )
         .await
         .unwrap();
     let allowed2 = auth_service
-        .check_permission("user-2", TEST_ORG_ID, Resource::Device, Action::Create)
+        .check_permission("user-2", TEST_ORG_ID, Resource::DataStream, Action::Create)
         .await
         .unwrap();
 
@@ -452,21 +521,21 @@ async fn test_user_with_roles_in_multiple_orgs() {
 
     // Should have access to org-1
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, "org-1", Resource::Device, Action::Create)
+        .check_permission(TEST_USER_ID, "org-1", Resource::DataStream, Action::Create)
         .await
         .unwrap();
     assert!(allowed);
 
     // Should have access to org-2
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, "org-2", Resource::Device, Action::Create)
+        .check_permission(TEST_USER_ID, "org-2", Resource::DataStream, Action::Create)
         .await
         .unwrap();
     assert!(allowed);
 
     // Should NOT have access to org-3
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, "org-3", Resource::Device, Action::Create)
+        .check_permission(TEST_USER_ID, "org-3", Resource::DataStream, Action::Create)
         .await
         .unwrap();
     assert!(!allowed);
@@ -661,7 +730,12 @@ async fn test_role_persisted_in_database() {
 
         // Role should still be there
         let allowed = auth_service2
-            .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::Device, Action::Create)
+            .check_permission(
+                TEST_USER_ID,
+                TEST_ORG_ID,
+                Resource::DataStream,
+                Action::Create,
+            )
             .await
             .unwrap();
 

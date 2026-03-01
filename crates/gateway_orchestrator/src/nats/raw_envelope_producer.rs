@@ -47,8 +47,8 @@ impl RawEnvelopeProducerTrait for RawEnvelopeProducer {
         // Serialize protobuf message
         let payload = proto_envelope.encode_to_vec();
 
-        // Build subject: {base_subject}.{device_id}
-        let subject = format!("{}.{}", self.base_subject, proto_envelope.device_id);
+        // Build subject: {base_subject}.{data_stream_id}
+        let subject = format!("{}.{}", self.base_subject, proto_envelope.data_stream_id);
 
         // Create request and call the middleware stack
         let request = PublishRequest::new(subject, payload);
@@ -90,7 +90,7 @@ mod tests {
 
         let envelope = RawEnvelope {
             organization_id: "org-123".to_string(),
-            end_device_id: "device-456".to_string(),
+            data_stream_id: "device-456".to_string(),
             received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x02, 0x03],
         };
@@ -118,7 +118,7 @@ mod tests {
 
         let envelope = RawEnvelope {
             organization_id: "org-123".to_string(),
-            end_device_id: "device-456".to_string(),
+            data_stream_id: "device-456".to_string(),
             received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x02, 0x03],
         };

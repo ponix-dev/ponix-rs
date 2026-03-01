@@ -68,13 +68,13 @@ impl Service<ConsumeRequest> for RawEnvelopeConsumerService {
                 }
             };
 
-            let device_id = domain_envelope.end_device_id.clone();
+            let data_stream_id = domain_envelope.data_stream_id.clone();
 
             // Process through domain service
             match domain_service.process_raw_envelope(domain_envelope).await {
                 Ok(()) => {
                     debug!(
-                        device_id = %device_id,
+                        data_stream_id = %data_stream_id,
                         "successfully processed RawEnvelope"
                     );
                     Ok(ConsumeResponse::ack())
@@ -82,7 +82,7 @@ impl Service<ConsumeRequest> for RawEnvelopeConsumerService {
                 Err(e) => {
                     warn!(
                         error = %e,
-                        device_id = %device_id,
+                        data_stream_id = %data_stream_id,
                         "failed to process RawEnvelope"
                     );
                     Ok(ConsumeResponse::nak(e.to_string()))

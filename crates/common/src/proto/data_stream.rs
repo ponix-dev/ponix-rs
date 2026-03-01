@@ -1,7 +1,7 @@
-use crate::domain::{Device, EndDeviceDefinition, PayloadContract};
+use crate::domain::{DataStream, DataStreamDefinition, PayloadContract};
 use chrono::{DateTime, Utc};
-use ponix_proto_prost::end_device::v1::{
-    EndDevice, EndDeviceDefinition as ProtoEndDeviceDefinition,
+use ponix_proto_prost::data_stream::v1::{
+    DataStream as ProtoDataStream, DataStreamDefinition as ProtoDataStreamDefinition,
     PayloadContract as ProtoPayloadContract,
 };
 use prost_types::Timestamp;
@@ -14,23 +14,23 @@ fn datetime_to_timestamp(dt: Option<DateTime<Utc>>) -> Option<Timestamp> {
     })
 }
 
-/// Convert domain Device to protobuf EndDevice
-pub fn to_proto_device(device: Device) -> EndDevice {
-    EndDevice {
-        device_id: device.device_id,
-        organization_id: device.organization_id,
-        workspace_id: device.workspace_id,
-        definition_id: device.definition_id,
-        gateway_id: device.gateway_id,
-        name: device.name,
-        created_at: datetime_to_timestamp(device.created_at),
-        updated_at: datetime_to_timestamp(device.updated_at),
+/// Convert domain DataStream to protobuf DataStream
+pub fn to_proto_data_stream(data_stream: DataStream) -> ProtoDataStream {
+    ProtoDataStream {
+        data_stream_id: data_stream.data_stream_id,
+        organization_id: data_stream.organization_id,
+        workspace_id: data_stream.workspace_id,
+        definition_id: data_stream.definition_id,
+        gateway_id: data_stream.gateway_id,
+        name: data_stream.name,
+        created_at: datetime_to_timestamp(data_stream.created_at),
+        updated_at: datetime_to_timestamp(data_stream.updated_at),
     }
 }
 
-/// Convert domain EndDeviceDefinition to protobuf EndDeviceDefinition
-pub fn to_proto_end_device_definition(def: EndDeviceDefinition) -> ProtoEndDeviceDefinition {
-    ProtoEndDeviceDefinition {
+/// Convert domain DataStreamDefinition to protobuf DataStreamDefinition
+pub fn to_proto_data_stream_definition(def: DataStreamDefinition) -> ProtoDataStreamDefinition {
+    ProtoDataStreamDefinition {
         id: def.id,
         organization_id: def.organization_id,
         name: def.name,
@@ -72,27 +72,27 @@ mod tests {
     use chrono::Utc;
 
     #[test]
-    fn test_domain_device_to_proto() {
+    fn test_domain_data_stream_to_proto() {
         let now = Utc::now();
-        let device = Device {
-            device_id: "device-123".to_string(),
+        let data_stream = DataStream {
+            data_stream_id: "ds-123".to_string(),
             organization_id: "org-456".to_string(),
             workspace_id: "ws-abc".to_string(),
             definition_id: "def-789".to_string(),
             gateway_id: "gw-xyz".to_string(),
-            name: "Test Device".to_string(),
+            name: "Test Data Stream".to_string(),
             created_at: Some(now),
             updated_at: Some(now),
         };
 
-        let proto = to_proto_device(device);
+        let proto = to_proto_data_stream(data_stream);
 
-        assert_eq!(proto.device_id, "device-123");
+        assert_eq!(proto.data_stream_id, "ds-123");
         assert_eq!(proto.organization_id, "org-456");
         assert_eq!(proto.workspace_id, "ws-abc");
         assert_eq!(proto.definition_id, "def-789");
         assert_eq!(proto.gateway_id, "gw-xyz");
-        assert_eq!(proto.name, "Test Device");
+        assert_eq!(proto.name, "Test Data Stream");
         assert!(proto.created_at.is_some());
         assert!(proto.updated_at.is_some());
     }
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn test_domain_definition_to_proto() {
         let now = Utc::now();
-        let def = EndDeviceDefinition {
+        let def = DataStreamDefinition {
             id: "def-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "Test Definition".to_string(),
@@ -115,7 +115,7 @@ mod tests {
             updated_at: Some(now),
         };
 
-        let proto = to_proto_end_device_definition(def);
+        let proto = to_proto_data_stream_definition(def);
 
         assert_eq!(proto.id, "def-123");
         assert_eq!(proto.organization_id, "org-456");

@@ -1,13 +1,13 @@
-mod device_handler;
-mod end_device_definition_handler;
+mod data_stream_definition_handler;
+mod data_stream_handler;
 mod gateway_handler;
 mod organization_handler;
 mod server;
 mod user_handler;
 mod workspace_handler;
 
-pub use device_handler::*;
-pub use end_device_definition_handler::*;
+pub use data_stream_definition_handler::*;
+pub use data_stream_handler::*;
 pub use gateway_handler::*;
 pub use organization_handler::*;
 pub use server::{run_ponix_grpc_server, PonixApiServices, REFLECTION_DESCRIPTORS};

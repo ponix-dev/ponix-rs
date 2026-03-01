@@ -73,7 +73,7 @@ impl ClickHouseInserterRepository {
             .context("failed to write row to inserter buffer")?;
 
         debug!(
-            device_id = %envelope.end_device_id,
+            data_stream_id = %envelope.data_stream_id,
             "buffered envelope for ClickHouse insert"
         );
 

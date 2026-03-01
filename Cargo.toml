@@ -48,8 +48,8 @@ http = "1.0"
 protoc-wkt = "1.0"
 
 # Protobuf (BSR registry)
-ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.5.0-20260222230759-321a9c11336c.2", registry = "buf" }
-ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.5.0-20260222230759-321a9c11336c.4", registry = "buf" }
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.5.0-20260228234535-5d13f6c08c29.2", registry = "buf" }
+ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.5.0-20260228234535-5d13f6c08c29.4", registry = "buf" }
 
 # Database clients
 clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }

@@ -1,8 +1,8 @@
 use crate::domain::{
-    CreateEndDeviceDefinitionRepoInput, DeleteEndDeviceDefinitionRepoInput, DomainError,
-    DomainResult, EndDeviceDefinition, EndDeviceDefinitionRepository,
-    GetEndDeviceDefinitionRepoInput, ListEndDeviceDefinitionsRepoInput, PayloadContract,
-    UpdateEndDeviceDefinitionRepoInput,
+    CreateDataStreamDefinitionRepoInput, DataStreamDefinition, DataStreamDefinitionRepository,
+    DeleteDataStreamDefinitionRepoInput, DomainError, DomainResult,
+    GetDataStreamDefinitionRepoInput, ListDataStreamDefinitionsRepoInput, PayloadContract,
+    UpdateDataStreamDefinitionRepoInput,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -12,7 +12,7 @@ use tracing::{debug, instrument};
 
 /// Definition row for PostgreSQL storage
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EndDeviceDefinitionRow {
+pub struct DataStreamDefinitionRow {
     pub id: String,
     pub organization_id: String,
     pub name: String,
@@ -21,10 +21,10 @@ pub struct EndDeviceDefinitionRow {
     pub updated_at: DateTime<Utc>,
 }
 
-impl TryFrom<EndDeviceDefinitionRow> for EndDeviceDefinition {
+impl TryFrom<DataStreamDefinitionRow> for DataStreamDefinition {
     type Error = DomainError;
 
-    fn try_from(row: EndDeviceDefinitionRow) -> Result<Self, Self::Error> {
+    fn try_from(row: DataStreamDefinitionRow) -> Result<Self, Self::Error> {
         let contracts: Vec<PayloadContract> =
             serde_json::from_value(row.contracts).map_err(|e| {
                 DomainError::RepositoryError(anyhow::anyhow!(
@@ -33,7 +33,7 @@ impl TryFrom<EndDeviceDefinitionRow> for EndDeviceDefinition {
                 ))
             })?;
 
-        Ok(EndDeviceDefinition {
+        Ok(DataStreamDefinition {
             id: row.id,
             organization_id: row.organization_id,
             name: row.name,
@@ -44,25 +44,25 @@ impl TryFrom<EndDeviceDefinitionRow> for EndDeviceDefinition {
     }
 }
 
-/// PostgreSQL implementation of EndDeviceDefinitionRepository
+/// PostgreSQL implementation of DataStreamDefinitionRepository
 #[derive(Clone)]
-pub struct PostgresEndDeviceDefinitionRepository {
+pub struct PostgresDataStreamDefinitionRepository {
     client: PostgresClient,
 }
 
-impl PostgresEndDeviceDefinitionRepository {
+impl PostgresDataStreamDefinitionRepository {
     pub fn new(client: PostgresClient) -> Self {
         Self { client }
     }
 }
 
 #[async_trait]
-impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
+impl DataStreamDefinitionRepository for PostgresDataStreamDefinitionRepository {
     #[instrument(skip(self, input), fields(id = %input.id, organization_id = %input.organization_id))]
     async fn create_definition(
         &self,
-        input: CreateEndDeviceDefinitionRepoInput,
-    ) -> DomainResult<EndDeviceDefinition> {
+        input: CreateDataStreamDefinitionRepoInput,
+    ) -> DomainResult<DataStreamDefinition> {
         let conn = self
             .client
             .get_connection()
@@ -77,7 +77,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         let result = conn
             .execute(
-                "INSERT INTO end_device_definitions (id, organization_id, name, contracts, created_at, updated_at)
+                "INSERT INTO data_stream_definitions (id, organization_id, name, contracts, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6)",
                 &[
                     &input.id,
@@ -93,15 +93,15 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
         if let Err(e) = result {
             if let Some(db_err) = e.as_db_error() {
                 if db_err.code().code() == "23505" {
-                    return Err(DomainError::EndDeviceDefinitionAlreadyExists(input.id));
+                    return Err(DomainError::DataStreamDefinitionAlreadyExists(input.id));
                 }
             }
             return Err(DomainError::RepositoryError(e.into()));
         }
 
-        debug!("created end device definition: {}", input.id);
+        debug!("created data stream definition: {}", input.id);
 
-        Ok(EndDeviceDefinition {
+        Ok(DataStreamDefinition {
             id: input.id,
             organization_id: input.organization_id,
             name: input.name,
@@ -114,8 +114,8 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
     #[instrument(skip(self, input), fields(id = %input.id, organization_id = %input.organization_id))]
     async fn get_definition(
         &self,
-        input: GetEndDeviceDefinitionRepoInput,
-    ) -> DomainResult<Option<EndDeviceDefinition>> {
+        input: GetDataStreamDefinitionRepoInput,
+    ) -> DomainResult<Option<DataStreamDefinition>> {
         let conn = self
             .client
             .get_connection()
@@ -125,7 +125,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
         let row = conn
             .query_opt(
                 "SELECT id, organization_id, name, contracts, created_at, updated_at
-                 FROM end_device_definitions
+                 FROM data_stream_definitions
                  WHERE id = $1 AND organization_id = $2",
                 &[&input.id, &input.organization_id],
             )
@@ -134,7 +134,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         match row {
             Some(row) => {
-                let def_row = EndDeviceDefinitionRow {
+                let def_row = DataStreamDefinitionRow {
                     id: row.get(0),
                     organization_id: row.get(1),
                     name: row.get(2),
@@ -151,8 +151,8 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
     #[instrument(skip(self, input), fields(id = %input.id, organization_id = %input.organization_id))]
     async fn update_definition(
         &self,
-        input: UpdateEndDeviceDefinitionRepoInput,
-    ) -> DomainResult<EndDeviceDefinition> {
+        input: UpdateDataStreamDefinitionRepoInput,
+    ) -> DomainResult<DataStreamDefinition> {
         let conn = self
             .client
             .get_connection()
@@ -161,8 +161,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         let now = Utc::now();
 
-        // Build dynamic UPDATE query
-        let mut query = String::from("UPDATE end_device_definitions SET updated_at = $1");
+        let mut query = String::from("UPDATE data_stream_definitions SET updated_at = $1");
         let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![&now];
         let mut param_idx = 2;
 
@@ -172,7 +171,6 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
             param_idx += 1;
         }
 
-        // Serialize contracts if provided
         let contracts_json = input
             .contracts
             .as_ref()
@@ -208,7 +206,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         match row {
             Some(row) => {
-                let def_row = EndDeviceDefinitionRow {
+                let def_row = DataStreamDefinitionRow {
                     id: row.get(0),
                     organization_id: row.get(1),
                     name: row.get(2),
@@ -216,17 +214,17 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
                     created_at: row.get(4),
                     updated_at: row.get(5),
                 };
-                debug!("updated end device definition: {}", input.id);
+                debug!("updated data stream definition: {}", input.id);
                 def_row.try_into()
             }
-            None => Err(DomainError::EndDeviceDefinitionNotFound(input.id)),
+            None => Err(DomainError::DataStreamDefinitionNotFound(input.id)),
         }
     }
 
     #[instrument(skip(self, input), fields(id = %input.id, organization_id = %input.organization_id))]
     async fn delete_definition(
         &self,
-        input: DeleteEndDeviceDefinitionRepoInput,
+        input: DeleteDataStreamDefinitionRepoInput,
     ) -> DomainResult<()> {
         let conn = self
             .client
@@ -236,7 +234,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         let result = conn
             .execute(
-                "DELETE FROM end_device_definitions WHERE id = $1 AND organization_id = $2",
+                "DELETE FROM data_stream_definitions WHERE id = $1 AND organization_id = $2",
                 &[&input.id, &input.organization_id],
             )
             .await;
@@ -244,15 +242,15 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
         match result {
             Ok(rows_affected) => {
                 if rows_affected == 0 {
-                    return Err(DomainError::EndDeviceDefinitionNotFound(input.id));
+                    return Err(DomainError::DataStreamDefinitionNotFound(input.id));
                 }
-                debug!("deleted end device definition: {}", input.id);
+                debug!("deleted data stream definition: {}", input.id);
                 Ok(())
             }
             Err(e) => {
                 if let Some(db_err) = e.as_db_error() {
                     if db_err.code().code() == "23503" {
-                        return Err(DomainError::EndDeviceDefinitionInUse(input.id));
+                        return Err(DomainError::DataStreamDefinitionInUse(input.id));
                     }
                 }
                 Err(DomainError::RepositoryError(e.into()))
@@ -263,8 +261,8 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
     #[instrument(skip(self, input), fields(organization_id = %input.organization_id))]
     async fn list_definitions(
         &self,
-        input: ListEndDeviceDefinitionsRepoInput,
-    ) -> DomainResult<Vec<EndDeviceDefinition>> {
+        input: ListDataStreamDefinitionsRepoInput,
+    ) -> DomainResult<Vec<DataStreamDefinition>> {
         let conn = self
             .client
             .get_connection()
@@ -274,7 +272,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
         let rows = conn
             .query(
                 "SELECT id, organization_id, name, contracts, created_at, updated_at
-                 FROM end_device_definitions
+                 FROM data_stream_definitions
                  WHERE organization_id = $1
                  ORDER BY created_at DESC",
                 &[&input.organization_id],
@@ -284,7 +282,7 @@ impl EndDeviceDefinitionRepository for PostgresEndDeviceDefinitionRepository {
 
         let mut definitions = Vec::with_capacity(rows.len());
         for row in &rows {
-            let def_row = EndDeviceDefinitionRow {
+            let def_row = DataStreamDefinitionRow {
                 id: row.get(0),
                 organization_id: row.get(1),
                 name: row.get(2),
