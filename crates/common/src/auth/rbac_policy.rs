@@ -1,7 +1,7 @@
 /// Resource types for authorization
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resource {
-    Device,
+    DataStream,
     Gateway,
     Organization,
     Workspace,
@@ -10,7 +10,7 @@ pub enum Resource {
 impl Resource {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Resource::Device => "device",
+            Resource::DataStream => "data_stream",
             Resource::Gateway => "gateway",
             Resource::Organization => "organization",
             Resource::Workspace => "workspace",
@@ -61,10 +61,30 @@ impl OrgRole {
 pub fn base_policies() -> Vec<Vec<String>> {
     vec![
         // Admin policies - full CRUD on all resources
-        vec!["admin".into(), "*".into(), "device".into(), "create".into()],
-        vec!["admin".into(), "*".into(), "device".into(), "read".into()],
-        vec!["admin".into(), "*".into(), "device".into(), "update".into()],
-        vec!["admin".into(), "*".into(), "device".into(), "delete".into()],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "data_stream".into(),
+            "create".into(),
+        ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "data_stream".into(),
+            "read".into(),
+        ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "data_stream".into(),
+            "update".into(),
+        ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "data_stream".into(),
+            "delete".into(),
+        ],
         vec![
             "admin".into(),
             "*".into(),
@@ -130,20 +150,25 @@ pub fn base_policies() -> Vec<Vec<String>> {
         vec![
             "member".into(),
             "*".into(),
-            "device".into(),
+            "data_stream".into(),
             "create".into(),
         ],
-        vec!["member".into(), "*".into(), "device".into(), "read".into()],
         vec![
             "member".into(),
             "*".into(),
-            "device".into(),
+            "data_stream".into(),
+            "read".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "data_stream".into(),
             "update".into(),
         ],
         vec![
             "member".into(),
             "*".into(),
-            "device".into(),
+            "data_stream".into(),
             "delete".into(),
         ],
         vec![

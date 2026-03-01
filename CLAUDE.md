@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ponix RS is a Rust-based IoT data ingestion platform with gRPC device management, NATS JetStream event processing, PostgreSQL Change Data Capture (CDC), and multi-database persistence (PostgreSQL + ClickHouse). It's a Cargo workspace with modular crates designed for future microservice extraction, currently deployed as a monolith.
+Ponix RS is a Rust-based IoT data ingestion platform with gRPC data stream management, NATS JetStream event processing, PostgreSQL Change Data Capture (CDC), and multi-database persistence (PostgreSQL + ClickHouse). It's a Cargo workspace with modular crates designed for future microservice extraction, currently deployed as a monolith.
 
 ## Development Commands
 
@@ -64,8 +64,8 @@ SELECT * FROM ponix.processed_envelopes LIMIT 10;
 # Connect to PostgreSQL
 docker exec -it ponix-postgres psql -U ponix -d ponix
 
-# Query devices
-SELECT * FROM devices;
+# Query data streams
+SELECT * FROM data_streams;
 ```
 
 ### gRPC API Testing
@@ -73,17 +73,17 @@ SELECT * FROM devices;
 # Install grpcurl
 brew install grpcurl
 
-# Create a device
+# Create a data stream
 grpcurl -plaintext -d '{"organization_id": "org-001", "name": "Sensor Alpha"}' \
-  localhost:50051 ponix.end_device.v1.EndDeviceService/CreateEndDevice
+  localhost:50051 ponix.data_stream.v1.DataStreamService/CreateDataStream
 
-# Get a device
-grpcurl -plaintext -d '{"device_id": "cm3rnbgek0000j5d37r63jnmn"}' \
-  localhost:50051 ponix.end_device.v1.EndDeviceService/GetEndDevice
+# Get a data stream
+grpcurl -plaintext -d '{"data_stream_id": "cm3rnbgek0000j5d37r63jnmn"}' \
+  localhost:50051 ponix.data_stream.v1.DataStreamService/GetDataStream
 
-# List devices
+# List data streams
 grpcurl -plaintext -d '{"organization_id": "org-001"}' \
-  localhost:50051 ponix.end_device.v1.EndDeviceService/ListEndDevices
+  localhost:50051 ponix.data_stream.v1.DataStreamService/GetWorkspaceDataStreams
 ```
 
 ## Architecture
@@ -100,12 +100,12 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
 
 - **`common`**: Shared infrastructure and domain types
   - **`domain/`**: Core domain entities and repository traits
-    - Entities: `Device`, `Organization`, `Gateway`, `RawEnvelope`, `ProcessedEnvelope`
-    - Repository traits: `DeviceRepository`, `OrganizationRepository`, `GatewayRepository`
+    - Entities: `DataStream`, `DataStreamWithDefinition`, `Organization`, `Gateway`, `RawEnvelope`, `ProcessedEnvelope`
+    - Repository traits: `DataStreamRepository`, `DataStreamDefinitionRepository`, `OrganizationRepository`, `GatewayRepository`
     - Producer traits: `ProcessedEnvelopeProducer`, `RawEnvelopeProducer`
   - **`postgres/`**: PostgreSQL integration
     - `PostgresClient`: Connection pooling (deadpool-postgres, max 5 connections)
-    - Repository implementations for devices, organizations, gateways
+    - Repository implementations for data streams, data stream definitions, organizations, gateways
   - **`nats/`**: NATS JetStream integration
     - `NatsClient`, `NatsConsumer` with batch processing
     - `ProcessingResult` for per-message Ack/Nak decisions
@@ -126,7 +126,7 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
 
 - **`ponix_api`**: gRPC API layer and domain services
   - **`domain/`**: Business logic services
-    - `DeviceService`: Device CRUD with organization validation
+    - `DataStreamService`: Data stream CRUD with organization validation
     - `OrganizationService`: Organization management
     - `GatewayService`: Gateway management
   - **`grpc/`**: Tonic gRPC handlers and server
@@ -148,7 +148,7 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
   - `AnalyticsWorker`: Coordinates envelope consumers
   - `ProcessedEnvelopeService`: Stores processed envelopes in ClickHouse
   - `RawEnvelopeService`: Converts raw → processed envelopes
-    - Device lookup, organization validation
+    - Data stream lookup, organization validation
     - CEL expression execution on binary payloads
     - Republishes to processed envelopes stream
   - `CelPayloadConverter`: CEL-based payload transformation
@@ -176,7 +176,7 @@ The system follows DDD principles with clear layer separation:
 Key patterns:
 - **Repository Pattern**: Traits in domain, implementations in infrastructure
 - **Dependency Inversion**: Domain defines interfaces, infrastructure implements
-- **Two-Type Pattern**: `CreateDeviceInput` (external) vs `CreateDeviceInputWithId` (internal)
+- **Two-Type Pattern**: `CreateDataStreamInput` (external) vs `CreateDataStreamInputWithId` (internal)
 - **ID Generation**: Domain service generates unique IDs using `xid`
 - **Error Mapping**: Domain errors mapped to gRPC Status codes
 
@@ -215,7 +215,7 @@ RawEnvelope (binary payload)
     ↓
 RawEnvelopeService.process_raw_envelope()
     ↓
-├─> DeviceRepository: Fetch device with CEL expression
+├─> DataStreamRepository: Fetch data stream with CEL expression
 ├─> Validate organization exists
 ├─> CelPayloadConverter: Execute CEL on binary data
 ├─> Validate output is JSON object
@@ -383,7 +383,7 @@ The `ponix_all_in_one` service initializes in phases:
 2. **PostgreSQL**: Run migrations → create client → initialize repositories
 3. **ClickHouse**: Run migrations → create client
 4. **NATS**: Connect → ensure streams exist
-5. **Domain Services**: Create DeviceService, OrganizationService, GatewayService
+5. **Domain Services**: Create DataStreamService, OrganizationService, GatewayService
 6. **Workers**: Initialize PonixApi, GatewayOrchestrator, CdcWorker, AnalyticsWorker
 7. **Runner**: Register all as app processes, register closers
 8. **Run**: Start all processes concurrently
@@ -480,10 +480,10 @@ See `crates/ponix_all_in_one/src/config.rs` for full config schema.
 - Service definitions use Buf Schema Registry for protobuf types
 - Import paths for tonic-generated code have nested `tonic` module:
   ```rust
-  use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceService;
+  use ponix_proto_tonic::data_stream::v1::tonic::data_stream_service_server::DataStreamService;
   ```
-- Domain service generates device IDs using `xid` crate (not at gRPC layer)
-- Error mapping: `DomainError::DeviceAlreadyExists` → `Status::already_exists`
+- Domain service generates data stream IDs using `xid` crate (not at gRPC layer)
+- Error mapping: `DomainError::DataStreamAlreadyExists` → `Status::already_exists`
 
 #### gRPC-Web Support
 The gRPC server supports both standard gRPC (HTTP/2) and gRPC-Web (HTTP/1.1) on the same port:

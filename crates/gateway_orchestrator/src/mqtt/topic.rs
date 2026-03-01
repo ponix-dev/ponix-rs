@@ -1,13 +1,13 @@
 use common::domain::{DomainError, DomainResult};
 
-/// Parsed MQTT topic containing organization and device IDs
+/// Parsed MQTT topic containing organization and data stream IDs
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedTopic {
     pub organization_id: String,
-    pub end_device_id: String,
+    pub data_stream_id: String,
 }
 
-/// Parse an MQTT topic in the format `{organization_id}/{end_device_id}`
+/// Parse an MQTT topic in the format `{organization_id}/{data_stream_id}`
 ///
 /// # Arguments
 /// * `topic` - The MQTT topic string to parse
@@ -22,20 +22,20 @@ pub struct ParsedTopic {
 ///
 /// let parsed = parse_topic("org-001/device-123").unwrap();
 /// assert_eq!(parsed.organization_id, "org-001");
-/// assert_eq!(parsed.end_device_id, "device-123");
+/// assert_eq!(parsed.data_stream_id, "device-123");
 /// ```
 pub fn parse_topic(topic: &str) -> DomainResult<ParsedTopic> {
     let parts: Vec<&str> = topic.split('/').collect();
 
     if parts.len() != 2 {
         return Err(DomainError::InvalidGatewayConfig(format!(
-            "Invalid topic format '{}': expected '{{org_id}}/{{device_id}}'",
+            "Invalid topic format '{}': expected '{{org_id}}/{{data_stream_id}}'",
             topic
         )));
     }
 
     let organization_id = parts[0].trim();
-    let end_device_id = parts[1].trim();
+    let data_stream_id = parts[1].trim();
 
     if organization_id.is_empty() {
         return Err(DomainError::InvalidGatewayConfig(
@@ -43,15 +43,15 @@ pub fn parse_topic(topic: &str) -> DomainResult<ParsedTopic> {
         ));
     }
 
-    if end_device_id.is_empty() {
+    if data_stream_id.is_empty() {
         return Err(DomainError::InvalidGatewayConfig(
-            "Device ID cannot be empty in topic".to_string(),
+            "Data stream ID cannot be empty in topic".to_string(),
         ));
     }
 
     Ok(ParsedTopic {
         organization_id: organization_id.to_string(),
-        end_device_id: end_device_id.to_string(),
+        data_stream_id: data_stream_id.to_string(),
     })
 }
 
@@ -65,7 +65,7 @@ mod tests {
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.organization_id, "org-001");
-        assert_eq!(parsed.end_device_id, "device-123");
+        assert_eq!(parsed.data_stream_id, "device-123");
     }
 
     #[test]
@@ -74,7 +74,7 @@ mod tests {
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.organization_id, "my_org");
-        assert_eq!(parsed.end_device_id, "sensor_temp_01");
+        assert_eq!(parsed.data_stream_id, "sensor_temp_01");
     }
 
     #[test]

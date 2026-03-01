@@ -12,7 +12,7 @@ use tracing::{debug, error};
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct ProcessedEnvelopeRow {
     pub organization_id: String,
-    pub end_device_id: String,
+    pub data_stream_id: String,
     // CRITICAL: This serde attribute is required when using JSON type alongside DateTime
     // Reference: https://github.com/ClickHouse/clickhouse-rs/blob/main/examples/data_types_derive_simple.rs
     #[serde(with = "clickhouse::serde::chrono::datetime")]
@@ -31,7 +31,7 @@ impl From<&ProcessedEnvelope> for ProcessedEnvelopeRow {
 
         ProcessedEnvelopeRow {
             organization_id: envelope.organization_id.clone(),
-            end_device_id: envelope.end_device_id.clone(),
+            data_stream_id: envelope.data_stream_id.clone(),
             received_at: envelope.received_at,
             processed_at: envelope.processed_at,
             data: data_json,
@@ -118,7 +118,7 @@ mod tests {
 
         let domain_envelope = ProcessedEnvelope {
             organization_id: "org-123".to_string(),
-            end_device_id: "device-456".to_string(),
+            data_stream_id: "ds-456".to_string(),
             received_at: Utc::now(),
             processed_at: Utc::now(),
             data: data_map,
@@ -127,7 +127,7 @@ mod tests {
         let row: ProcessedEnvelopeRow = (&domain_envelope).into();
 
         assert_eq!(row.organization_id, "org-123");
-        assert_eq!(row.end_device_id, "device-456");
+        assert_eq!(row.data_stream_id, "ds-456");
         assert!(row.data.contains("temperature"));
         assert!(row.data.contains("23.5"));
     }
@@ -136,7 +136,7 @@ mod tests {
     fn test_empty_data_conversion() {
         let domain_envelope = ProcessedEnvelope {
             organization_id: "org-123".to_string(),
-            end_device_id: "device-456".to_string(),
+            data_stream_id: "ds-456".to_string(),
             received_at: Utc::now(),
             processed_at: Utc::now(),
             data: serde_json::Map::new(),

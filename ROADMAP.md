@@ -18,10 +18,8 @@ Make the existing ingest path multi-protocol and production-grade before buildin
 - [x] #122 — Multi-protocol payload contracts — devices aren't locked to one CEL expression
 - [x] #119 — Own the CEL runtime — ability to add IoT-specific functions
 - [x] #120 — Pre-compiled CEL — removes per-message compilation cost at scale
-- [ ] #26 — RAKwireless decoder — broader hardware support
 - [x] #94 — Gateway deployer abstraction — decouple gateway lifecycle from in-process `tokio::spawn`
-- [ ] #48 — CDC high availability — eliminates single point of failure
-- [ ] #157 — Rename End Device to Data Stream — align naming with the platform's evolving multi-source model
+- [x] #157 — Rename End Device to Data Stream — align naming with the platform's evolving multi-source model
 
 > **Why first:** Everything downstream depends on reliable, validated data flowing in. Protocol-agnostic contracts (#122) are especially important — agents will eventually need to reason about devices speaking different protocols, and the downlink path will need protocol-aware encoding.
 
@@ -96,7 +94,7 @@ Build the reverse path — platform to device. This becomes the built-in `downli
 - [ ] #138 — Downlink NATS stream — `downlink_commands` stream. Commands flow through the same event infrastructure as uplinks
 - [ ] #139 — Downlink gRPC service — manual command submission, status queries, command history
 - [ ] #140 — Gateway downlink publishing — extend gateway runners to publish to device MQTT topics. Consume from `downlink_commands` stream, deliver via the appropriate gateway
-- [ ] #141 — Downlink encoding — reverse payload conversion — JSON to device-native binary. Mirrors the uplink CEL contracts. Store downlink expressions alongside uplink contracts in `EndDeviceDefinition`
+- [ ] #141 — Downlink encoding — reverse payload conversion — JSON to device-native binary. Mirrors the uplink CEL contracts. Store downlink expressions alongside uplink contracts in `DataStreamDefinition`
 
 > **Why here and not earlier:** Downlink is useless without something intelligent deciding what to send. But it doesn't need the full autonomous loop to be valuable — manual downlinks via gRPC are useful on their own and let you test the plumbing before agents drive it.
 
@@ -125,18 +123,18 @@ Wire the agent runtime to two trigger sources — real-time events from the NATS
 
 ## Phase 6: LoRaWAN / ChirpStack
 
-Add first-class LoRaWAN support via ChirpStack integration — both uplink and downlink. This is a new `EndDeviceDefinition` type that plugs into the existing ingest, downlink, and agent infrastructure built in earlier phases.
+Add first-class LoRaWAN support via ChirpStack integration — both uplink and downlink. This is a new `DataStreamDefinition` type that plugs into the existing ingest, downlink, and agent infrastructure built in earlier phases.
 
 ### Uplink
 
-- [ ] #147 — ChirpStack `EndDeviceDefinition` type — a new device definition type representing ChirpStack-managed LoRaWAN devices. Carries ChirpStack-specific metadata: application ID, device profile, device EUI, and payload codec configuration
+- [ ] #147 — ChirpStack `DataStreamDefinition` type — a new data stream definition type representing ChirpStack-managed LoRaWAN devices. Carries ChirpStack-specific metadata: application ID, device profile, device EUI, and payload codec configuration
 - [ ] #148 — ChirpStack uplink ingest — subscribe to ChirpStack's event stream (MQTT or gRPC integration), receive uplink events, map them to the platform's envelope format. Feeds into the same NATS → CEL → ClickHouse pipeline as all other devices
-- [ ] #149 — ChirpStack payload contracts — CEL expressions (or ChirpStack's built-in codec output) for decoding LoRaWAN payloads. Stored on the `EndDeviceDefinition` alongside the standard uplink contracts
+- [ ] #149 — ChirpStack payload contracts — CEL expressions (or ChirpStack's built-in codec output) for decoding LoRaWAN payloads. Stored on the `DataStreamDefinition` alongside the standard uplink contracts
 
 ### Downlink
 
 - [ ] #150 — ChirpStack downlink routing — when a `DownlinkCommand` targets a ChirpStack device, route it through ChirpStack's downlink API (enqueue) instead of direct MQTT publish. The downlink infrastructure from Phase 4 handles lifecycle tracking — ChirpStack handles the LoRaWAN Class A/B/C scheduling
-- [ ] #151 — ChirpStack downlink encoding — reverse payload conversion for LoRaWAN devices. Store downlink encoding expressions on the ChirpStack `EndDeviceDefinition`. The `downlink_command` built-in tool uses these to encode the agent's JSON payload into the binary format ChirpStack expects
+- [ ] #151 — ChirpStack downlink encoding — reverse payload conversion for LoRaWAN devices. Store downlink encoding expressions on the ChirpStack `DataStreamDefinition`. The `downlink_command` built-in tool uses these to encode the agent's JSON payload into the binary format ChirpStack expects
 
 > **Why last:** The full platform — ingest, knowledge layer, agent runtime, downlink infrastructure, and workflow engine — needs to be solid before adding a new protocol integration. ChirpStack support is additive: it's a new `EndDeviceDefinition` type that plugs into every layer, not a rearchitecture. Doing it last means the abstractions are proven and the integration is straightforward.
 
@@ -196,11 +194,30 @@ flowchart TD
 
 ---
 
+## Phase 7: Microservice Extraction & HA
+
+Break apart the monolith into independently deployable services and add high availability where the architecture currently has single points of failure. This phase is deliberately last — the crate boundaries established throughout earlier phases naturally define the extraction seams.
+
+- [ ] #65 — Consolidate service initialization into `init_process` crate — clean boot sequence that supports both monolith and independent service deployment
+- [ ] #48 — CDC high availability — eliminates single point of failure via leader election and Redis-backed state
+
+> **Why last:** The monolith is the right deployment model while the feature surface is evolving rapidly. Extracting services too early locks in boundaries that haven't been proven yet. By this point, every crate has been battle-tested through six phases of feature development, and the `Runner` process model already isolates each worker — extraction is mechanical, not architectural.
+
+---
+
+## Phase 8: Contract Evolution
+
+Extend the payload contract system beyond single pre-compiled CEL expressions. Add versioning, testing infrastructure, new decoder types, and a management API that decouples contracts from device definitions.
+
+- [ ] #26 — RAKwireless decoder — broader hardware support with protocol-specific codec
+
+---
+
 ## Open Questions to Resolve Along the Way
 
 - **Where does new code live?** Each phase will naturally suggest boundaries, but no need to decide crate structure upfront.
 - **Ollama vs. external LLM?** #112 starts with Ollama for local inference, but the agent runtime's LLM interface should be provider-agnostic.
 - **Cron scheduling at scale** — single scheduler with distributed lock, or sharded? Depends on how many concurrent workflows tenants define.
 - **Agent step limits & cost control** — how many tool calls per run? How do you prevent an agent from looping? Token budgets, step caps, and wall-clock timeouts all need sensible defaults.
-- **Additional protocol support** — after ChirpStack, CoAP and other network servers each have their own uplink/downlink semantics — handle via additional `EndDeviceDefinition` types as needed.
+- **Additional protocol support** — after ChirpStack, CoAP and other network servers each have their own uplink/downlink semantics — handle via additional `DataStreamDefinition` types as needed.
 - **Multi-tenant isolation** — do orgs share a model, or does each get their own? Workspace scoping handles tool and data boundaries, but model sharing is a separate question.

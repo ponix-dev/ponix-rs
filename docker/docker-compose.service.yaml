@@ -70,14 +70,14 @@ services:
       PONIX_CDC_GATEWAY_TABLE_NAME: "gateways"
       PONIX_CDC_WORKSPACE_ENTITY_NAME: "workspaces"
       PONIX_CDC_WORKSPACE_TABLE_NAME: "workspaces"
-      PONIX_CDC_DEVICE_ENTITY_NAME: "devices"
-      PONIX_CDC_DEVICE_TABLE_NAME: "devices"
+      PONIX_CDC_DATA_STREAM_ENTITY_NAME: "data_streams"
+      PONIX_CDC_DATA_STREAM_TABLE_NAME: "data_streams"
       PONIX_CDC_ORGANIZATION_ENTITY_NAME: "organizations"
       PONIX_CDC_ORGANIZATION_TABLE_NAME: "organizations"
       PONIX_CDC_USER_ENTITY_NAME: "users"
       PONIX_CDC_USER_TABLE_NAME: "users"
-      PONIX_CDC_END_DEVICE_DEFINITION_ENTITY_NAME: "end_device_definitions"
-      PONIX_CDC_END_DEVICE_DEFINITION_TABLE_NAME: "end_device_definitions"
+      PONIX_CDC_DATA_STREAM_DEFINITION_ENTITY_NAME: "data_stream_definitions"
+      PONIX_CDC_DATA_STREAM_DEFINITION_TABLE_NAME: "data_stream_definitions"
       PONIX_CDC_PUBLICATION_NAME: "ponix_cdc_publication"
       PONIX_CDC_SLOT_NAME: "ponix_cdc_slot"
       PONIX_CDC_BATCH_SIZE: "100"
@@ -87,10 +87,10 @@ services:
 
       # NATS CDC streams
       PONIX_NATS_WORKSPACE_STREAM: "workspaces"
-      PONIX_NATS_DEVICE_STREAM: "devices"
+      PONIX_NATS_DATA_STREAMS_STREAM: "data_streams"
       PONIX_NATS_ORGANIZATION_STREAM: "organizations"
       PONIX_NATS_USER_STREAM: "users"
-      PONIX_NATS_END_DEVICE_DEFINITION_STREAM: "end_device_definitions"
+      PONIX_NATS_DATA_STREAM_DEFINITIONS_STREAM: "data_stream_definitions"
     depends_on:
       - nats
       - clickhouse

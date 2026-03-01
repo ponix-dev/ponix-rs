@@ -69,8 +69,8 @@ impl ProcessedEnvelopeProducerTrait for ProcessedEnvelopeProducer {
         // Serialize protobuf message
         let payload = proto_envelope.encode_to_vec();
 
-        // Build subject: {base_subject}.{end_device_id}
-        let subject = format!("{}.{}", self.base_subject, proto_envelope.end_device_id);
+        // Build subject: {base_subject}.{data_stream_id}
+        let subject = format!("{}.{}", self.base_subject, proto_envelope.data_stream_id);
 
         // Create request and call the middleware stack
         let request = PublishRequest::new(subject, payload);
@@ -114,7 +114,7 @@ mod domain_trait_tests {
 
         let envelope = DomainProcessedEnvelope {
             organization_id: "org-123".to_string(),
-            end_device_id: "device-456".to_string(),
+            data_stream_id: "ds-456".to_string(),
             received_at: chrono::Utc::now(),
             processed_at: chrono::Utc::now(),
             data,
@@ -147,7 +147,7 @@ mod domain_trait_tests {
 
         let envelope = DomainProcessedEnvelope {
             organization_id: "org-123".to_string(),
-            end_device_id: "device-456".to_string(),
+            data_stream_id: "ds-456".to_string(),
             received_at: chrono::Utc::now(),
             processed_at: chrono::Utc::now(),
             data,

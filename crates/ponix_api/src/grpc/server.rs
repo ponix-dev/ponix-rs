@@ -8,18 +8,18 @@ use tokio_util::sync::CancellationToken;
 use tonic::service::Routes;
 
 use crate::domain::{
-    DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
-    WorkspaceService,
+    DataStreamDefinitionService, DataStreamService, GatewayService, OrganizationService,
+    UserService, WorkspaceService,
 };
 use crate::grpc::{
-    DeviceServiceHandler, EndDeviceDefinitionServiceHandler, GatewayServiceHandler,
+    DataStreamDefinitionServiceHandler, DataStreamServiceHandler, GatewayServiceHandler,
     OrganizationServiceHandler, UserServiceHandler, WorkspaceServiceHandler,
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_proto_prost;
-use ponix_proto_tonic::end_device::v1::tonic::end_device_definition_service_server::EndDeviceDefinitionServiceServer;
-use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceServiceServer;
+use ponix_proto_tonic::data_stream::v1::tonic::data_stream_definition_service_server::DataStreamDefinitionServiceServer;
+use ponix_proto_tonic::data_stream::v1::tonic::data_stream_service_server::DataStreamServiceServer;
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServiceServer;
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationServiceServer;
 use ponix_proto_tonic::user::v1::tonic::user_service_server::UserServiceServer;
@@ -27,7 +27,7 @@ use ponix_proto_tonic::workspace::v1::tonic::workspace_service_server::Workspace
 
 /// File descriptor sets for gRPC reflection service.
 pub const REFLECTION_DESCRIPTORS: &[&[u8]] = &[
-    ponix_proto_prost::end_device::v1::FILE_DESCRIPTOR_SET,
+    ponix_proto_prost::data_stream::v1::FILE_DESCRIPTOR_SET,
     ponix_proto_prost::organization::v1::FILE_DESCRIPTOR_SET,
     ponix_proto_prost::gateway::v1::FILE_DESCRIPTOR_SET,
     ponix_proto_prost::user::v1::FILE_DESCRIPTOR_SET,
@@ -36,8 +36,8 @@ pub const REFLECTION_DESCRIPTORS: &[&[u8]] = &[
 
 /// All domain services needed to build gRPC routes.
 pub struct PonixApiServices {
-    pub device_service: Arc<DeviceService>,
-    pub definition_service: Arc<EndDeviceDefinitionService>,
+    pub data_stream_service: Arc<DataStreamService>,
+    pub definition_service: Arc<DataStreamDefinitionService>,
     pub organization_service: Arc<OrganizationService>,
     pub gateway_service: Arc<GatewayService>,
     pub user_service: Arc<UserService>,
@@ -51,9 +51,11 @@ impl PonixApiServices {
     /// Build Routes containing all Ponix API services.
     pub fn into_routes(self) -> Routes {
         // Create handlers
-        let device_handler =
-            DeviceServiceHandler::new(self.device_service, self.auth_token_provider.clone());
-        let definition_handler = EndDeviceDefinitionServiceHandler::new(
+        let data_stream_handler = DataStreamServiceHandler::new(
+            self.data_stream_service,
+            self.auth_token_provider.clone(),
+        );
+        let definition_handler = DataStreamDefinitionServiceHandler::new(
             self.definition_service,
             self.auth_token_provider.clone(),
         );
@@ -75,8 +77,8 @@ impl PonixApiServices {
         // Build routes with all services
         let mut builder = Routes::builder();
         builder
-            .add_service(EndDeviceServiceServer::new(device_handler))
-            .add_service(EndDeviceDefinitionServiceServer::new(definition_handler))
+            .add_service(DataStreamServiceServer::new(data_stream_handler))
+            .add_service(DataStreamDefinitionServiceServer::new(definition_handler))
             .add_service(OrganizationServiceServer::new(organization_handler))
             .add_service(GatewayServiceServer::new(gateway_handler))
             .add_service(WorkspaceServiceServer::new(workspace_handler))

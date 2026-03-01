@@ -40,9 +40,9 @@ pub struct ServiceConfig {
     #[serde(default = "default_nats_workspace_stream")]
     pub nats_workspace_stream: String,
 
-    /// NATS JetStream stream name for device CDC events
-    #[serde(default = "default_nats_device_stream")]
-    pub nats_device_stream: String,
+    /// NATS JetStream stream name for data stream CDC events
+    #[serde(default = "default_nats_data_streams_stream")]
+    pub nats_data_streams_stream: String,
 
     /// NATS JetStream stream name for organization CDC events
     #[serde(default = "default_nats_organization_stream")]
@@ -52,9 +52,9 @@ pub struct ServiceConfig {
     #[serde(default = "default_nats_user_stream")]
     pub nats_user_stream: String,
 
-    /// NATS JetStream stream name for end device definition CDC events
-    #[serde(default = "default_nats_end_device_definition_stream")]
-    pub nats_end_device_definition_stream: String,
+    /// NATS JetStream stream name for data stream definition CDC events
+    #[serde(default = "default_nats_data_stream_definitions_stream")]
+    pub nats_data_stream_definitions_stream: String,
 
     /// Batch size for consumer
     #[serde(default = "default_nats_batch_size")]
@@ -177,13 +177,13 @@ pub struct ServiceConfig {
     #[serde(default = "default_cdc_workspace_table_name")]
     pub cdc_workspace_table_name: String,
 
-    /// CDC entity name for device events
-    #[serde(default = "default_cdc_device_entity_name")]
-    pub cdc_device_entity_name: String,
+    /// CDC entity name for data stream events
+    #[serde(default = "default_cdc_data_stream_entity_name")]
+    pub cdc_data_stream_entity_name: String,
 
-    /// CDC table name for device events
-    #[serde(default = "default_cdc_device_table_name")]
-    pub cdc_device_table_name: String,
+    /// CDC table name for data stream events
+    #[serde(default = "default_cdc_data_stream_table_name")]
+    pub cdc_data_stream_table_name: String,
 
     /// CDC entity name for organization events
     #[serde(default = "default_cdc_organization_entity_name")]
@@ -201,13 +201,13 @@ pub struct ServiceConfig {
     #[serde(default = "default_cdc_user_table_name")]
     pub cdc_user_table_name: String,
 
-    /// CDC entity name for end device definition events
-    #[serde(default = "default_cdc_end_device_definition_entity_name")]
-    pub cdc_end_device_definition_entity_name: String,
+    /// CDC entity name for data stream definition events
+    #[serde(default = "default_cdc_data_stream_definition_entity_name")]
+    pub cdc_data_stream_definition_entity_name: String,
 
-    /// CDC table name for end device definition events
-    #[serde(default = "default_cdc_end_device_definition_table_name")]
-    pub cdc_end_device_definition_table_name: String,
+    /// CDC table name for data stream definition events
+    #[serde(default = "default_cdc_data_stream_definition_table_name")]
+    pub cdc_data_stream_definition_table_name: String,
 
     /// CDC publication name
     #[serde(default = "default_cdc_publication_name")]
@@ -302,8 +302,8 @@ fn default_nats_workspace_stream() -> String {
     "workspaces".to_string()
 }
 
-fn default_nats_device_stream() -> String {
-    "devices".to_string()
+fn default_nats_data_streams_stream() -> String {
+    "data_streams".to_string()
 }
 
 fn default_nats_organization_stream() -> String {
@@ -314,8 +314,8 @@ fn default_nats_user_stream() -> String {
     "users".to_string()
 }
 
-fn default_nats_end_device_definition_stream() -> String {
-    "end_device_definitions".to_string()
+fn default_nats_data_stream_definitions_stream() -> String {
+    "data_stream_definitions".to_string()
 }
 
 fn default_nats_batch_size() -> usize {
@@ -439,12 +439,12 @@ fn default_cdc_workspace_table_name() -> String {
     "workspaces".to_string()
 }
 
-fn default_cdc_device_entity_name() -> String {
-    "devices".to_string()
+fn default_cdc_data_stream_entity_name() -> String {
+    "data_streams".to_string()
 }
 
-fn default_cdc_device_table_name() -> String {
-    "devices".to_string()
+fn default_cdc_data_stream_table_name() -> String {
+    "data_streams".to_string()
 }
 
 fn default_cdc_organization_entity_name() -> String {
@@ -463,12 +463,12 @@ fn default_cdc_user_table_name() -> String {
     "users".to_string()
 }
 
-fn default_cdc_end_device_definition_entity_name() -> String {
-    "end_device_definitions".to_string()
+fn default_cdc_data_stream_definition_entity_name() -> String {
+    "data_stream_definitions".to_string()
 }
 
-fn default_cdc_end_device_definition_table_name() -> String {
-    "end_device_definitions".to_string()
+fn default_cdc_data_stream_definition_table_name() -> String {
+    "data_stream_definitions".to_string()
 }
 
 fn default_cdc_publication_name() -> String {

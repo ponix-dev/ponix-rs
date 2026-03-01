@@ -3,7 +3,7 @@ mod config;
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{
-    CdcConfig, DeviceConverter, EndDeviceDefinitionConverter, EntityConfig, GatewayConverter,
+    CdcConfig, DataStreamConverter, DataStreamDefinitionConverter, EntityConfig, GatewayConverter,
     OrganizationConverter, UserConverter, WorkspaceConverter,
 };
 use common::auth::{
@@ -15,7 +15,7 @@ use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingC
 use common::nats::NatsClient;
 use common::postgres::create_postgres_authorization_adapter;
 use common::postgres::{
-    PostgresClient, PostgresDeviceRepository, PostgresEndDeviceDefinitionRepository,
+    PostgresClient, PostgresDataStreamDefinitionRepository, PostgresDataStreamRepository,
     PostgresGatewayRepository, PostgresOrganizationRepository, PostgresRefreshTokenRepository,
     PostgresUserRepository, PostgresWorkspaceRepository,
 };
@@ -25,8 +25,8 @@ use gateway_orchestrator::domain::DeployerType;
 use gateway_orchestrator::gateway_orchestrator::{GatewayOrchestrator, GatewayOrchestratorConfig};
 use goose::MigrationRunner;
 use ponix_api::domain::{
-    DeviceService, EndDeviceDefinitionService, GatewayService, OrganizationService, UserService,
-    WorkspaceService,
+    DataStreamDefinitionService, DataStreamService, GatewayService, OrganizationService,
+    UserService, WorkspaceService,
 };
 use ponix_api::grpc::PonixApiServices;
 use ponix_api::ponix_api::PonixApi;
@@ -95,17 +95,17 @@ async fn main() {
     };
 
     // Initialize domain services
-    let device_service = Arc::new(DeviceService::new(
-        postgres_repos.device.clone(),
+    let data_stream_service = Arc::new(DataStreamService::new(
+        postgres_repos.data_stream.clone(),
         postgres_repos.organization.clone(),
-        postgres_repos.definition.clone(),
+        postgres_repos.data_stream_definition.clone(),
         postgres_repos.gateway.clone(),
         authorization_service.clone(),
     ));
     let cel_compiler: Arc<dyn common::cel::CelExpressionCompiler> =
         Arc::new(common::cel::CelCompiler::new());
-    let definition_service = Arc::new(EndDeviceDefinitionService::new(
-        postgres_repos.definition.clone(),
+    let definition_service = Arc::new(DataStreamDefinitionService::new(
+        postgres_repos.data_stream_definition.clone(),
         postgres_repos.organization.clone(),
         authorization_service.clone(),
         cel_compiler,
@@ -170,7 +170,7 @@ async fn main() {
     // Initialize application modules
     let ponix_api = PonixApi::new(
         PonixApiServices {
-            device_service: device_service.clone(),
+            data_stream_service: data_stream_service.clone(),
             definition_service,
             organization_service,
             gateway_service,
@@ -226,10 +226,10 @@ async fn main() {
         table_name: config.cdc_workspace_table_name.clone(),
         converter: Box::new(WorkspaceConverter::new()),
     };
-    let device_entity_config = EntityConfig {
-        entity_name: config.cdc_device_entity_name.clone(),
-        table_name: config.cdc_device_table_name.clone(),
-        converter: Box::new(DeviceConverter::new()),
+    let data_stream_entity_config = EntityConfig {
+        entity_name: config.cdc_data_stream_entity_name.clone(),
+        table_name: config.cdc_data_stream_table_name.clone(),
+        converter: Box::new(DataStreamConverter::new()),
     };
     let organization_entity_config = EntityConfig {
         entity_name: config.cdc_organization_entity_name.clone(),
@@ -241,10 +241,10 @@ async fn main() {
         table_name: config.cdc_user_table_name.clone(),
         converter: Box::new(UserConverter::new()),
     };
-    let end_device_definition_entity_config = EntityConfig {
-        entity_name: config.cdc_end_device_definition_entity_name.clone(),
-        table_name: config.cdc_end_device_definition_table_name.clone(),
-        converter: Box::new(EndDeviceDefinitionConverter::new()),
+    let data_stream_definition_entity_config = EntityConfig {
+        entity_name: config.cdc_data_stream_definition_entity_name.clone(),
+        table_name: config.cdc_data_stream_definition_table_name.clone(),
+        converter: Box::new(DataStreamDefinitionConverter::new()),
     };
     let cdc_worker = CdcWorker::new(
         nats_client.clone(),
@@ -253,16 +253,16 @@ async fn main() {
             entity_configs: vec![
                 gateway_entity_config,
                 workspace_entity_config,
-                device_entity_config,
+                data_stream_entity_config,
                 organization_entity_config,
                 user_entity_config,
-                end_device_definition_entity_config,
+                data_stream_definition_entity_config,
             ],
         },
     );
 
     let analytics_ingester = match AnalyticsWorker::new(
-        postgres_repos.device.clone(),
+        postgres_repos.data_stream.clone(),
         postgres_repos.organization.clone(),
         clickhouse_client,
         nats_client.clone(),
@@ -336,8 +336,8 @@ async fn main() {
 }
 
 struct PostgresRepositories {
-    device: Arc<PostgresDeviceRepository>,
-    definition: Arc<PostgresEndDeviceDefinitionRepository>,
+    data_stream: Arc<PostgresDataStreamRepository>,
+    data_stream_definition: Arc<PostgresDataStreamDefinitionRepository>,
     organization: Arc<PostgresOrganizationRepository>,
     gateway: Arc<PostgresGatewayRepository>,
     user: Arc<PostgresUserRepository>,
@@ -358,8 +358,8 @@ async fn initialize_shared_dependencies(
     run_postgres_migrations(config).await?;
     let postgres_client = create_postgres_client(config)?;
     let postgres_repos = PostgresRepositories {
-        device: Arc::new(PostgresDeviceRepository::new(postgres_client.clone())),
-        definition: Arc::new(PostgresEndDeviceDefinitionRepository::new(
+        data_stream: Arc::new(PostgresDataStreamRepository::new(postgres_client.clone())),
+        data_stream_definition: Arc::new(PostgresDataStreamDefinitionRepository::new(
             postgres_client.clone(),
         )),
         organization: Arc::new(PostgresOrganizationRepository::new(postgres_client.clone())),
@@ -457,13 +457,15 @@ async fn ensure_nats_streams(client: &NatsClient, config: &ServiceConfig) -> any
     client.ensure_stream(&config.nats_raw_stream).await?;
     client.ensure_stream(&config.nats_gateway_stream).await?;
     client.ensure_stream(&config.nats_workspace_stream).await?;
-    client.ensure_stream(&config.nats_device_stream).await?;
+    client
+        .ensure_stream(&config.nats_data_streams_stream)
+        .await?;
     client
         .ensure_stream(&config.nats_organization_stream)
         .await?;
     client.ensure_stream(&config.nats_user_stream).await?;
     client
-        .ensure_stream(&config.nats_end_device_definition_stream)
+        .ensure_stream(&config.nats_data_stream_definitions_stream)
         .await?;
     Ok(())
 }

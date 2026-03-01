@@ -1,26 +1,26 @@
 use crate::domain::CdcConverter;
 use async_trait::async_trait;
 use bytes::Bytes;
-use ponix_proto_prost::end_device::v1::{
-    EndDeviceDefinition, PayloadContract as ProtoPayloadContract,
+use ponix_proto_prost::data_stream::v1::{
+    DataStreamDefinition, PayloadContract as ProtoPayloadContract,
 };
 use prost::Message;
 use serde_json::Value;
 
-pub struct EndDeviceDefinitionConverter;
+pub struct DataStreamDefinitionConverter;
 
-impl Default for EndDeviceDefinitionConverter {
+impl Default for DataStreamDefinitionConverter {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl EndDeviceDefinitionConverter {
+impl DataStreamDefinitionConverter {
     pub fn new() -> Self {
         Self
     }
 
-    fn value_to_proto(&self, data: &Value) -> anyhow::Result<EndDeviceDefinition> {
+    fn value_to_proto(&self, data: &Value) -> anyhow::Result<DataStreamDefinition> {
         let id = data
             .get("id")
             .and_then(|v| v.as_str())
@@ -65,7 +65,7 @@ impl EndDeviceDefinitionConverter {
             .and_then(|v| v.as_str())
             .and_then(|s| parse_timestamp(s).ok());
 
-        Ok(EndDeviceDefinition {
+        Ok(DataStreamDefinition {
             id,
             organization_id,
             name,
@@ -77,7 +77,7 @@ impl EndDeviceDefinitionConverter {
 }
 
 #[async_trait]
-impl CdcConverter for EndDeviceDefinitionConverter {
+impl CdcConverter for DataStreamDefinitionConverter {
     async fn convert_insert(&self, data: Value) -> anyhow::Result<Bytes> {
         let proto = self.value_to_proto(&data)?;
         Ok(Bytes::from(proto.encode_to_vec()))
@@ -131,7 +131,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_insert() {
-        let converter = EndDeviceDefinitionConverter::new();
+        let converter = DataStreamDefinitionConverter::new();
         let data = json!({
             "id": "def-123",
             "organization_id": "org-1",
@@ -153,7 +153,7 @@ mod tests {
         let bytes = result.unwrap();
         assert!(!bytes.is_empty());
 
-        let decoded = EndDeviceDefinition::decode(bytes).unwrap();
+        let decoded = DataStreamDefinition::decode(bytes).unwrap();
         assert_eq!(decoded.id, "def-123");
         assert_eq!(decoded.organization_id, "org-1");
         assert_eq!(decoded.name, "Test Definition");
@@ -167,7 +167,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_insert_with_defaults() {
-        let converter = EndDeviceDefinitionConverter::new();
+        let converter = DataStreamDefinitionConverter::new();
         let data = json!({
             "id": "def-123",
             "organization_id": "org-1",
@@ -180,13 +180,13 @@ mod tests {
         assert!(result.is_ok());
 
         let bytes = result.unwrap();
-        let decoded = EndDeviceDefinition::decode(bytes).unwrap();
+        let decoded = DataStreamDefinition::decode(bytes).unwrap();
         assert!(decoded.contracts.is_empty());
     }
 
     #[tokio::test]
     async fn test_convert_insert_contracts_as_string() {
-        let converter = EndDeviceDefinitionConverter::new();
+        let converter = DataStreamDefinitionConverter::new();
         let data = json!({
             "id": "def-123",
             "organization_id": "org-1",
@@ -200,14 +200,14 @@ mod tests {
         assert!(result.is_ok());
 
         let bytes = result.unwrap();
-        let decoded = EndDeviceDefinition::decode(bytes).unwrap();
+        let decoded = DataStreamDefinition::decode(bytes).unwrap();
         assert_eq!(decoded.contracts.len(), 1);
         assert_eq!(decoded.contracts[0].match_expression, "true");
     }
 
     #[tokio::test]
     async fn test_convert_update() {
-        let converter = EndDeviceDefinitionConverter::new();
+        let converter = DataStreamDefinitionConverter::new();
         let old = json!({
             "id": "def-123",
             "organization_id": "org-1",
@@ -232,14 +232,14 @@ mod tests {
         assert!(result.is_ok());
 
         let bytes = result.unwrap();
-        let decoded = EndDeviceDefinition::decode(bytes).unwrap();
+        let decoded = DataStreamDefinition::decode(bytes).unwrap();
         assert_eq!(decoded.name, "Updated Definition");
         assert_eq!(decoded.contracts.len(), 1);
     }
 
     #[tokio::test]
     async fn test_convert_delete() {
-        let converter = EndDeviceDefinitionConverter::new();
+        let converter = DataStreamDefinitionConverter::new();
         let data = json!({
             "id": "def-123",
             "organization_id": "org-1",
@@ -250,7 +250,7 @@ mod tests {
         assert!(result.is_ok());
 
         let bytes = result.unwrap();
-        let decoded = EndDeviceDefinition::decode(bytes).unwrap();
+        let decoded = DataStreamDefinition::decode(bytes).unwrap();
         assert_eq!(decoded.id, "def-123");
     }
 

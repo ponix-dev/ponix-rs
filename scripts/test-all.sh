@@ -56,7 +56,7 @@ run_test() {
 run_test "test-auth.sh" "Authentication Tests"
 run_test "test-organizations.sh" "Organization Tests"
 run_test "test-workspaces.sh" "Workspace Tests"
-run_test "test-devices.sh" "Device Tests"
+run_test "test-data-streams.sh" "Data Stream Tests"
 run_test "test-gateways.sh" "Gateway Tests"
 
 # MQTT pipeline tests

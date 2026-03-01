@@ -5,7 +5,7 @@ use async_trait::async_trait;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcessedEnvelope {
     pub organization_id: String,
-    pub end_device_id: String,
+    pub data_stream_id: String,
     pub received_at: chrono::DateTime<chrono::Utc>,
     pub processed_at: chrono::DateTime<chrono::Utc>,
     pub data: serde_json::Map<String, serde_json::Value>,
@@ -21,7 +21,7 @@ pub struct StoreEnvelopesInput {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawEnvelope {
     pub organization_id: String,
-    pub end_device_id: String,
+    pub data_stream_id: String,
     pub received_at: chrono::DateTime<chrono::Utc>,
     pub payload: Vec<u8>,
 }

@@ -223,11 +223,11 @@ pub(crate) async fn handle_mqtt_message(
         organization_id = %gateway.organization_id,
         topic = %topic,
         payload_size = payload.len(),
-        device_id = tracing::field::Empty,
+        data_stream_id = tracing::field::Empty,
     );
 
     async {
-        // Parse topic to extract org_id and device_id
+        // Parse topic to extract org_id and data_stream_id
         let parsed = match parse_topic(topic) {
             Ok(p) => p,
             Err(e) => {
@@ -239,8 +239,8 @@ pub(crate) async fn handle_mqtt_message(
             }
         };
 
-        // Record device_id in the current span
-        Span::current().record("device_id", &parsed.end_device_id);
+        // Record data_stream_id in the current span
+        Span::current().record("data_stream_id", &parsed.data_stream_id);
 
         // Verify organization matches gateway config
         if parsed.organization_id != gateway.organization_id {
@@ -255,7 +255,7 @@ pub(crate) async fn handle_mqtt_message(
         // Create RawEnvelope
         let envelope = RawEnvelope {
             organization_id: parsed.organization_id,
-            end_device_id: parsed.end_device_id.clone(),
+            data_stream_id: parsed.data_stream_id.clone(),
             received_at: chrono::Utc::now(),
             payload: payload.to_vec(),
         };
@@ -352,7 +352,7 @@ mod tests {
             .expect_publish_raw_envelope()
             .withf(|envelope: &RawEnvelope| {
                 envelope.organization_id == "org-001"
-                    && envelope.end_device_id == "device-123"
+                    && envelope.data_stream_id == "device-123"
                     && envelope.payload == vec![0x01, 0x02, 0x03]
             })
             .times(1)

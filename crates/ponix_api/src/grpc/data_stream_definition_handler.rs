@@ -3,32 +3,32 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::{
-    CreateEndDeviceDefinitionRequest, DeleteEndDeviceDefinitionRequest, EndDeviceDefinitionService,
-    GetEndDeviceDefinitionRequest, ListEndDeviceDefinitionsRequest,
-    UpdateEndDeviceDefinitionRequest,
+    CreateDataStreamDefinitionRequest, DataStreamDefinitionService,
+    DeleteDataStreamDefinitionRequest, GetDataStreamDefinitionRequest,
+    ListDataStreamDefinitionsRequest, UpdateDataStreamDefinitionRequest,
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
-use common::proto::{from_proto_payload_contract, to_proto_end_device_definition};
-use ponix_proto_prost::end_device::v1::{
-    CreateEndDeviceDefinitionRequest as ProtoCreateRequest, CreateEndDeviceDefinitionResponse,
-    DeleteEndDeviceDefinitionRequest as ProtoDeleteRequest, DeleteEndDeviceDefinitionResponse,
-    EndDeviceDefinition, GetEndDeviceDefinitionRequest as ProtoGetRequest,
-    GetEndDeviceDefinitionResponse, ListEndDeviceDefinitionsRequest as ProtoListRequest,
-    ListEndDeviceDefinitionsResponse, UpdateEndDeviceDefinitionRequest as ProtoUpdateRequest,
-    UpdateEndDeviceDefinitionResponse,
+use common::proto::{from_proto_payload_contract, to_proto_data_stream_definition};
+use ponix_proto_prost::data_stream::v1::{
+    CreateDataStreamDefinitionRequest as ProtoCreateRequest, CreateDataStreamDefinitionResponse,
+    DataStreamDefinition, DeleteDataStreamDefinitionRequest as ProtoDeleteRequest,
+    DeleteDataStreamDefinitionResponse, GetDataStreamDefinitionRequest as ProtoGetRequest,
+    GetDataStreamDefinitionResponse, ListDataStreamDefinitionsRequest as ProtoListRequest,
+    ListDataStreamDefinitionsResponse, UpdateDataStreamDefinitionRequest as ProtoUpdateRequest,
+    UpdateDataStreamDefinitionResponse,
 };
-use ponix_proto_tonic::end_device::v1::tonic::end_device_definition_service_server::EndDeviceDefinitionService as EndDeviceDefinitionServiceTrait;
+use ponix_proto_tonic::data_stream::v1::tonic::data_stream_definition_service_server::DataStreamDefinitionService as DataStreamDefinitionServiceTrait;
 
-/// gRPC handler for EndDeviceDefinitionService
-pub struct EndDeviceDefinitionServiceHandler {
-    domain_service: Arc<EndDeviceDefinitionService>,
+/// gRPC handler for DataStreamDefinitionService
+pub struct DataStreamDefinitionServiceHandler {
+    domain_service: Arc<DataStreamDefinitionService>,
     auth_token_provider: Arc<dyn AuthTokenProvider>,
 }
 
-impl EndDeviceDefinitionServiceHandler {
+impl DataStreamDefinitionServiceHandler {
     pub fn new(
-        domain_service: Arc<EndDeviceDefinitionService>,
+        domain_service: Arc<DataStreamDefinitionService>,
         auth_token_provider: Arc<dyn AuthTokenProvider>,
     ) -> Self {
         Self {
@@ -39,20 +39,20 @@ impl EndDeviceDefinitionServiceHandler {
 }
 
 #[tonic::async_trait]
-impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
+impl DataStreamDefinitionServiceTrait for DataStreamDefinitionServiceHandler {
     #[instrument(
-        name = "CreateEndDeviceDefinition",
+        name = "CreateDataStreamDefinition",
         skip(self, request),
         fields(organization_id = %request.get_ref().organization_id, name = %request.get_ref().name)
     )]
-    async fn create_end_device_definition(
+    async fn create_data_stream_definition(
         &self,
         request: Request<ProtoCreateRequest>,
-    ) -> Result<Response<CreateEndDeviceDefinitionResponse>, Status> {
+    ) -> Result<Response<CreateDataStreamDefinitionResponse>, Status> {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        let service_request = CreateEndDeviceDefinitionRequest {
+        let service_request = CreateDataStreamDefinitionRequest {
             user_id: user_context.user_id,
             organization_id: req.organization_id,
             name: req.name,
@@ -71,24 +71,24 @@ impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
 
         debug!(id = %definition.id, "Definition created successfully");
 
-        Ok(Response::new(CreateEndDeviceDefinitionResponse {
-            end_device_definition: Some(to_proto_end_device_definition(definition)),
+        Ok(Response::new(CreateDataStreamDefinitionResponse {
+            data_stream_definition: Some(to_proto_data_stream_definition(definition)),
         }))
     }
 
     #[instrument(
-        name = "GetEndDeviceDefinition",
+        name = "GetDataStreamDefinition",
         skip(self, request),
         fields(id = %request.get_ref().id, organization_id = %request.get_ref().organization_id)
     )]
-    async fn get_end_device_definition(
+    async fn get_data_stream_definition(
         &self,
         request: Request<ProtoGetRequest>,
-    ) -> Result<Response<GetEndDeviceDefinitionResponse>, Status> {
+    ) -> Result<Response<GetDataStreamDefinitionResponse>, Status> {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        let service_request = GetEndDeviceDefinitionRequest {
+        let service_request = GetDataStreamDefinitionRequest {
             user_id: user_context.user_id,
             id: req.id,
             organization_id: req.organization_id,
@@ -100,20 +100,20 @@ impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        Ok(Response::new(GetEndDeviceDefinitionResponse {
-            end_device_definition: Some(to_proto_end_device_definition(definition)),
+        Ok(Response::new(GetDataStreamDefinitionResponse {
+            data_stream_definition: Some(to_proto_data_stream_definition(definition)),
         }))
     }
 
     #[instrument(
-        name = "UpdateEndDeviceDefinition",
+        name = "UpdateDataStreamDefinition",
         skip(self, request),
         fields(id = %request.get_ref().id, organization_id = %request.get_ref().organization_id)
     )]
-    async fn update_end_device_definition(
+    async fn update_data_stream_definition(
         &self,
         request: Request<ProtoUpdateRequest>,
-    ) -> Result<Response<UpdateEndDeviceDefinitionResponse>, Status> {
+    ) -> Result<Response<UpdateDataStreamDefinitionResponse>, Status> {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
@@ -132,7 +132,7 @@ impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
             )
         };
 
-        let service_request = UpdateEndDeviceDefinitionRequest {
+        let service_request = UpdateDataStreamDefinitionRequest {
             user_id: user_context.user_id,
             id: req.id,
             organization_id: req.organization_id,
@@ -148,24 +148,24 @@ impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
 
         debug!(id = %definition.id, "Definition updated successfully");
 
-        Ok(Response::new(UpdateEndDeviceDefinitionResponse {
-            end_device_definition: Some(to_proto_end_device_definition(definition)),
+        Ok(Response::new(UpdateDataStreamDefinitionResponse {
+            data_stream_definition: Some(to_proto_data_stream_definition(definition)),
         }))
     }
 
     #[instrument(
-        name = "DeleteEndDeviceDefinition",
+        name = "DeleteDataStreamDefinition",
         skip(self, request),
         fields(id = %request.get_ref().id, organization_id = %request.get_ref().organization_id)
     )]
-    async fn delete_end_device_definition(
+    async fn delete_data_stream_definition(
         &self,
         request: Request<ProtoDeleteRequest>,
-    ) -> Result<Response<DeleteEndDeviceDefinitionResponse>, Status> {
+    ) -> Result<Response<DeleteDataStreamDefinitionResponse>, Status> {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        let service_request = DeleteEndDeviceDefinitionRequest {
+        let service_request = DeleteDataStreamDefinitionRequest {
             user_id: user_context.user_id,
             id: req.id,
             organization_id: req.organization_id,
@@ -178,22 +178,22 @@ impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
 
         debug!("Definition deleted successfully");
 
-        Ok(Response::new(DeleteEndDeviceDefinitionResponse {}))
+        Ok(Response::new(DeleteDataStreamDefinitionResponse {}))
     }
 
     #[instrument(
-        name = "ListEndDeviceDefinitions",
+        name = "ListDataStreamDefinitions",
         skip(self, request),
         fields(organization_id = %request.get_ref().organization_id)
     )]
-    async fn list_end_device_definitions(
+    async fn list_data_stream_definitions(
         &self,
         request: Request<ProtoListRequest>,
-    ) -> Result<Response<ListEndDeviceDefinitionsResponse>, Status> {
+    ) -> Result<Response<ListDataStreamDefinitionsResponse>, Status> {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        let service_request = ListEndDeviceDefinitionsRequest {
+        let service_request = ListDataStreamDefinitionsRequest {
             user_id: user_context.user_id,
             organization_id: req.organization_id,
         };
@@ -206,13 +206,13 @@ impl EndDeviceDefinitionServiceTrait for EndDeviceDefinitionServiceHandler {
 
         debug!(count = definitions.len(), "Listed definitions");
 
-        let proto_definitions: Vec<EndDeviceDefinition> = definitions
+        let proto_definitions: Vec<DataStreamDefinition> = definitions
             .into_iter()
-            .map(to_proto_end_device_definition)
+            .map(to_proto_data_stream_definition)
             .collect();
 
-        Ok(Response::new(ListEndDeviceDefinitionsResponse {
-            end_device_definitions: proto_definitions,
+        Ok(Response::new(ListDataStreamDefinitionsResponse {
+            data_stream_definitions: proto_definitions,
         }))
     }
 }

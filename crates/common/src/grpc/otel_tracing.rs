@@ -85,17 +85,17 @@ impl Extractor for HttpHeaderExtractor<'_> {
 }
 
 /// Extract method name suffix from gRPC path
-/// e.g., "/ponix.end_device.v1.EndDeviceService/CreateEndDevice" -> "CreateEndDevice"
+/// e.g., "/ponix.data_stream.v1.DataStreamService/CreateDataStream" -> "CreateDataStream"
 fn extract_method_name(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
 /// Extract service name from gRPC path
-/// e.g., "/ponix.end_device.v1.EndDeviceService/CreateEndDevice" -> "EndDeviceService"
+/// e.g., "/ponix.data_stream.v1.DataStreamService/CreateDataStream" -> "DataStreamService"
 fn extract_service_name(path: &str) -> &str {
     let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
     if parts.len() >= 2 {
-        // Get the service part (e.g., "ponix.end_device.v1.EndDeviceService")
+        // Get the service part (e.g., "ponix.data_stream.v1.DataStreamService")
         // and extract just the service name
         parts[0].rsplit('.').next().unwrap_or(parts[0])
     } else {
@@ -194,8 +194,8 @@ mod tests {
     #[test]
     fn test_extract_method_name() {
         assert_eq!(
-            extract_method_name("/ponix.end_device.v1.EndDeviceService/CreateEndDevice"),
-            "CreateEndDevice"
+            extract_method_name("/ponix.data_stream.v1.DataStreamService/CreateDataStream"),
+            "CreateDataStream"
         );
         assert_eq!(
             extract_method_name("/ponix.organization.v1.OrganizationService/GetOrganization"),
@@ -208,8 +208,8 @@ mod tests {
     #[test]
     fn test_extract_service_name() {
         assert_eq!(
-            extract_service_name("/ponix.end_device.v1.EndDeviceService/CreateEndDevice"),
-            "EndDeviceService"
+            extract_service_name("/ponix.data_stream.v1.DataStreamService/CreateDataStream"),
+            "DataStreamService"
         );
         assert_eq!(
             extract_service_name("/ponix.organization.v1.OrganizationService/GetOrganization"),
@@ -221,6 +221,6 @@ mod tests {
     fn test_config_should_ignore() {
         let config = GrpcTracingConfig::default();
         assert!(config.should_ignore("/grpc.reflection.v1/ServerReflectionInfo"));
-        assert!(!config.should_ignore("/ponix.end_device.v1.EndDeviceService/CreateEndDevice"));
+        assert!(!config.should_ignore("/ponix.data_stream.v1.DataStreamService/CreateDataStream"));
     }
 }
