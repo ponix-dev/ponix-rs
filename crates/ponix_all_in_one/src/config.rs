@@ -56,6 +56,10 @@ pub struct ServiceConfig {
     #[serde(default = "default_nats_data_stream_definitions_stream")]
     pub nats_data_stream_definitions_stream: String,
 
+    /// NATS Object Store bucket name for document storage
+    #[serde(default = "default_nats_object_store_bucket")]
+    pub nats_object_store_bucket: String,
+
     /// Batch size for consumer
     #[serde(default = "default_nats_batch_size")]
     pub nats_batch_size: usize,
@@ -316,6 +320,10 @@ fn default_nats_user_stream() -> String {
 
 fn default_nats_data_stream_definitions_stream() -> String {
     "data_stream_definitions".to_string()
+}
+
+fn default_nats_object_store_bucket() -> String {
+    "ponix-documents".to_string()
 }
 
 fn default_nats_batch_size() -> usize {

@@ -3,6 +3,8 @@ use async_nats::jetstream;
 use async_nats::HeaderMap;
 use async_trait::async_trait;
 
+pub use async_nats::jetstream::object_store::ObjectInfo;
+
 /// Trait for JetStream consumer operations
 /// Abstracts the operations needed to create and use a NATS JetStream consumer
 #[cfg_attr(any(test, feature = "testing"), mockall::automock)]
@@ -53,4 +55,24 @@ pub trait JetStreamPublisher: Send + Sync {
         headers: HeaderMap,
         payload: bytes::Bytes,
     ) -> Result<()>;
+}
+
+/// Trait for document/blob storage operations backed by NATS Object Store
+#[cfg_attr(any(test, feature = "testing"), mockall::automock)]
+#[async_trait]
+pub trait DocumentContentStore: Send + Sync {
+    /// Upload content with the given key
+    async fn upload(&self, key: &str, content: bytes::Bytes) -> Result<()>;
+
+    /// Download content by key
+    async fn download(&self, key: &str) -> Result<bytes::Bytes>;
+
+    /// Delete an object by key
+    async fn delete(&self, key: &str) -> Result<()>;
+
+    /// Get metadata about an object by key
+    async fn info(&self, key: &str) -> Result<ObjectInfo>;
+
+    /// Check if an object exists by key
+    async fn exists(&self, key: &str) -> Result<bool>;
 }
