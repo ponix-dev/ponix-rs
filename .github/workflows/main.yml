@@ -24,6 +24,12 @@ jobs:
     secrets:
       BSR_TOKEN: ${{ secrets.BSR_TOKEN }}
 
+  ponix-postgres:
+    name: Publish ponix-postgres
+    uses: ./.github/workflows/ponix-postgres.yml
+    with:
+      push: true
+
   release:
     name: Release
     needs: [unit-tests, integration-tests]
