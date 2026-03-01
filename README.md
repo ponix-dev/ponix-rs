@@ -1,229 +1,84 @@
 # Ponix
 
-An IoT data insights platform that transforms raw device telemetry into actionable data.
+A data ingestion platform that transforms raw event data into structured, queryable insights.
 
 ## What is Ponix?
 
-Ponix is designed to solve a common IoT challenge: devices send raw binary payloads, but you need structured, queryable data. Ponix sits between your IoT devices and your analytics tools, automatically transforming device payloads into clean JSON that's ready for analysis.
+Ponix ingests event data from any source — IoT devices, webhooks, APIs, services — and transforms it into structured JSON using configurable expressions. Processed data is stored in [ClickHouse](https://clickhouse.com/) for fast analytical queries across millions of events.
 
-**The Problem:**
-- Your temperature sensor sends `[0x01, 0x67, 0x01, 0x10]`
-- You need `{"temperature": 27.2, "unit": "celsius"}`
+### How it works
 
-**The Solution:**
-Ponix uses CEL (Common Expression Language) to transform device payloads on-the-fly, storing the results for real-time queries and historical analysis.
+1. **Create a data stream** — define a named stream with a transformation expression
+2. **Send events** — raw payloads are routed to the matching data stream
+3. **Automatic transformation** — expressions convert raw data into structured JSON
+4. **Query with SQL** — processed events land in ClickHouse, ready for analysis
 
-## Key Features
+### Key capabilities
 
-### Flexible Payload Transformation
-Configure each device with custom CEL expressions to transform binary data into structured JSON. Built-in support for Cayenne LPP and extensible for custom formats.
+- **Configurable transformations** — define how each data stream converts raw payloads to structured JSON
+- **Analytical storage** — ClickHouse provides fast SQL queries across large volumes of event data
+- **Real-time processing** — events are transformed and stored as they arrive
+- **Multi-tenant** — organize data streams by organization and workspace
+- **gRPC API** — manage data streams, organizations, and gateways programmatically
 
-### Time-Series Analytics
-Automatic storage in ClickHouse provides fast queries across millions of data points with full-text search and aggregations.
-
-### Device Management
-Simple gRPC API to register devices, configure transformations, and manage your IoT fleet with organizations and gateways.
-
-### Real-Time Processing
-Event-driven architecture with NATS JetStream ensures low-latency data processing and reliable delivery.
-
-### Change Data Capture
-PostgreSQL CDC captures configuration changes and propagates them through the system via NATS streams.
-
-## Quick Start
+## Getting Started
 
 ### Prerequisites
-- Docker and Docker Compose
+
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- [Rust](https://rustup.rs/) (for local development)
+- (Optional) [Tilt](https://tilt.dev/) for live-reloading development
 - (Optional) [mise](https://mise.jdx.dev/) for task management
 
-### Run Ponix
+### Running Ponix
 
 ```bash
-# Start all services (PostgreSQL, ClickHouse, NATS, and Ponix)
+# Start infrastructure
 docker-compose -f docker/docker-compose.deps.yaml up -d
+
+# Start Ponix
 docker-compose -f docker/docker-compose.service.yaml up --build
 
-# Or use Tilt for development
+# Or use Tilt for development (watches for changes and rebuilds)
 tilt up
 ```
 
-**Services will be available at:**
-- gRPC API: `localhost:50051`
-- NATS: `localhost:4222`
-- ClickHouse: `localhost:8123` (HTTP), `localhost:9000` (native)
-- PostgreSQL: `localhost:5432`
+Once running, the gRPC API is available at `localhost:50051`.
 
-## Usage Example
-
-### 1. Register a Device
+### Try it out
 
 ```bash
 # Install grpcurl
 brew install grpcurl
 
-# Create a temperature sensor with Cayenne LPP payload conversion
+# Create a data stream
 grpcurl -plaintext -d '{
   "organization_id": "my-org",
   "name": "Temperature Sensor",
   "payload_conversion": "cayenne_lpp_decode(input)"
-}' localhost:50051 ponix.end_device.v1.EndDeviceService/CreateEndDevice
+}' localhost:50051 ponix.data_stream.v1.DataStreamService/CreateDataStream
 ```
 
-### 2. Send Data
-
-When your device sends a Cayenne LPP payload like `[0x01, 0x67, 0x01, 0x10]`, Ponix automatically:
-1. Looks up the device configuration
-2. Executes the CEL expression: `cayenne_lpp_decode(input)`
-3. Transforms to: `{"temperature_1": 27.2}`
-4. Stores in ClickHouse for querying
-
-### 3. Query Your Data
+Ponix matches incoming events to their data stream, runs the transformation, and stores the result in ClickHouse:
 
 ```bash
-# Connect to ClickHouse
-docker exec -it ponix-clickhouse clickhouse-client -u ponix --password ponix
-
-# Query recent sensor data
-SELECT
-  end_device_id,
-  received_at,
-  data
-FROM ponix.processed_envelopes
-WHERE end_device_id = 'your-device-id'
-ORDER BY received_at DESC
-LIMIT 10;
+# Query processed events
+docker exec -it ponix-clickhouse clickhouse-client -u ponix --password ponix \
+  -q "SELECT data_stream_id, received_at, data FROM ponix.processed_envelopes ORDER BY received_at DESC LIMIT 10"
 ```
 
-## Advanced Usage
-
-### Custom Transformations
-
-Create sophisticated transformations with CEL:
-
-```javascript
-// Unit conversion and enrichment
-{
-  'temp_c': cayenne_lpp_decode(input).temperature_1,
-  'temp_f': cayenne_lpp_decode(input).temperature_1 * 9.0 / 5.0 + 32.0,
-  'humidity': cayenne_lpp_decode(input).humidity_2,
-  'timestamp': timestamp(now)
-}
-```
-
-### Conditional Logic
-
-```javascript
-// Alert on high temperature
-cayenne_lpp_decode(input).temperature_1 > 30 ?
-  {'status': 'alert', 'message': 'High temperature detected'} :
-  {'status': 'normal', 'temp': cayenne_lpp_decode(input).temperature_1}
-```
-
-### Device Management
+### Running tests
 
 ```bash
-# List all devices for an organization
-grpcurl -plaintext -d '{
-  "organization_id": "my-org"
-}' localhost:50051 ponix.end_device.v1.EndDeviceService/ListEndDevices
-
-# Get device details
-grpcurl -plaintext -d '{
-  "device_id": "device-id-here"
-}' localhost:50051 ponix.end_device.v1.EndDeviceService/GetEndDevice
-```
-
-## Architecture
-
-```
-                                    ┌─────────────────┐
-                                    │   PostgreSQL    │
-                                    │  (Devices, Orgs,│
-                                    │   Gateways)     │
-                                    └────────┬────────┘
-                                             │ CDC
-                                             ▼
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ IoT Device  │───▶│   Gateway   │───▶│    NATS     │───▶│  Analytics  │
-│             │    │             │    │  JetStream  │    │   Worker    │
-└─────────────┘    └─────────────┘    └──────┬──────┘    └──────┬──────┘
-                                             │                  │
-                         Raw Envelopes ──────┘                  │
-                                                                ▼
-                                                         ┌─────────────┐
-                                                         │ ClickHouse  │
-                                                         │ (Analytics) │
-                                                         └─────────────┘
-```
-
-### Data Flow
-
-1. **Device Registration**: Configure each device with a CEL expression via gRPC API
-2. **Data Ingestion**: Raw binary payloads arrive via NATS
-3. **Transformation**: CEL engine converts binary to JSON based on device config
-4. **Storage**: Structured data is batch-written to ClickHouse
-5. **Query**: Run SQL queries on your IoT data
-
-### Modular Workers
-
-Ponix is built as modular workers that run concurrently:
-- **ponix_api**: gRPC server for device/organization/gateway management
-- **gateway_orchestrator**: Manages gateway state via CDC events
-- **cdc_worker**: Captures PostgreSQL changes and publishes to NATS
-- **analytics_worker**: Processes raw and processed envelopes
-
-## Built-In Functions
-
-- `cayenne_lpp_decode(input)` - Decode Cayenne Low Power Payload format
-- `base64_encode(bytes)` - Encode bytes to base64
-- Standard CEL operators and functions
-
-## Development
-
-### Running Tests
-
-```bash
-# Unit tests (fast, no Docker required)
+# Unit tests (no Docker required)
 cargo test --workspace --lib --bins
 
 # Integration tests (requires Docker)
 cargo test --workspace --features integration-tests -- --test-threads=1
 ```
 
-### Project Structure
+## Supported Gateways
 
-Ponix is built as a Rust workspace with modular crates:
+Gateways connect external data sources to Ponix. Currently supported:
 
-```
-crates/
-├── runner/              # Process lifecycle management
-├── common/              # Shared domain types & infrastructure
-├── ponix_api/           # gRPC API & domain services
-├── gateway_orchestrator/# Gateway CDC orchestration
-├── cdc_worker/          # PostgreSQL CDC to NATS
-├── analytics_worker/    # Envelope processing & ClickHouse storage
-├── goose/               # Database migration runner
-└── ponix_all_in_one/    # Main service binary
-```
-
-See [CLAUDE.md](CLAUDE.md) for detailed development documentation.
-
-## Configuration
-
-Configure via environment variables with `PONIX_` prefix:
-
-```bash
-# Database connections
-PONIX_POSTGRES_HOST=localhost
-PONIX_POSTGRES_PORT=5432
-PONIX_CLICKHOUSE_URL=http://localhost:8123
-PONIX_NATS_URL=nats://localhost:4222
-
-# gRPC API
-PONIX_GRPC_HOST=0.0.0.0
-PONIX_GRPC_PORT=50051
-
-# CDC Configuration
-PONIX_CDC_PUBLICATION_NAME=ponix_cdc_publication
-PONIX_CDC_SLOT_NAME=ponix_cdc_slot
-```
+- **MQTT** — subscribe to MQTT topics and ingest messages as events
