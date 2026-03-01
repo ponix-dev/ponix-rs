@@ -68,6 +68,14 @@ impl NatsClient {
         Arc::new(NatsJetStreamPublisher::new(self.jetstream.clone()))
     }
 
+    /// Create a DocumentContentStore backed by NATS Object Store
+    pub async fn create_object_store_client(
+        &self,
+        bucket_name: &str,
+    ) -> anyhow::Result<crate::nats::object_store::NatsObjectStoreClient> {
+        crate::nats::object_store::NatsObjectStoreClient::new(&self.jetstream, bucket_name).await
+    }
+
     pub async fn close(self) {
         debug!("closing nats connection");
         // Connection closes automatically when dropped
