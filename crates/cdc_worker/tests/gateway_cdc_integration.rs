@@ -58,9 +58,9 @@ async fn setup_test_env() -> TestEnvironment {
             "-c",
             "wal_level=logical",
             "-c",
-            "max_replication_slots=4",
+            "max_replication_slots=10",
             "-c",
-            "max_wal_senders=4",
+            "max_wal_senders=10",
         ])
         .start()
         .await
