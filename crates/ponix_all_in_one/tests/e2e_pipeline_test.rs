@@ -36,9 +36,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, Image};
+use testcontainers::{ContainerAsync, GenericImage, Image, ImageExt};
 use testcontainers_modules::clickhouse::ClickHouse;
-use testcontainers_modules::postgres::Postgres;
 use tokio::time::sleep;
 
 /// Custom ClickHouse image with version 24.10 for JSON type support
@@ -130,7 +129,7 @@ impl Image for NatsWithJetStream {
 
 /// Start all required containers in parallel
 async fn start_containers() -> Result<(
-    ContainerAsync<Postgres>,
+    ContainerAsync<GenericImage>,
     ContainerAsync<ClickHouse24>,
     ContainerAsync<NatsWithJetStream>,
     String, // postgres_url
@@ -140,7 +139,13 @@ async fn start_containers() -> Result<(
 )> {
     // Start containers in parallel
     let (postgres, clickhouse, nats) = tokio::join!(
-        Postgres::default().start(),
+        GenericImage::new("ponix-postgres", "latest")
+            .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
+                "database system is ready to accept connections"
+            ))
+            .with_exposed_port(5432.into())
+            .with_env_var("POSTGRES_PASSWORD", "postgres")
+            .start(),
         ClickHouse24::default().start(),
         NatsWithJetStream::default().start()
     );
