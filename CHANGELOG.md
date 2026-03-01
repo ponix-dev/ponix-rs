@@ -1,3 +1,9 @@
+## [1.21.0](https://github.com/ponix-dev/ponix-rs/compare/v1.20.0...v1.21.0) (2026-03-01)
+
+### Features
+
+* rename End Device to Data Stream ([#157](https://github.com/ponix-dev/ponix-rs/issues/157)) ([#158](https://github.com/ponix-dev/ponix-rs/issues/158)) ([51424a1](https://github.com/ponix-dev/ponix-rs/commit/51424a1fff0c46109f139af13305cf3df21aeb12))
+
 ## [1.20.0](https://github.com/ponix-dev/ponix-rs/compare/v1.19.0...v1.20.0) (2026-02-28)
 
 ### Features
