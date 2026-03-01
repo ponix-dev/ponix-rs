@@ -6,11 +6,12 @@ use tracing::{debug, instrument};
 
 use crate::domain::{
     DeleteDocumentRequest, DocumentService, DownloadDocumentRequest, GetDocumentRequest,
+    LinkDocumentRequest, ListDocumentsByTargetRequest, UnlinkDocumentRequest,
     UpdateDocumentRequest, UploadDocumentRequest,
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
-use common::proto::{prost_struct_to_json_value, to_proto_document};
+use common::proto::{prost_struct_to_json_value, to_proto_document, to_proto_document_summary};
 use ponix_proto_prost::document::v1::{
     self as proto, DeleteDocumentResponse, DownloadDocumentResponse, GetDocumentResponse,
     ListDataStreamDocumentsResponse, ListDefinitionDocumentsResponse,
@@ -149,11 +150,12 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
+        let user_id = user_context.user_id;
         let document = self
             .domain_service
             .upload_document(UploadDocumentRequest {
-                user_id: user_context.user_id,
-                organization_id: req.organization_id,
+                user_id: user_id.clone(),
+                organization_id: req.organization_id.clone(),
                 name: req.name,
                 mime_type: req.mime_type,
                 metadata: prost_struct_to_json_value(req.metadata),
@@ -162,11 +164,21 @@ impl DocumentServiceTrait for DocumentServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        // TODO: Link document to data stream (Part 2 - associations)
+        self.domain_service
+            .link_to_data_stream(LinkDocumentRequest {
+                user_id,
+                document_id: document.document_id.clone(),
+                target_id: req.data_stream_id.clone(),
+                organization_id: req.organization_id,
+                workspace_id: Some(req.workspace_id),
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
         debug!(
             document_id = %document.document_id,
             data_stream_id = %req.data_stream_id,
-            "Document uploaded for data stream (association pending)"
+            "Document uploaded and linked to data stream"
         );
 
         Ok(Response::new(UploadDataStreamDocumentResponse {
@@ -206,13 +218,20 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         &self,
         request: Request<proto::UnlinkDocumentFromDataStreamRequest>,
     ) -> Result<Response<UnlinkDocumentFromDataStreamResponse>, Status> {
-        let _user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
-        let _req = request.into_inner();
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let req = request.into_inner();
 
-        // TODO: Implement association unlinking (Part 2)
-        Err(Status::unimplemented(
-            "Document association unlinking not yet implemented",
-        ))
+        self.domain_service
+            .unlink_from_data_stream(UnlinkDocumentRequest {
+                user_id: user_context.user_id,
+                document_id: req.document_id,
+                target_id: req.data_stream_id,
+                organization_id: req.organization_id,
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
+        Ok(Response::new(UnlinkDocumentFromDataStreamResponse {}))
     }
 
     #[instrument(name = "ListDataStreamDocuments", skip(self, request), fields(data_stream_id = %request.get_ref().data_stream_id, organization_id = %request.get_ref().organization_id))]
@@ -220,13 +239,25 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         &self,
         request: Request<proto::ListDataStreamDocumentsRequest>,
     ) -> Result<Response<ListDataStreamDocumentsResponse>, Status> {
-        let _user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
-        let _req = request.into_inner();
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let req = request.into_inner();
 
-        // TODO: Implement association listing (Part 2)
-        Err(Status::unimplemented(
-            "Document association listing not yet implemented",
-        ))
+        let documents = self
+            .domain_service
+            .list_data_stream_documents(ListDocumentsByTargetRequest {
+                user_id: user_context.user_id,
+                target_id: req.data_stream_id,
+                organization_id: req.organization_id,
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
+        Ok(Response::new(ListDataStreamDocumentsResponse {
+            documents: documents
+                .into_iter()
+                .map(to_proto_document_summary)
+                .collect(),
+        }))
     }
 
     // --- Definition document operations ---
@@ -239,11 +270,12 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
+        let user_id = user_context.user_id;
         let document = self
             .domain_service
             .upload_document(UploadDocumentRequest {
-                user_id: user_context.user_id,
-                organization_id: req.organization_id,
+                user_id: user_id.clone(),
+                organization_id: req.organization_id.clone(),
                 name: req.name,
                 mime_type: req.mime_type,
                 metadata: prost_struct_to_json_value(req.metadata),
@@ -252,11 +284,21 @@ impl DocumentServiceTrait for DocumentServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        // TODO: Link document to definition (Part 2 - associations)
+        self.domain_service
+            .link_to_definition(LinkDocumentRequest {
+                user_id,
+                document_id: document.document_id.clone(),
+                target_id: req.definition_id.clone(),
+                organization_id: req.organization_id,
+                workspace_id: None,
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
         debug!(
             document_id = %document.document_id,
             definition_id = %req.definition_id,
-            "Document uploaded for definition (association pending)"
+            "Document uploaded and linked to definition"
         );
 
         Ok(Response::new(UploadDefinitionDocumentResponse {
@@ -296,13 +338,20 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         &self,
         request: Request<proto::UnlinkDocumentFromDefinitionRequest>,
     ) -> Result<Response<UnlinkDocumentFromDefinitionResponse>, Status> {
-        let _user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
-        let _req = request.into_inner();
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let req = request.into_inner();
 
-        // TODO: Implement association unlinking (Part 2)
-        Err(Status::unimplemented(
-            "Document association unlinking not yet implemented",
-        ))
+        self.domain_service
+            .unlink_from_definition(UnlinkDocumentRequest {
+                user_id: user_context.user_id,
+                document_id: req.document_id,
+                target_id: req.definition_id,
+                organization_id: req.organization_id,
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
+        Ok(Response::new(UnlinkDocumentFromDefinitionResponse {}))
     }
 
     #[instrument(name = "ListDefinitionDocuments", skip(self, request), fields(definition_id = %request.get_ref().definition_id, organization_id = %request.get_ref().organization_id))]
@@ -310,13 +359,25 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         &self,
         request: Request<proto::ListDefinitionDocumentsRequest>,
     ) -> Result<Response<ListDefinitionDocumentsResponse>, Status> {
-        let _user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
-        let _req = request.into_inner();
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let req = request.into_inner();
 
-        // TODO: Implement association listing (Part 2)
-        Err(Status::unimplemented(
-            "Document association listing not yet implemented",
-        ))
+        let documents = self
+            .domain_service
+            .list_definition_documents(ListDocumentsByTargetRequest {
+                user_id: user_context.user_id,
+                target_id: req.definition_id,
+                organization_id: req.organization_id,
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
+        Ok(Response::new(ListDefinitionDocumentsResponse {
+            documents: documents
+                .into_iter()
+                .map(to_proto_document_summary)
+                .collect(),
+        }))
     }
 
     // --- Workspace document operations ---
@@ -329,11 +390,12 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
+        let user_id = user_context.user_id;
         let document = self
             .domain_service
             .upload_document(UploadDocumentRequest {
-                user_id: user_context.user_id,
-                organization_id: req.organization_id,
+                user_id: user_id.clone(),
+                organization_id: req.organization_id.clone(),
                 name: req.name,
                 mime_type: req.mime_type,
                 metadata: prost_struct_to_json_value(req.metadata),
@@ -342,11 +404,21 @@ impl DocumentServiceTrait for DocumentServiceHandler {
             .await
             .map_err(domain_error_to_status)?;
 
-        // TODO: Link document to workspace (Part 2 - associations)
+        self.domain_service
+            .link_to_workspace(LinkDocumentRequest {
+                user_id,
+                document_id: document.document_id.clone(),
+                target_id: req.workspace_id.clone(),
+                organization_id: req.organization_id,
+                workspace_id: None,
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
         debug!(
             document_id = %document.document_id,
             workspace_id = %req.workspace_id,
-            "Document uploaded for workspace (association pending)"
+            "Document uploaded and linked to workspace"
         );
 
         Ok(Response::new(UploadWorkspaceDocumentResponse {
@@ -386,13 +458,20 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         &self,
         request: Request<proto::UnlinkDocumentFromWorkspaceRequest>,
     ) -> Result<Response<UnlinkDocumentFromWorkspaceResponse>, Status> {
-        let _user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
-        let _req = request.into_inner();
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let req = request.into_inner();
 
-        // TODO: Implement association unlinking (Part 2)
-        Err(Status::unimplemented(
-            "Document association unlinking not yet implemented",
-        ))
+        self.domain_service
+            .unlink_from_workspace(UnlinkDocumentRequest {
+                user_id: user_context.user_id,
+                document_id: req.document_id,
+                target_id: req.workspace_id,
+                organization_id: req.organization_id,
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
+        Ok(Response::new(UnlinkDocumentFromWorkspaceResponse {}))
     }
 
     #[instrument(name = "ListWorkspaceDocuments", skip(self, request), fields(workspace_id = %request.get_ref().workspace_id, organization_id = %request.get_ref().organization_id))]
@@ -400,12 +479,24 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         &self,
         request: Request<proto::ListWorkspaceDocumentsRequest>,
     ) -> Result<Response<ListWorkspaceDocumentsResponse>, Status> {
-        let _user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
-        let _req = request.into_inner();
+        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
+        let req = request.into_inner();
 
-        // TODO: Implement association listing (Part 2)
-        Err(Status::unimplemented(
-            "Document association listing not yet implemented",
-        ))
+        let documents = self
+            .domain_service
+            .list_workspace_documents(ListDocumentsByTargetRequest {
+                user_id: user_context.user_id,
+                target_id: req.workspace_id,
+                organization_id: req.organization_id,
+            })
+            .await
+            .map_err(domain_error_to_status)?;
+
+        Ok(Response::new(ListWorkspaceDocumentsResponse {
+            documents: documents
+                .into_iter()
+                .map(to_proto_document_summary)
+                .collect(),
+        }))
     }
 }

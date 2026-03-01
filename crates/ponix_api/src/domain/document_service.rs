@@ -1,8 +1,9 @@
 use bytes::Bytes;
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
-    CreateDocumentRepoInput, DeleteDocumentRepoInput, Document, DocumentRepository, DomainError,
-    DomainResult, GetDocumentRepoInput, GetOrganizationRepoInput, OrganizationRepository,
+    CreateDocumentRepoInput, DeleteDocumentRepoInput, Document, DocumentAssociationRepository,
+    DocumentRepository, DomainError, DomainResult, GetDocumentRepoInput, GetOrganizationRepoInput,
+    LinkDocumentInput, ListDocumentsByTargetInput, OrganizationRepository, UnlinkDocumentInput,
     UpdateDocumentRepoInput,
 };
 use common::nats::DocumentContentStore;
@@ -80,10 +81,50 @@ pub struct DownloadDocumentRequest {
     pub organization_id: String,
 }
 
+/// Service request for linking a document to a target entity
+#[derive(Debug, Clone, Validate)]
+pub struct LinkDocumentRequest {
+    #[garde(skip)]
+    pub user_id: String,
+    #[garde(length(min = 1))]
+    pub document_id: String,
+    #[garde(length(min = 1))]
+    pub target_id: String,
+    #[garde(length(min = 1))]
+    pub organization_id: String,
+    #[garde(skip)]
+    pub workspace_id: Option<String>,
+}
+
+/// Service request for unlinking a document from a target entity
+#[derive(Debug, Clone, Validate)]
+pub struct UnlinkDocumentRequest {
+    #[garde(skip)]
+    pub user_id: String,
+    #[garde(length(min = 1))]
+    pub document_id: String,
+    #[garde(length(min = 1))]
+    pub target_id: String,
+    #[garde(length(min = 1))]
+    pub organization_id: String,
+}
+
+/// Service request for listing documents by target entity
+#[derive(Debug, Clone, Validate)]
+pub struct ListDocumentsByTargetRequest {
+    #[garde(skip)]
+    pub user_id: String,
+    #[garde(length(min = 1))]
+    pub target_id: String,
+    #[garde(length(min = 1))]
+    pub organization_id: String,
+}
+
 /// Domain service for document management business logic
 pub struct DocumentService {
     document_repository: Arc<dyn DocumentRepository>,
     document_content_store: Arc<dyn DocumentContentStore>,
+    document_association_repository: Arc<dyn DocumentAssociationRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
     authorization_provider: Arc<dyn AuthorizationProvider>,
 }
@@ -92,12 +133,14 @@ impl DocumentService {
     pub fn new(
         document_repository: Arc<dyn DocumentRepository>,
         document_content_store: Arc<dyn DocumentContentStore>,
+        document_association_repository: Arc<dyn DocumentAssociationRepository>,
         organization_repository: Arc<dyn OrganizationRepository>,
         authorization_provider: Arc<dyn AuthorizationProvider>,
     ) -> Self {
         Self {
             document_repository,
             document_content_store,
+            document_association_repository,
             organization_repository,
             authorization_provider,
         }
@@ -105,10 +148,7 @@ impl DocumentService {
 
     /// Upload a document: compute checksum, store content, persist metadata.
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, name = %request.name))]
-    pub async fn upload_document(
-        &self,
-        request: UploadDocumentRequest,
-    ) -> DomainResult<Document> {
+    pub async fn upload_document(&self, request: UploadDocumentRequest) -> DomainResult<Document> {
         common::garde::validate_struct(&request)?;
 
         self.authorization_provider
@@ -167,10 +207,7 @@ impl DocumentService {
 
     /// Update a document's metadata and optionally replace content.
     #[instrument(skip(self, request), fields(user_id = %request.user_id, document_id = %request.document_id, organization_id = %request.organization_id))]
-    pub async fn update_document(
-        &self,
-        request: UpdateDocumentRequest,
-    ) -> DomainResult<Document> {
+    pub async fn update_document(&self, request: UpdateDocumentRequest) -> DomainResult<Document> {
         common::garde::validate_struct(&request)?;
 
         self.authorization_provider
@@ -183,7 +220,9 @@ impl DocumentService {
             .await?;
 
         // Get existing document to verify it exists and get the object store key
-        let existing = self.get_document_internal(&request.document_id, &request.organization_id).await?;
+        let existing = self
+            .get_document_internal(&request.document_id, &request.organization_id)
+            .await?;
 
         // If new content is provided, upload it and compute new checksum/size
         let (size_bytes, checksum) = if let Some(ref content) = request.content {
@@ -230,7 +269,8 @@ impl DocumentService {
             )
             .await?;
 
-        self.get_document_internal(&request.document_id, &request.organization_id).await
+        self.get_document_internal(&request.document_id, &request.organization_id)
+            .await
     }
 
     /// Delete a document (soft delete metadata + best-effort content cleanup)
@@ -247,7 +287,9 @@ impl DocumentService {
             )
             .await?;
 
-        let doc = self.get_document_internal(&request.document_id, &request.organization_id).await?;
+        let doc = self
+            .get_document_internal(&request.document_id, &request.organization_id)
+            .await?;
 
         self.document_repository
             .delete_document(DeleteDocumentRepoInput {
@@ -257,7 +299,11 @@ impl DocumentService {
             .await?;
 
         // Best-effort content store cleanup
-        if let Err(e) = self.document_content_store.delete(&doc.object_store_key).await {
+        if let Err(e) = self
+            .document_content_store
+            .delete(&doc.object_store_key)
+            .await
+        {
             warn!(
                 object_store_key = %doc.object_store_key,
                 error = %e,
@@ -286,7 +332,9 @@ impl DocumentService {
             )
             .await?;
 
-        let doc = self.get_document_internal(&request.document_id, &request.organization_id).await?;
+        let doc = self
+            .get_document_internal(&request.document_id, &request.organization_id)
+            .await?;
 
         let content = self
             .document_content_store
@@ -295,6 +343,218 @@ impl DocumentService {
             .map_err(DomainError::RepositoryError)?;
 
         Ok((doc, content))
+    }
+
+    // --- Association methods ---
+
+    /// Link a document to a data stream
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, document_id = %request.document_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn link_to_data_stream(&self, request: LinkDocumentRequest) -> DomainResult<()> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Create,
+            )
+            .await?;
+
+        self.document_association_repository
+            .link_to_data_stream(LinkDocumentInput {
+                document_id: request.document_id,
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+                workspace_id: request.workspace_id,
+            })
+            .await
+    }
+
+    /// Unlink a document from a data stream
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, document_id = %request.document_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn unlink_from_data_stream(
+        &self,
+        request: UnlinkDocumentRequest,
+    ) -> DomainResult<()> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Delete,
+            )
+            .await?;
+
+        self.document_association_repository
+            .unlink_from_data_stream(UnlinkDocumentInput {
+                document_id: request.document_id,
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+            })
+            .await
+    }
+
+    /// List documents linked to a data stream
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn list_data_stream_documents(
+        &self,
+        request: ListDocumentsByTargetRequest,
+    ) -> DomainResult<Vec<Document>> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Read,
+            )
+            .await?;
+
+        self.document_association_repository
+            .list_data_stream_documents(ListDocumentsByTargetInput {
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+            })
+            .await
+    }
+
+    /// Link a document to a definition
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, document_id = %request.document_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn link_to_definition(&self, request: LinkDocumentRequest) -> DomainResult<()> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Create,
+            )
+            .await?;
+
+        self.document_association_repository
+            .link_to_definition(LinkDocumentInput {
+                document_id: request.document_id,
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+                workspace_id: request.workspace_id,
+            })
+            .await
+    }
+
+    /// Unlink a document from a definition
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, document_id = %request.document_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn unlink_from_definition(&self, request: UnlinkDocumentRequest) -> DomainResult<()> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Delete,
+            )
+            .await?;
+
+        self.document_association_repository
+            .unlink_from_definition(UnlinkDocumentInput {
+                document_id: request.document_id,
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+            })
+            .await
+    }
+
+    /// List documents linked to a definition
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn list_definition_documents(
+        &self,
+        request: ListDocumentsByTargetRequest,
+    ) -> DomainResult<Vec<Document>> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Read,
+            )
+            .await?;
+
+        self.document_association_repository
+            .list_definition_documents(ListDocumentsByTargetInput {
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+            })
+            .await
+    }
+
+    /// Link a document to a workspace
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, document_id = %request.document_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn link_to_workspace(&self, request: LinkDocumentRequest) -> DomainResult<()> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Create,
+            )
+            .await?;
+
+        self.document_association_repository
+            .link_to_workspace(LinkDocumentInput {
+                document_id: request.document_id,
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+                workspace_id: request.workspace_id,
+            })
+            .await
+    }
+
+    /// Unlink a document from a workspace
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, document_id = %request.document_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn unlink_from_workspace(&self, request: UnlinkDocumentRequest) -> DomainResult<()> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Delete,
+            )
+            .await?;
+
+        self.document_association_repository
+            .unlink_from_workspace(UnlinkDocumentInput {
+                document_id: request.document_id,
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+            })
+            .await
+    }
+
+    /// List documents linked to a workspace
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, target_id = %request.target_id, organization_id = %request.organization_id))]
+    pub async fn list_workspace_documents(
+        &self,
+        request: ListDocumentsByTargetRequest,
+    ) -> DomainResult<Vec<Document>> {
+        common::garde::validate_struct(&request)?;
+        self.authorization_provider
+            .require_permission(
+                &request.user_id,
+                &request.organization_id,
+                Resource::Document,
+                Action::Read,
+            )
+            .await?;
+
+        self.document_association_repository
+            .list_workspace_documents(ListDocumentsByTargetInput {
+                target_id: request.target_id,
+                organization_id: request.organization_id,
+            })
+            .await
     }
 
     /// Internal helper to get a document or return DocumentNotFound
@@ -322,7 +582,11 @@ impl DocumentService {
             organization_id: organization_id.to_string(),
         };
 
-        match self.organization_repository.get_organization(org_input).await? {
+        match self
+            .organization_repository
+            .get_organization(org_input)
+            .await?
+        {
             Some(org) => {
                 if org.deleted_at.is_some() {
                     return Err(DomainError::OrganizationDeleted(format!(
@@ -351,7 +615,10 @@ fn compute_sha256(content: &[u8]) -> String {
 mod tests {
     use super::*;
     use common::auth::MockAuthorizationProvider;
-    use common::domain::{MockDocumentRepository, MockOrganizationRepository, Organization};
+    use common::domain::{
+        MockDocumentAssociationRepository, MockDocumentRepository, MockOrganizationRepository,
+        Organization,
+    };
     use common::nats::MockDocumentContentStore;
 
     const TEST_USER_ID: &str = "user-123";
@@ -400,31 +667,28 @@ mod tests {
         let mut mock_content_store = MockDocumentContentStore::new();
         let mock_org_repo = create_mock_org_repo_with_org();
 
-        mock_content_store
-            .expect_upload()
-            .returning(|_, _| Ok(()));
+        mock_content_store.expect_upload().returning(|_, _| Ok(()));
 
-        mock_doc_repo
-            .expect_create_document()
-            .returning(|input| {
-                Ok(Document {
-                    document_id: input.document_id,
-                    organization_id: input.organization_id,
-                    name: input.name,
-                    mime_type: input.mime_type,
-                    size_bytes: input.size_bytes,
-                    object_store_key: input.object_store_key,
-                    checksum: input.checksum,
-                    metadata: input.metadata,
-                    deleted_at: None,
-                    created_at: None,
-                    updated_at: None,
-                })
-            });
+        mock_doc_repo.expect_create_document().returning(|input| {
+            Ok(Document {
+                document_id: input.document_id,
+                organization_id: input.organization_id,
+                name: input.name,
+                mime_type: input.mime_type,
+                size_bytes: input.size_bytes,
+                object_store_key: input.object_store_key,
+                checksum: input.checksum,
+                metadata: input.metadata,
+                deleted_at: None,
+                created_at: None,
+                updated_at: None,
+            })
+        });
 
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -459,6 +723,7 @@ mod tests {
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -489,6 +754,7 @@ mod tests {
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -512,25 +778,20 @@ mod tests {
         let mut mock_content_store = MockDocumentContentStore::new();
         let mock_org_repo = create_mock_org_repo_with_org();
 
-        mock_content_store
-            .expect_upload()
-            .returning(|_, _| Ok(()));
+        mock_content_store.expect_upload().returning(|_, _| Ok(()));
 
-        mock_content_store
-            .expect_delete()
-            .returning(|_| Ok(()));
+        mock_content_store.expect_delete().returning(|_| Ok(()));
 
-        mock_doc_repo
-            .expect_create_document()
-            .returning(|_| {
-                Err(DomainError::RepositoryError(anyhow::anyhow!(
-                    "database error"
-                )))
-            });
+        mock_doc_repo.expect_create_document().returning(|_| {
+            Err(DomainError::RepositoryError(anyhow::anyhow!(
+                "database error"
+            )))
+        });
 
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -562,6 +823,7 @@ mod tests {
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -583,13 +845,12 @@ mod tests {
         let mock_content_store = MockDocumentContentStore::new();
         let mock_org_repo = MockOrganizationRepository::new();
 
-        mock_doc_repo
-            .expect_get_document()
-            .returning(|_| Ok(None));
+        mock_doc_repo.expect_get_document().returning(|_| Ok(None));
 
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -615,17 +876,14 @@ mod tests {
             .expect_get_document()
             .returning(move |_| Ok(Some(doc.clone())));
 
-        mock_doc_repo
-            .expect_delete_document()
-            .returning(|_| Ok(()));
+        mock_doc_repo.expect_delete_document().returning(|_| Ok(()));
 
-        mock_content_store
-            .expect_delete()
-            .returning(|_| Ok(()));
+        mock_content_store.expect_delete().returning(|_| Ok(()));
 
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -658,6 +916,7 @@ mod tests {
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -686,27 +945,26 @@ mod tests {
             .expect_get_document()
             .returning(move |_| Ok(Some(existing_doc.clone())));
 
-        mock_doc_repo
-            .expect_update_document()
-            .returning(|input| {
-                Ok(Document {
-                    document_id: input.document_id,
-                    organization_id: input.organization_id,
-                    name: input.name.unwrap_or_else(|| "test.pdf".to_string()),
-                    mime_type: "application/pdf".to_string(),
-                    size_bytes: 1024,
-                    object_store_key: "key".to_string(),
-                    checksum: "abc123".to_string(),
-                    metadata: serde_json::json!({}),
-                    deleted_at: None,
-                    created_at: None,
-                    updated_at: None,
-                })
-            });
+        mock_doc_repo.expect_update_document().returning(|input| {
+            Ok(Document {
+                document_id: input.document_id,
+                organization_id: input.organization_id,
+                name: input.name.unwrap_or_else(|| "test.pdf".to_string()),
+                mime_type: "application/pdf".to_string(),
+                size_bytes: 1024,
+                object_store_key: "key".to_string(),
+                checksum: "abc123".to_string(),
+                metadata: serde_json::json!({}),
+                deleted_at: None,
+                created_at: None,
+                updated_at: None,
+            })
+        });
 
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             create_mock_auth_provider(),
         );
@@ -733,17 +991,20 @@ mod tests {
         let mock_org_repo = MockOrganizationRepository::new();
 
         let mut mock_auth = MockAuthorizationProvider::new();
-        mock_auth.expect_require_permission().returning(|_, _, _, _| {
-            Box::pin(async {
-                Err(DomainError::PermissionDenied(
-                    "User does not have permission".to_string(),
-                ))
-            })
-        });
+        mock_auth
+            .expect_require_permission()
+            .returning(|_, _, _, _| {
+                Box::pin(async {
+                    Err(DomainError::PermissionDenied(
+                        "User does not have permission".to_string(),
+                    ))
+                })
+            });
 
         let service = DocumentService::new(
             Arc::new(mock_doc_repo),
             Arc::new(mock_content_store),
+            Arc::new(MockDocumentAssociationRepository::new()),
             Arc::new(mock_org_repo),
             Arc::new(mock_auth),
         );

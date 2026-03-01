@@ -13,18 +13,17 @@ use crate::domain::{
 };
 use crate::grpc::{
     DataStreamDefinitionServiceHandler, DataStreamServiceHandler, DocumentServiceHandler,
-    GatewayServiceHandler, OrganizationServiceHandler, UserServiceHandler,
-    WorkspaceServiceHandler,
+    GatewayServiceHandler, OrganizationServiceHandler, UserServiceHandler, WorkspaceServiceHandler,
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{run_grpc_server, GrpcServerConfig};
 use ponix_proto_prost;
 use ponix_proto_tonic::data_stream::v1::tonic::data_stream_definition_service_server::DataStreamDefinitionServiceServer;
 use ponix_proto_tonic::data_stream::v1::tonic::data_stream_service_server::DataStreamServiceServer;
+use ponix_proto_tonic::document::v1::tonic::document_service_server::DocumentServiceServer;
 use ponix_proto_tonic::gateway::v1::tonic::gateway_service_server::GatewayServiceServer;
 use ponix_proto_tonic::organization::v1::tonic::organization_service_server::OrganizationServiceServer;
 use ponix_proto_tonic::user::v1::tonic::user_service_server::UserServiceServer;
-use ponix_proto_tonic::document::v1::tonic::document_service_server::DocumentServiceServer;
 use ponix_proto_tonic::workspace::v1::tonic::workspace_service_server::WorkspaceServiceServer;
 
 /// File descriptor sets for gRPC reflection service.
@@ -63,10 +62,8 @@ impl PonixApiServices {
             self.definition_service,
             self.auth_token_provider.clone(),
         );
-        let document_handler = DocumentServiceHandler::new(
-            self.document_service,
-            self.auth_token_provider.clone(),
-        );
+        let document_handler =
+            DocumentServiceHandler::new(self.document_service, self.auth_token_provider.clone());
         let organization_handler = OrganizationServiceHandler::new(
             self.organization_service,
             self.auth_token_provider.clone(),

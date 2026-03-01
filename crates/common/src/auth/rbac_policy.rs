@@ -93,12 +93,7 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "document".into(),
             "create".into(),
         ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "document".into(),
-            "read".into(),
-        ],
+        vec!["admin".into(), "*".into(), "document".into(), "read".into()],
         vec![
             "admin".into(),
             "*".into(),

@@ -57,6 +57,8 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::DocumentAlreadyExists(msg) => Status::already_exists(msg),
 
+        DomainError::DocumentAssociationAlreadyExists(msg) => Status::already_exists(msg),
+
         DomainError::InvalidGatewayId(msg)
         | DomainError::InvalidGatewayType(msg)
         | DomainError::InvalidGatewayConfig(msg) => Status::invalid_argument(msg),

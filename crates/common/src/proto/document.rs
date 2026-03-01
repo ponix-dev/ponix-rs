@@ -1,6 +1,7 @@
 use crate::domain::Document;
 use chrono::{DateTime, Utc};
 use ponix_proto_prost::document::v1::Document as ProtoDocument;
+use ponix_proto_prost::document::v1::DocumentSummary as ProtoDocumentSummary;
 use prost_types::{value::Kind, ListValue, Struct, Timestamp, Value};
 
 /// Convert domain Document to protobuf Document
@@ -12,6 +13,20 @@ pub fn to_proto_document(doc: Document) -> ProtoDocument {
         mime_type: doc.mime_type,
         size_bytes: doc.size_bytes,
         checksum: doc.checksum,
+        metadata: json_value_to_prost_struct(&doc.metadata),
+        created_at: datetime_to_timestamp(doc.created_at),
+        updated_at: datetime_to_timestamp(doc.updated_at),
+    }
+}
+
+/// Convert domain Document to protobuf DocumentSummary (excludes checksum)
+pub fn to_proto_document_summary(doc: Document) -> ProtoDocumentSummary {
+    ProtoDocumentSummary {
+        document_id: doc.document_id,
+        organization_id: doc.organization_id,
+        name: doc.name,
+        mime_type: doc.mime_type,
+        size_bytes: doc.size_bytes,
         metadata: json_value_to_prost_struct(&doc.metadata),
         created_at: datetime_to_timestamp(doc.created_at),
         updated_at: datetime_to_timestamp(doc.updated_at),
@@ -60,9 +75,7 @@ fn json_to_prost_value(value: &serde_json::Value) -> Value {
     let kind = match value {
         serde_json::Value::Null => Kind::NullValue(0),
         serde_json::Value::Bool(b) => Kind::BoolValue(*b),
-        serde_json::Value::Number(n) => {
-            Kind::NumberValue(n.as_f64().unwrap_or(0.0))
-        }
+        serde_json::Value::Number(n) => Kind::NumberValue(n.as_f64().unwrap_or(0.0)),
         serde_json::Value::String(s) => Kind::StringValue(s.clone()),
         serde_json::Value::Array(arr) => {
             let values = arr.iter().map(json_to_prost_value).collect();
@@ -138,6 +151,35 @@ mod tests {
 
         let metadata = proto.metadata.unwrap();
         assert!(metadata.fields.contains_key("author"));
+    }
+
+    #[test]
+    fn test_domain_document_to_proto_summary_excludes_checksum() {
+        let now = Utc::now();
+        let doc = Document {
+            document_id: "doc-123".to_string(),
+            organization_id: "org-456".to_string(),
+            name: "test.pdf".to_string(),
+            mime_type: "application/pdf".to_string(),
+            size_bytes: 1024,
+            object_store_key: "org-456/doc-123/test.pdf".to_string(),
+            checksum: "abc123".to_string(),
+            metadata: serde_json::json!({"author": "Alice"}),
+            deleted_at: None,
+            created_at: Some(now),
+            updated_at: Some(now),
+        };
+
+        let summary = to_proto_document_summary(doc);
+
+        assert_eq!(summary.document_id, "doc-123");
+        assert_eq!(summary.organization_id, "org-456");
+        assert_eq!(summary.name, "test.pdf");
+        assert_eq!(summary.mime_type, "application/pdf");
+        assert_eq!(summary.size_bytes, 1024);
+        assert!(summary.metadata.is_some());
+        assert!(summary.created_at.is_some());
+        assert!(summary.updated_at.is_some());
     }
 
     #[test]

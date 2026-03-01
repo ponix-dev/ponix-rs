@@ -32,7 +32,7 @@ Give the platform memory beyond raw time-series. Documents, entity relationships
 - [x] #102 — AGE + pgvector extensions — graph traversal and vector similarity in PostgreSQL
 - [x] #107 — NATS Object Storage — binary document content storage
 - [x] #106 — Document entity + repository — metadata for manuals, datasheets, config files
-- [ ] #108 — Document service + upload + associations — gRPC metadata + HTTP file upload + document association RPCs (link documents to data streams, definitions, workspaces) with dedicated junction tables and transactional AGE graph writes (subsumes #110/#111 for document relationships)
+- [x] #108 — Document service + upload + associations — gRPC metadata + HTTP file upload + document association RPCs (link documents to data streams, definitions, workspaces) with dedicated junction tables and transactional AGE graph writes (subsumes #110/#111 for document relationships)
 - [ ] #109 — Document CDC — document change events in the event stream (feeds embedding pipeline #124, not graph sync — graph writes are transactional in #108)
 - [ ] #112 — Ollama + embedding service — local LLM inference and embedding generation
 - [ ] #124 — Document embedding pipeline — when a document is created (via CDC), chunk it, embed chunks with `nomic-embed-text`, store vectors in pgvector. Low-volume — documents are created occasionally, not thousands per second

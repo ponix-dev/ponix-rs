@@ -17,8 +17,9 @@ use common::nats::NatsObjectStoreClient;
 use common::postgres::create_postgres_authorization_adapter;
 use common::postgres::{
     PostgresClient, PostgresDataStreamDefinitionRepository, PostgresDataStreamRepository,
-    PostgresDocumentRepository, PostgresGatewayRepository, PostgresOrganizationRepository,
-    PostgresRefreshTokenRepository, PostgresUserRepository, PostgresWorkspaceRepository,
+    PostgresDocumentAssociationRepository, PostgresDocumentRepository, PostgresGatewayRepository,
+    PostgresOrganizationRepository, PostgresRefreshTokenRepository, PostgresUserRepository,
+    PostgresWorkspaceRepository,
 };
 use common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig, TelemetryProviders};
 use config::ServiceConfig;
@@ -144,6 +145,7 @@ async fn main() {
     let document_service = Arc::new(DocumentService::new(
         postgres_repos.document.clone(),
         Arc::new(object_store_client),
+        postgres_repos.document_association.clone(),
         postgres_repos.organization.clone(),
         authorization_service.clone(),
     ));
@@ -348,6 +350,7 @@ struct PostgresRepositories {
     data_stream: Arc<PostgresDataStreamRepository>,
     data_stream_definition: Arc<PostgresDataStreamDefinitionRepository>,
     document: Arc<PostgresDocumentRepository>,
+    document_association: Arc<PostgresDocumentAssociationRepository>,
     organization: Arc<PostgresOrganizationRepository>,
     gateway: Arc<PostgresGatewayRepository>,
     user: Arc<PostgresUserRepository>,
@@ -374,6 +377,9 @@ async fn initialize_shared_dependencies(
             postgres_client.clone(),
         )),
         document: Arc::new(PostgresDocumentRepository::new(postgres_client.clone())),
+        document_association: Arc::new(PostgresDocumentAssociationRepository::new(
+            postgres_client.clone(),
+        )),
         organization: Arc::new(PostgresOrganizationRepository::new(postgres_client.clone())),
         gateway: Arc::new(PostgresGatewayRepository::new(postgres_client.clone())),
         user: Arc::new(PostgresUserRepository::new(postgres_client.clone())),
