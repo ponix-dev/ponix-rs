@@ -20,7 +20,7 @@ pub struct Document {
 
 /// Repository input for creating a document
 #[derive(Debug, Clone, PartialEq)]
-pub struct CreateDocumentRepoInput {
+pub struct CreateDocumentRepoInputWithId {
     pub document_id: String,
     pub organization_id: String,
     pub name: String,
@@ -68,7 +68,7 @@ pub struct ListDocumentsRepoInput {
 #[async_trait]
 pub trait DocumentRepository: Send + Sync {
     /// Create a new document
-    async fn create_document(&self, input: CreateDocumentRepoInput) -> DomainResult<Document>;
+    async fn create_document(&self, input: CreateDocumentRepoInputWithId) -> DomainResult<Document>;
 
     /// Get a document by ID and organization (excludes soft deleted)
     async fn get_document(&self, input: GetDocumentRepoInput) -> DomainResult<Option<Document>>;

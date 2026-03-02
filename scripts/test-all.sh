@@ -58,6 +58,7 @@ run_test "test-organizations.sh" "Organization Tests"
 run_test "test-workspaces.sh" "Workspace Tests"
 run_test "test-data-streams.sh" "Data Stream Tests"
 run_test "test-gateways.sh" "Gateway Tests"
+run_test "test-documents.sh" "Document Tests"
 
 # MQTT pipeline tests
 run_test "test-mqtt-pipeline.sh" "MQTT Pipeline Test"

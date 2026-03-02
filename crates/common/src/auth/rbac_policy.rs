@@ -2,6 +2,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resource {
     DataStream,
+    Document,
     Gateway,
     Organization,
     Workspace,
@@ -11,6 +12,7 @@ impl Resource {
     pub fn as_str(&self) -> &'static str {
         match self {
             Resource::DataStream => "data_stream",
+            Resource::Document => "document",
             Resource::Gateway => "gateway",
             Resource::Organization => "organization",
             Resource::Workspace => "workspace",
@@ -83,6 +85,25 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "admin".into(),
             "*".into(),
             "data_stream".into(),
+            "delete".into(),
+        ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "document".into(),
+            "create".into(),
+        ],
+        vec!["admin".into(), "*".into(), "document".into(), "read".into()],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "document".into(),
+            "update".into(),
+        ],
+        vec![
+            "admin".into(),
+            "*".into(),
+            "document".into(),
             "delete".into(),
         ],
         vec![
@@ -169,6 +190,30 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "member".into(),
             "*".into(),
             "data_stream".into(),
+            "delete".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "document".into(),
+            "create".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "document".into(),
+            "read".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "document".into(),
+            "update".into(),
+        ],
+        vec![
+            "member".into(),
+            "*".into(),
+            "document".into(),
             "delete".into(),
         ],
         vec![

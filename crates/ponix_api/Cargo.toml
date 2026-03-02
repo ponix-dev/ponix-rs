@@ -11,10 +11,15 @@ tracing.workspace = true
 xid.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+tokio-stream.workspace = true
 chrono.workspace = true
 tonic.workspace = true
 anyhow.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+bytes.workspace = true
+sha2.workspace = true
+hex.workspace = true
 
 ponix-proto-prost.workspace = true
 ponix-proto-tonic.workspace = true

@@ -98,6 +98,9 @@ impl CorsConfig {
     }
 }
 
+/// 16 MB — default max message size for document uploads.
+pub const DEFAULT_MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+
 /// Configuration for the gRPC server.
 #[derive(Debug, Clone)]
 pub struct GrpcServerConfig {
@@ -113,6 +116,10 @@ pub struct GrpcServerConfig {
     pub enable_grpc_web: bool,
     /// CORS configuration. Only used when gRPC-Web is enabled.
     pub cors_config: Option<CorsConfig>,
+    /// Max decoding (inbound) message size in bytes. Applies per-service.
+    pub max_decoding_message_size: usize,
+    /// Max encoding (outbound) message size in bytes. Applies per-service.
+    pub max_encoding_message_size: usize,
 }
 
 impl Default for GrpcServerConfig {
@@ -124,6 +131,8 @@ impl Default for GrpcServerConfig {
             tracing_config: GrpcTracingConfig::default(),
             enable_grpc_web: false,
             cors_config: None,
+            max_decoding_message_size: DEFAULT_MAX_MESSAGE_SIZE,
+            max_encoding_message_size: DEFAULT_MAX_MESSAGE_SIZE,
         }
     }
 }

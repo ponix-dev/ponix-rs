@@ -3167,13 +3167,18 @@ name = "ponix_api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "chrono",
  "common",
  "garde",
+ "hex",
  "ponix_ponix_community_neoeinstein-prost",
  "ponix_ponix_community_neoeinstein-tonic",
  "serde",
+ "serde_json",
+ "sha2",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tonic 0.14.2",
  "tracing",
@@ -3182,9 +3187,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-prost"
-version = "0.5.0-20260228234535-5d13f6c08c29.2"
+version = "0.5.0-20260301231928-8dfaced60b62.2"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "189661d4fe40c4111864c40772fdf903bb521a1172b49ed7e2405db04c9148e3"
+checksum = "dcf5eeefd70f7bb5dcb02fc48daeed125f0fc5a65674c67739432d05e7be78b8"
 dependencies = [
  "prost 0.14.1",
  "prost-types",
@@ -3192,9 +3197,9 @@ dependencies = [
 
 [[package]]
 name = "ponix_ponix_community_neoeinstein-tonic"
-version = "0.5.0-20260228234535-5d13f6c08c29.4"
+version = "0.5.0-20260301231928-8dfaced60b62.4"
 source = "sparse+https://buf.build/gen/cargo/"
-checksum = "afbe49557b95b4ad540e67d77a7bf742a1bda133f982c966c48da69530a1a787"
+checksum = "200bff130730eac195b2a3ecfd725411c5d714b46d6d4d783a5ab52e54b55ba0"
 dependencies = [
  "ponix_ponix_community_neoeinstein-prost",
  "tonic 0.14.2",

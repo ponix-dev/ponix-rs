@@ -1,5 +1,5 @@
 use crate::domain::{
-    CreateDocumentRepoInput, DeleteDocumentRepoInput, Document, DocumentRepository, DomainError,
+    CreateDocumentRepoInputWithId, DeleteDocumentRepoInput, Document, DocumentRepository, DomainError,
     DomainResult, GetDocumentRepoInput, ListDocumentsRepoInput, UpdateDocumentRepoInput,
 };
 use crate::postgres::PostgresClient;
@@ -74,7 +74,7 @@ impl PostgresDocumentRepository {
 #[async_trait]
 impl DocumentRepository for PostgresDocumentRepository {
     #[instrument(skip(self, input), fields(document_id = %input.document_id, organization_id = %input.organization_id))]
-    async fn create_document(&self, input: CreateDocumentRepoInput) -> DomainResult<Document> {
+    async fn create_document(&self, input: CreateDocumentRepoInputWithId) -> DomainResult<Document> {
         debug!(document_id = %input.document_id, "creating document in database");
 
         let conn = self
