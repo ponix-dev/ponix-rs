@@ -120,7 +120,7 @@ impl PostgresDocumentAssociationRepository {
             .map_err(|e| DomainError::RepositoryError(e.into()))?;
 
         if rows_affected == 0 {
-            return Err(DomainError::DocumentNotFound(format!(
+            return Err(DomainError::DocumentAssociationNotFound(format!(
                 "Association not found: document {} <-> {}",
                 document_id, source_id
             )));
@@ -171,11 +171,11 @@ impl PostgresDocumentAssociationRepository {
 impl DocumentAssociationRepository for PostgresDocumentAssociationRepository {
     #[instrument(skip(self, input), fields(document_id = %input.document_id, target_id = %input.target_id, organization_id = %input.organization_id))]
     async fn link_to_data_stream(&self, input: LinkDocumentInput) -> DomainResult<()> {
-        let workspace_id = input
-            .workspace_id
-            .as_deref()
-            .unwrap_or_default()
-            .to_string();
+        let workspace_id = input.workspace_id.ok_or_else(|| {
+            DomainError::ValidationError(
+                "workspace_id is required for data stream associations".to_string(),
+            )
+        })?;
         debug!(document_id = %input.document_id, data_stream_id = %input.target_id, "linking document to data stream");
 
         self.link_transaction(

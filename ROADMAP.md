@@ -27,17 +27,25 @@ Make the existing ingest path multi-protocol and production-grade before buildin
 
 ## Phase 2: Knowledge Layer
 
-Give the platform memory beyond raw time-series. Documents, entity relationships, a graph that represents how the physical world is connected, and vector embeddings that make documents searchable by meaning.
+Give the platform memory beyond raw time-series. Documents with collaborative editing via Yrs (Rust CRDT, binary-compatible with Yjs), entity relationships, a graph that represents how the physical world is connected, and vector embeddings that make documents searchable by meaning.
 
 - [x] #102 — AGE + pgvector extensions — graph traversal and vector similarity in PostgreSQL
 - [x] #107 — NATS Object Storage — binary document content storage
 - [x] #106 — Document entity + repository — metadata for manuals, datasheets, config files
 - [x] #108 — Document service + upload + associations — gRPC metadata + HTTP file upload + document association RPCs (link documents to data streams, definitions, workspaces) with dedicated junction tables and transactional AGE graph writes (subsumes #110/#111 for document relationships)
-- [ ] #109 — Document CDC — document change events in the event stream (feeds embedding pipeline #124, not graph sync — graph writes are transactional in #108)
+- [ ] #168 — Migrate Document entity to Yrs-based collaborative schema — replace file columns (`object_store_key`, `checksum`, `size_bytes`, `mime_type`) with Yrs columns (`yrs_state`, `yrs_state_vector`, `content_text`, `content_html`). Migration + domain entity + repository. Associations unchanged
+- [ ] #169 — Update DocumentService for Yrs document lifecycle — replace upload/download with create (empty Yrs doc) + metadata-only get. Content editing via WebSocket, not gRPC
+- [ ] #170 — Update Document proto and gRPC for Yrs-based documents — replace Upload RPCs with Create RPCs, remove DownloadDocument streaming, update Document message fields
+- [ ] #171 — Remove NATS Object Store document dependency — remove `DocumentContentStore` from document path, clean up object store init in `ponix_all_in_one`
+- [ ] #172 — Collaboration server with Yrs WebSocket endpoint — new `collaboration_server` crate. WebSocket at `/ws/documents/{document_id}`. Loads/persists Yrs state from PostgreSQL, extracts `content_text`/`content_html` on compaction. Runner process
+- [ ] #173 — Document comments with Yrs StickyIndex anchoring — `document_comments` table, threaded replies, resolve/unresolve. Domain entity + repository + gRPC RPCs
+- [ ] #174 — Document version snapshots — `document_versions` table with full Yrs state snapshots. Create/list/get/restore via gRPC
+- [x] #175 — Plate + Yrs frontend integration guide — `docs/frontend-integration-guide.md` in `ponix-ui` — Plate setup, `slate-yjs` binding, comment UI mapping, version history patterns. Handoff doc for frontend agent
+- [ ] #109 — Document CDC — triggers on `content_text` changes (written by Yrs compaction), CDC payload contains text directly — no NATS Object Store fetch needed. Feeds embedding pipeline #124
 - [ ] #112 — Ollama + embedding service — local LLM inference and embedding generation
-- [ ] #124 — Document embedding pipeline — when a document is created (via CDC), chunk it, embed chunks with `nomic-embed-text`, store vectors in pgvector. Low-volume — documents are created occasionally, not thousands per second
+- [ ] #124 — Document embedding pipeline — when `content_text` changes (via CDC #109), chunk the text directly from the CDC payload, embed chunks with `nomic-embed-text`, store vectors in pgvector. Re-embed on meaningful edits. Low-volume — documents are edited occasionally, not thousands per second
 
-> **Why second:** An agent making device decisions needs context. "Device X is in Building 3, which has HVAC system Y, and the manufacturer's datasheet says the operating range is 10–40°C." That context lives in documents and relationships, not in the time-series. By setting up Ollama and the embedding pipeline here, documents are searchable by meaning as soon as they enter the system — no need to wait for the full agent runtime.
+> **Why second:** An agent making device decisions needs context. "Device X is in Building 3, which has HVAC system Y, and the manufacturer's datasheet says the operating range is 10–40°C." That context lives in documents and relationships, not in the time-series. Collaborative editing via Yrs means documents are living artifacts — teams can edit them in real-time while the embedding pipeline keeps semantic search up to date on every meaningful change. By setting up Ollama and the embedding pipeline here, documents are searchable by meaning as soon as they enter the system — no need to wait for the full agent runtime.
 
 ---
 

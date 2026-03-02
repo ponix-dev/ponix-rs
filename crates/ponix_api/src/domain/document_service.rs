@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
-    CreateDocumentRepoInput, DeleteDocumentRepoInput, Document, DocumentAssociationRepository,
+    CreateDocumentRepoInputWithId, DeleteDocumentRepoInput, Document, DocumentAssociationRepository,
     DocumentRepository, DomainError, DomainResult, GetDocumentRepoInput, GetOrganizationRepoInput,
     LinkDocumentInput, ListDocumentsByTargetInput, OrganizationRepository, UnlinkDocumentInput,
     UpdateDocumentRepoInput,
@@ -177,7 +177,7 @@ impl DocumentService {
             .map_err(DomainError::RepositoryError)?;
 
         // Persist metadata to database
-        let repo_input = CreateDocumentRepoInput {
+        let repo_input = CreateDocumentRepoInputWithId {
             document_id: document_id.clone(),
             organization_id: request.organization_id.clone(),
             name: request.name,

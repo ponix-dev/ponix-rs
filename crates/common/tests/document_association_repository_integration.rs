@@ -1,7 +1,7 @@
 #![cfg(feature = "integration-tests")]
 
 use common::domain::{
-    CreateDataStreamDefinitionRepoInput, CreateDocumentRepoInput,
+    CreateDataStreamDefinitionRepoInput, CreateDocumentRepoInputWithId,
     CreateOrganizationRepoInputWithId, DataStreamDefinitionRepository,
     DocumentAssociationRepository, DocumentRepository, DomainError, LinkDocumentInput,
     ListDocumentsByTargetInput, OrganizationRepository, PayloadContract,
@@ -161,7 +161,7 @@ async fn create_definition(client: &PostgresClient, org_id: &str, def_id: &str) 
 
 async fn create_doc(doc_repo: &PostgresDocumentRepository, doc_id: &str, org_id: &str) {
     doc_repo
-        .create_document(CreateDocumentRepoInput {
+        .create_document(CreateDocumentRepoInputWithId {
             document_id: doc_id.to_string(),
             organization_id: org_id.to_string(),
             name: format!("{}.pdf", doc_id),
@@ -320,7 +320,7 @@ async fn test_unlink_nonexistent_association_fails() {
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        DomainError::DocumentNotFound(_)
+        DomainError::DocumentAssociationNotFound(_)
     ));
 }
 

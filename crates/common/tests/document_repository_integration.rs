@@ -1,7 +1,7 @@
 #![cfg(feature = "integration-tests")]
 
 use common::domain::{
-    CreateDocumentRepoInput, CreateOrganizationRepoInputWithId, DeleteDocumentRepoInput,
+    CreateDocumentRepoInputWithId, CreateOrganizationRepoInputWithId, DeleteDocumentRepoInput,
     DocumentRepository, DomainError, GetDocumentRepoInput, ListDocumentsRepoInput,
     OrganizationRepository, RegisterUserRepoInputWithId, UpdateDocumentRepoInput, UserRepository,
 };
@@ -82,8 +82,8 @@ async fn setup_test_db() -> (
     (postgres, doc_repo, org_repo)
 }
 
-fn make_create_input(id: &str, org_id: &str) -> CreateDocumentRepoInput {
-    CreateDocumentRepoInput {
+fn make_create_input(id: &str, org_id: &str) -> CreateDocumentRepoInputWithId {
+    CreateDocumentRepoInputWithId {
         document_id: id.to_string(),
         organization_id: org_id.to_string(),
         name: "Manual.pdf".to_string(),

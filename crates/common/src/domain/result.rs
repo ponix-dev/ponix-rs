@@ -76,6 +76,9 @@ pub enum DomainError {
     #[error("Document association already exists: {0}")]
     DocumentAssociationAlreadyExists(String),
 
+    #[error("Document association not found: {0}")]
+    DocumentAssociationNotFound(String),
+
     #[error("Invalid gateway ID: {0}")]
     InvalidGatewayId(String),
 
