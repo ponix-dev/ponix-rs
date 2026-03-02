@@ -1,3 +1,9 @@
+## [1.26.0](https://github.com/ponix-dev/ponix-rs/compare/v1.25.0...v1.26.0) (2026-03-02)
+
+### Features
+
+* document associations with AGE graph edges ([#108](https://github.com/ponix-dev/ponix-rs/issues/108)) ([#167](https://github.com/ponix-dev/ponix-rs/issues/167)) ([b0ab142](https://github.com/ponix-dev/ponix-rs/commit/b0ab142bfab9d1e9e64fddada3e685262a8c7f79))
+
 ## [1.25.0](https://github.com/ponix-dev/ponix-rs/compare/v1.24.0...v1.25.0) (2026-03-01)
 
 ### Features
