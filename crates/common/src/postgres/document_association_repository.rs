@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use tracing::{debug, instrument};
 
-const DOCUMENT_SELECT_COLUMNS: &str = "d.document_id, d.organization_id, d.name, d.mime_type, d.size_bytes, d.object_store_key, d.checksum, d.metadata, d.deleted_at, d.created_at, d.updated_at";
+const DOCUMENT_SELECT_COLUMNS: &str = "d.document_id, d.organization_id, d.name, d.yrs_state, d.yrs_state_vector, d.content_text, d.content_html, d.metadata, d.deleted_at, d.created_at, d.updated_at";
 
 fn document_from_row(row: &tokio_postgres::Row) -> Document {
     let deleted_at: Option<DateTime<Utc>> = row.get(8);
@@ -17,10 +17,10 @@ fn document_from_row(row: &tokio_postgres::Row) -> Document {
         document_id: row.get(0),
         organization_id: row.get(1),
         name: row.get(2),
-        mime_type: row.get(3),
-        size_bytes: row.get(4),
-        object_store_key: row.get(5),
-        checksum: row.get(6),
+        yrs_state: row.get(3),
+        yrs_state_vector: row.get(4),
+        content_text: row.get(5),
+        content_html: row.get(6),
         metadata: row.get(7),
         deleted_at,
         created_at: Some(created_at),

@@ -3167,16 +3167,13 @@ name = "ponix_api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bytes",
  "chrono",
  "common",
  "garde",
- "hex",
  "ponix_ponix_community_neoeinstein-prost",
  "ponix_ponix_community_neoeinstein-tonic",
  "serde",
  "serde_json",
- "sha2",
  "tokio",
  "tokio-stream",
  "tokio-util",

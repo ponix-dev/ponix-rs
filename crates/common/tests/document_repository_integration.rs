@@ -86,11 +86,11 @@ fn make_create_input(id: &str, org_id: &str) -> CreateDocumentRepoInputWithId {
     CreateDocumentRepoInputWithId {
         document_id: id.to_string(),
         organization_id: org_id.to_string(),
-        name: "Manual.pdf".to_string(),
-        mime_type: "application/pdf".to_string(),
-        size_bytes: 1024,
-        object_store_key: format!("{}/{}/Manual.pdf", org_id, id),
-        checksum: "sha256-abc123".to_string(),
+        name: "Manual".to_string(),
+        yrs_state: vec![],
+        yrs_state_vector: vec![],
+        content_text: String::new(),
+        content_html: String::new(),
         metadata: serde_json::json!({"author": "test"}),
     }
 }
@@ -116,9 +116,9 @@ async fn test_document_crud_operations() {
     let created = doc_repo.create_document(create_input).await.unwrap();
     assert_eq!(created.document_id, "doc-crud-001");
     assert_eq!(created.organization_id, "org-crud-001");
-    assert_eq!(created.name, "Manual.pdf");
-    assert_eq!(created.mime_type, "application/pdf");
-    assert_eq!(created.size_bytes, 1024);
+    assert_eq!(created.name, "Manual");
+    assert!(created.yrs_state.is_empty());
+    assert!(created.yrs_state_vector.is_empty());
     assert_eq!(created.metadata, serde_json::json!({"author": "test"}));
     assert!(created.created_at.is_some());
     assert!(created.updated_at.is_some());
@@ -133,23 +133,17 @@ async fn test_document_crud_operations() {
     assert!(retrieved.is_some());
     let doc = retrieved.unwrap();
     assert_eq!(doc.document_id, "doc-crud-001");
-    assert_eq!(doc.checksum, "sha256-abc123");
+    assert!(doc.content_text.is_empty());
 
-    // Update name, file metadata, and custom metadata
+    // Update name and metadata
     let update_input = UpdateDocumentRepoInput {
         document_id: "doc-crud-001".to_string(),
         organization_id: "org-crud-001".to_string(),
-        name: Some("Updated Manual.pdf".to_string()),
-        mime_type: Some("application/octet-stream".to_string()),
-        size_bytes: Some(2048),
-        checksum: Some("sha256-updated".to_string()),
+        name: Some("Updated Manual".to_string()),
         metadata: Some(serde_json::json!({"author": "test", "version": 2})),
     };
     let updated = doc_repo.update_document(update_input).await.unwrap();
-    assert_eq!(updated.name, "Updated Manual.pdf");
-    assert_eq!(updated.mime_type, "application/octet-stream");
-    assert_eq!(updated.size_bytes, 2048);
-    assert_eq!(updated.checksum, "sha256-updated");
+    assert_eq!(updated.name, "Updated Manual");
     assert_eq!(
         updated.metadata,
         serde_json::json!({"author": "test", "version": 2})
@@ -202,28 +196,6 @@ async fn test_document_unique_constraint() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_document_unique_object_store_key() {
-    let (_container, doc_repo, org_repo) = setup_test_db().await;
-
-    create_org(&org_repo, "org-key-001").await;
-
-    let create_input = make_create_input("doc-key-001", "org-key-001");
-    doc_repo.create_document(create_input).await.unwrap();
-
-    // Different document_id but same object_store_key should fail
-    let mut duplicate_key_input = make_create_input("doc-key-002", "org-key-001");
-    duplicate_key_input.object_store_key = "org-key-001/doc-key-001/Manual.pdf".to_string();
-
-    let result = doc_repo.create_document(duplicate_key_input).await;
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        DomainError::DocumentAlreadyExists(_)
-    ));
-}
-
-#[tokio::test]
-#[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_document_foreign_key_organization() {
     let (_container, doc_repo, _org_repo) = setup_test_db().await;
 
@@ -247,8 +219,7 @@ async fn test_list_excludes_soft_deleted() {
     // Create 3 documents
     for i in 1..=3 {
         let mut input = make_create_input(&format!("doc-list-{}", i), "org-list-001");
-        input.name = format!("Document {}.pdf", i);
-        input.object_store_key = format!("org-list-001/doc-list-{}/file.pdf", i);
+        input.name = format!("Document {}", i);
         doc_repo.create_document(input).await.unwrap();
     }
 
@@ -315,9 +286,6 @@ async fn test_update_document_with_wrong_organization_returns_not_found() {
         document_id: "doc-update-001".to_string(),
         organization_id: "org-update-2".to_string(),
         name: Some("Hacked Name".to_string()),
-        mime_type: None,
-        size_bytes: None,
-        checksum: None,
         metadata: None,
     };
     let result = doc_repo.update_document(wrong_update).await;

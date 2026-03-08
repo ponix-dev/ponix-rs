@@ -2,16 +2,16 @@ use crate::domain::result::DomainResult;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
-/// Document entity representing metadata about a stored document
+/// Document entity representing a collaborative document with Yrs CRDT state
 #[derive(Debug, Clone, PartialEq)]
 pub struct Document {
     pub document_id: String,
     pub organization_id: String,
     pub name: String,
-    pub mime_type: String,
-    pub size_bytes: i64,
-    pub object_store_key: String,
-    pub checksum: String,
+    pub yrs_state: Vec<u8>,
+    pub yrs_state_vector: Vec<u8>,
+    pub content_text: String,
+    pub content_html: String,
     pub metadata: serde_json::Value,
     pub deleted_at: Option<DateTime<Utc>>,
     pub created_at: Option<DateTime<Utc>>,
@@ -24,10 +24,10 @@ pub struct CreateDocumentRepoInputWithId {
     pub document_id: String,
     pub organization_id: String,
     pub name: String,
-    pub mime_type: String,
-    pub size_bytes: i64,
-    pub object_store_key: String,
-    pub checksum: String,
+    pub yrs_state: Vec<u8>,
+    pub yrs_state_vector: Vec<u8>,
+    pub content_text: String,
+    pub content_html: String,
     pub metadata: serde_json::Value,
 }
 
@@ -44,9 +44,6 @@ pub struct UpdateDocumentRepoInput {
     pub document_id: String,
     pub organization_id: String,
     pub name: Option<String>,
-    pub mime_type: Option<String>,
-    pub size_bytes: Option<i64>,
-    pub checksum: Option<String>,
     pub metadata: Option<serde_json::Value>,
 }
 
@@ -68,7 +65,8 @@ pub struct ListDocumentsRepoInput {
 #[async_trait]
 pub trait DocumentRepository: Send + Sync {
     /// Create a new document
-    async fn create_document(&self, input: CreateDocumentRepoInputWithId) -> DomainResult<Document>;
+    async fn create_document(&self, input: CreateDocumentRepoInputWithId)
+        -> DomainResult<Document>;
 
     /// Get a document by ID and organization (excludes soft deleted)
     async fn get_document(&self, input: GetDocumentRepoInput) -> DomainResult<Option<Document>>;
