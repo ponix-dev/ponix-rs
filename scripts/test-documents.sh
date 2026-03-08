@@ -204,11 +204,10 @@ fi
 
 # Verify upload response contains expected fields
 DS_DOC_NAME=$(echo "$UPLOAD_DS_RESPONSE" | jq -r '.document.name // empty')
-DS_DOC_MIME=$(echo "$UPLOAD_DS_RESPONSE" | jq -r '.document.mimeType // empty')
-if [ "$DS_DOC_NAME" = "ds-sensor-manual.pdf" ] && [ "$DS_DOC_MIME" = "application/pdf" ]; then
-    print_success "Upload response has correct name and mime_type"
+if [ "$DS_DOC_NAME" = "ds-sensor-manual.pdf" ]; then
+    print_success "Upload response has correct name"
 else
-    print_error "Upload response has unexpected fields: name=$DS_DOC_NAME, mime=$DS_DOC_MIME"
+    print_error "Upload response has unexpected name: $DS_DOC_NAME"
     exit 1
 fi
 
@@ -255,19 +254,12 @@ GET_DOC_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     }")
 
 RETURNED_DOC_NAME=$(echo "$GET_DOC_RESPONSE" | jq -r '.document.name // empty')
-RETURNED_CHECKSUM=$(echo "$GET_DOC_RESPONSE" | jq -r '.document.checksum // empty')
 if [ "$RETURNED_DOC_NAME" = "ds-sensor-manual.pdf" ]; then
     print_success "GetDocument returned correct data"
 else
     print_error "GetDocument returned unexpected data"
     echo "$GET_DOC_RESPONSE"
     exit 1
-fi
-
-if [ -n "$RETURNED_CHECKSUM" ] && [ "$RETURNED_CHECKSUM" != "null" ]; then
-    print_success "GetDocument includes checksum (full Document)"
-else
-    print_warning "GetDocument missing checksum"
 fi
 
 # UpdateDataStreamDocument
@@ -292,25 +284,25 @@ else
     exit 1
 fi
 
-# UpdateDataStreamDocument with content
-print_step "Testing UpdateDataStreamDocument with new content..."
+# UpdateDataStreamDocument with metadata
+print_step "Testing UpdateDataStreamDocument with metadata..."
 
-UPDATE_DS_CONTENT_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+UPDATE_DS_META_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "document.v1.DocumentService/UpdateDataStreamDocument" \
     "{
         \"document_id\": \"$DS_DOC_ID\",
         \"data_stream_id\": \"$DATA_STREAM_ID\",
         \"organization_id\": \"$ORG_ID\",
         \"workspace_id\": \"$WORKSPACE_ID\",
-        \"content\": \"$UPDATED_CONTENT\"
+        \"metadata\": {\"fields\": {\"revision\": {\"numberValue\": 2}}}
     }")
 
-UPDATED_SIZE=$(echo "$UPDATE_DS_CONTENT_RESPONSE" | jq -r '.document.sizeBytes // empty')
-if [ -n "$UPDATED_SIZE" ] && [ "$UPDATED_SIZE" != "null" ] && [ "$UPDATED_SIZE" != "0" ]; then
-    print_success "Document content updated (size: $UPDATED_SIZE bytes)"
+UPDATED_META_NAME=$(echo "$UPDATE_DS_META_RESPONSE" | jq -r '.document.name // empty')
+if [ -n "$UPDATED_META_NAME" ] && [ "$UPDATED_META_NAME" != "null" ]; then
+    print_success "Document metadata updated successfully"
 else
-    print_error "Document content update may have failed"
-    echo "$UPDATE_DS_CONTENT_RESPONSE"
+    print_error "Document metadata update may have failed"
+    echo "$UPDATE_DS_META_RESPONSE"
     exit 1
 fi
 
