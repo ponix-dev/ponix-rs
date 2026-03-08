@@ -10,9 +10,9 @@ pub fn to_proto_document(doc: Document) -> ProtoDocument {
         document_id: doc.document_id,
         organization_id: doc.organization_id,
         name: doc.name,
-        mime_type: doc.mime_type,
-        size_bytes: doc.size_bytes,
-        checksum: doc.checksum,
+        mime_type: String::new(),
+        size_bytes: 0,
+        checksum: String::new(),
         metadata: json_value_to_prost_struct(&doc.metadata),
         created_at: datetime_to_timestamp(doc.created_at),
         updated_at: datetime_to_timestamp(doc.updated_at),
@@ -25,8 +25,8 @@ pub fn to_proto_document_summary(doc: Document) -> ProtoDocumentSummary {
         document_id: doc.document_id,
         organization_id: doc.organization_id,
         name: doc.name,
-        mime_type: doc.mime_type,
-        size_bytes: doc.size_bytes,
+        mime_type: String::new(),
+        size_bytes: 0,
         metadata: json_value_to_prost_struct(&doc.metadata),
         created_at: datetime_to_timestamp(doc.created_at),
         updated_at: datetime_to_timestamp(doc.updated_at),
@@ -126,11 +126,11 @@ mod tests {
         let doc = Document {
             document_id: "doc-123".to_string(),
             organization_id: "org-456".to_string(),
-            name: "test.pdf".to_string(),
-            mime_type: "application/pdf".to_string(),
-            size_bytes: 1024,
-            object_store_key: "org-456/doc-123/test.pdf".to_string(),
-            checksum: "abc123".to_string(),
+            name: "test doc".to_string(),
+            yrs_state: vec![1, 2, 3],
+            yrs_state_vector: vec![4, 5, 6],
+            content_text: "hello".to_string(),
+            content_html: "<p>hello</p>".to_string(),
             metadata: serde_json::json!({"author": "Alice"}),
             deleted_at: None,
             created_at: Some(now),
@@ -141,10 +141,10 @@ mod tests {
 
         assert_eq!(proto.document_id, "doc-123");
         assert_eq!(proto.organization_id, "org-456");
-        assert_eq!(proto.name, "test.pdf");
-        assert_eq!(proto.mime_type, "application/pdf");
-        assert_eq!(proto.size_bytes, 1024);
-        assert_eq!(proto.checksum, "abc123");
+        assert_eq!(proto.name, "test doc");
+        assert!(proto.mime_type.is_empty());
+        assert_eq!(proto.size_bytes, 0);
+        assert!(proto.checksum.is_empty());
         assert!(proto.metadata.is_some());
         assert!(proto.created_at.is_some());
         assert!(proto.updated_at.is_some());
@@ -154,16 +154,16 @@ mod tests {
     }
 
     #[test]
-    fn test_domain_document_to_proto_summary_excludes_checksum() {
+    fn test_domain_document_to_proto_summary() {
         let now = Utc::now();
         let doc = Document {
             document_id: "doc-123".to_string(),
             organization_id: "org-456".to_string(),
-            name: "test.pdf".to_string(),
-            mime_type: "application/pdf".to_string(),
-            size_bytes: 1024,
-            object_store_key: "org-456/doc-123/test.pdf".to_string(),
-            checksum: "abc123".to_string(),
+            name: "test doc".to_string(),
+            yrs_state: vec![],
+            yrs_state_vector: vec![],
+            content_text: String::new(),
+            content_html: String::new(),
             metadata: serde_json::json!({"author": "Alice"}),
             deleted_at: None,
             created_at: Some(now),
@@ -174,9 +174,9 @@ mod tests {
 
         assert_eq!(summary.document_id, "doc-123");
         assert_eq!(summary.organization_id, "org-456");
-        assert_eq!(summary.name, "test.pdf");
-        assert_eq!(summary.mime_type, "application/pdf");
-        assert_eq!(summary.size_bytes, 1024);
+        assert_eq!(summary.name, "test doc");
+        assert!(summary.mime_type.is_empty());
+        assert_eq!(summary.size_bytes, 0);
         assert!(summary.metadata.is_some());
         assert!(summary.created_at.is_some());
         assert!(summary.updated_at.is_some());

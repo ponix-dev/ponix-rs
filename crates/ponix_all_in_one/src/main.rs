@@ -70,7 +70,7 @@ async fn main() {
     debug!("Configuration: {:?}", config);
 
     // Initialize shared dependencies
-    let (postgres_repos, postgres_client, clickhouse_client, nats_client, object_store_client) =
+    let (postgres_repos, postgres_client, clickhouse_client, nats_client, _object_store_client) =
         match initialize_shared_dependencies(&config).await {
             Ok(deps) => deps,
             Err(e) => {
@@ -144,7 +144,6 @@ async fn main() {
     ));
     let document_service = Arc::new(DocumentService::new(
         postgres_repos.document.clone(),
-        Arc::new(object_store_client),
         postgres_repos.document_association.clone(),
         postgres_repos.organization.clone(),
         authorization_service.clone(),
