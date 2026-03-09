@@ -13,7 +13,6 @@ use common::auth::{
 use common::clickhouse::ClickHouseClient;
 use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
-use common::nats::NatsObjectStoreClient;
 use common::postgres::create_postgres_authorization_adapter;
 use common::postgres::{
     PostgresClient, PostgresDataStreamDefinitionRepository, PostgresDataStreamRepository,
@@ -70,7 +69,7 @@ async fn main() {
     debug!("Configuration: {:?}", config);
 
     // Initialize shared dependencies
-    let (postgres_repos, postgres_client, clickhouse_client, nats_client, _object_store_client) =
+    let (postgres_repos, postgres_client, clickhouse_client, nats_client) =
         match initialize_shared_dependencies(&config).await {
             Ok(deps) => deps,
             Err(e) => {
@@ -364,7 +363,6 @@ async fn initialize_shared_dependencies(
     PostgresClient,
     ClickHouseClient,
     Arc<NatsClient>,
-    NatsObjectStoreClient,
 )> {
     // PostgreSQL initialization
     info!("Initializing PostgreSQL...");
@@ -402,18 +400,11 @@ async fn initialize_shared_dependencies(
     );
     ensure_nats_streams(&nats_client, config).await?;
 
-    // Initialize NATS Object Store for document storage
-    info!("Initializing NATS Object Store...");
-    let object_store_client = nats_client
-        .create_object_store_client(&config.nats_object_store_bucket)
-        .await?;
-
     Ok((
         postgres_repos,
         postgres_client,
         clickhouse_client,
         nats_client,
-        object_store_client,
     ))
 }
 
