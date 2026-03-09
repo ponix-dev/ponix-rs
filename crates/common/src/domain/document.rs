@@ -71,6 +71,10 @@ pub trait DocumentRepository: Send + Sync {
     /// Get a document by ID and organization (excludes soft deleted)
     async fn get_document(&self, input: GetDocumentRepoInput) -> DomainResult<Option<Document>>;
 
+    /// Get a document by ID only, without organization scoping (excludes soft deleted).
+    /// Used by the collaboration server where organization context is not available.
+    async fn get_document_by_id(&self, document_id: &str) -> DomainResult<Option<Document>>;
+
     /// Update a document's name and/or metadata
     async fn update_document(&self, input: UpdateDocumentRepoInput) -> DomainResult<Document>;
 

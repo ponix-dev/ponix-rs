@@ -9,6 +9,7 @@ members = [
     "crates/analytics_worker",
     "crates/init_process",
     "crates/gateway_orchestrator",
+    "crates/collaboration_server",
 ]
 resolver = "2"
 

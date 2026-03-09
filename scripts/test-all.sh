@@ -67,6 +67,9 @@ run_test "test-multi-contract-pipeline.sh" "Multi-Contract Pipeline Test"
 # Infrastructure tests
 run_test "test-document-updates-stream.sh" "Document Updates Stream Test"
 
+# Collaboration server tests
+run_test "test-collaboration.sh" "Collaboration Server Test"
+
 # Summary
 echo -e "${BLUE}==========================================${NC}"
 echo -e "${BLUE}              Test Summary               ${NC}"

@@ -273,7 +273,7 @@ async fn initialize_services(
     let nats_client = Arc::new(NatsClient::connect(nats_url, Duration::from_secs(30)).await?);
 
     // Ensure streams exist (JetStream must be enabled in NATS)
-    use async_nats::jetstream::stream::Config as StreamConfig;
+    use common::nats::StreamConfig;
     nats_client
         .ensure_stream(StreamConfig {
             name: "raw_envelopes".to_string(),

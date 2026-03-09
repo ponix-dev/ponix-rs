@@ -169,6 +169,35 @@ impl DocumentRepository for PostgresDocumentRepository {
         Ok(document)
     }
 
+    #[instrument(skip(self), fields(document_id = %document_id))]
+    async fn get_document_by_id(&self, document_id: &str) -> DomainResult<Option<Document>> {
+        debug!(document_id = %document_id, "getting document by id from database");
+
+        let conn = self
+            .client
+            .get_connection()
+            .await
+            .map_err(DomainError::RepositoryError)?;
+
+        let row = conn
+            .query_opt(
+                &format!(
+                    "SELECT {} FROM documents WHERE document_id = $1 AND deleted_at IS NULL",
+                    SELECT_COLUMNS
+                ),
+                &[&document_id],
+            )
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        let document = row.map(|r| {
+            let doc_row = row_from_pg(&r);
+            doc_row.into()
+        });
+
+        Ok(document)
+    }
+
     #[instrument(skip(self, input), fields(document_id = %input.document_id, organization_id = %input.organization_id))]
     async fn update_document(&self, input: UpdateDocumentRepoInput) -> DomainResult<Document> {
         debug!(document_id = %input.document_id, organization_id = %input.organization_id, "updating document in database");

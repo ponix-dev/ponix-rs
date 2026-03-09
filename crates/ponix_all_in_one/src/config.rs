@@ -155,6 +155,19 @@ pub struct ServiceConfig {
     #[serde(default = "default_grpc_cors_allowed_origins")]
     pub grpc_cors_allowed_origins: String,
 
+    // Collaboration server configuration
+    /// Collaboration server host
+    #[serde(default = "default_collab_host")]
+    pub collab_host: String,
+
+    /// Collaboration server port
+    #[serde(default = "default_collab_port")]
+    pub collab_port: u16,
+
+    /// Collaboration server CORS allowed origins
+    #[serde(default = "default_collab_cors_allowed_origins")]
+    pub collab_cors_allowed_origins: String,
+
     // JWT configuration
     /// JWT signing secret (required for production)
     #[serde(default = "default_jwt_secret")]
@@ -410,6 +423,19 @@ fn default_postgres_migrations_dir() -> String {
 
 fn default_postgres_goose_binary_path() -> String {
     "goose".to_string()
+}
+
+// Collaboration server defaults
+fn default_collab_host() -> String {
+    "0.0.0.0".to_string()
+}
+
+fn default_collab_port() -> u16 {
+    50052
+}
+
+fn default_collab_cors_allowed_origins() -> String {
+    "*".to_string()
 }
 
 // gRPC defaults

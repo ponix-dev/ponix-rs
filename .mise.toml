@@ -4,6 +4,7 @@ tilt = "latest"
 rust = "latest"
 grpcurl = "latest"
 jq = "latest"
+websocat = "latest"
 # Cross-platform tool installs
 "github:pressly/goose" = "latest"
 "github:nats-io/natscli" = "latest"
