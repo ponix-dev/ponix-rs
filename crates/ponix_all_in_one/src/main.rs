@@ -6,6 +6,9 @@ use cdc_worker::domain::{
     CdcConfig, DataStreamConverter, DataStreamDefinitionConverter, EntityConfig, GatewayConverter,
     OrganizationConverter, UserConverter, WorkspaceConverter,
 };
+use collaboration_server::CollaborationServerConfig;
+use collaboration_server::nats::NatsDocumentRelay;
+use collaboration_server::CollaborationServer;
 use common::auth::{
     Argon2PasswordService, CasbinAuthorizationService, CryptoRefreshTokenProvider,
     JwtAuthTokenProvider, JwtConfig,
@@ -123,6 +126,7 @@ async fn main() {
     let jwt_config = JwtConfig::new(config.jwt_secret.clone(), config.jwt_expiration_hours);
     let auth_token_provider: Arc<dyn common::auth::AuthTokenProvider> =
         Arc::new(JwtAuthTokenProvider::new(jwt_config));
+    let auth_token_provider_for_collab = auth_token_provider.clone();
     let password_service: Arc<dyn common::auth::PasswordService> =
         Arc::new(Argon2PasswordService::new());
     let refresh_token_provider: Arc<dyn common::auth::RefreshTokenProvider> =
@@ -296,6 +300,26 @@ async fn main() {
         }
     };
 
+    // Create collaboration server
+    let nats_relay = Arc::new(NatsDocumentRelay::new(
+        nats_client.create_publisher_client(),
+        nats_client.jetstream().clone(),
+    ));
+
+    let collab_config = CollaborationServerConfig {
+        host: config.collab_host.clone(),
+        port: config.collab_port,
+        cors_allowed_origins: config.collab_cors_allowed_origins.clone(),
+        document_updates_stream: config.nats_document_updates_stream.clone(),
+    };
+
+    let collaboration_server = CollaborationServer::new(
+        collab_config,
+        postgres_repos.document.clone() as Arc<dyn common::domain::DocumentRepository>,
+        auth_token_provider_for_collab,
+        nats_relay,
+    );
+
     // Build runner with all processes
     let mut runner = Runner::new();
 
@@ -310,6 +334,12 @@ async fn main() {
 
     // Add CDC Worker process (handles Postgres → NATS CDC events)
     runner = runner.with_named_process("cdc_worker", cdc_worker.into_runner_process());
+
+    // Add Collaboration Server process
+    runner = runner.with_named_process(
+        "collaboration_server",
+        collaboration_server.into_runner_process(),
+    );
 
     // Add Analytics Ingester processes
     let analytics_processes = analytics_ingester.into_runner_processes();

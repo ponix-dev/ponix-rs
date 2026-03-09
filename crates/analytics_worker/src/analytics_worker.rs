@@ -12,7 +12,6 @@ use common::nats::{
 use common::postgres::{PostgresDataStreamRepository, PostgresOrganizationRepository};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
 use tracing::info;
 
@@ -158,18 +157,7 @@ impl AnalyticsWorker {
         })
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn into_runner_processes(
-        self,
-    ) -> Vec<
-        Box<
-            dyn FnOnce(
-                    CancellationToken,
-                ) -> std::pin::Pin<
-                    Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>,
-                > + Send,
-        >,
-    > {
+    pub fn into_runner_processes(self) -> Vec<ponix_runner::AppProcess> {
         vec![
             // Processed envelope consumer
             Box::new({

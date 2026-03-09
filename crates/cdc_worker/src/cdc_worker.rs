@@ -1,7 +1,6 @@
 use crate::domain::{CdcConfig, CdcProcess, EntityConfig};
 use common::nats::NatsClient;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 pub struct CdcWorkerConfig {
@@ -25,16 +24,7 @@ impl CdcWorker {
         }
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn into_runner_process(
-        self,
-    ) -> Box<
-        dyn FnOnce(
-                CancellationToken,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>,
-            > + Send,
-    > {
+    pub fn into_runner_process(self) -> ponix_runner::AppProcess {
         Box::new({
             let cdc_config = self.cdc_config;
             let nats_client = self.nats_client;
