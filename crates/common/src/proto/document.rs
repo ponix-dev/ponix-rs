@@ -123,14 +123,15 @@ mod tests {
     #[test]
     fn test_domain_document_to_proto() {
         let now = Utc::now();
+        let (yrs_state, yrs_state_vector) = crate::yrs::create_empty_document();
         let doc = Document {
             document_id: "doc-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "test doc".to_string(),
-            yrs_state: vec![1, 2, 3],
-            yrs_state_vector: vec![4, 5, 6],
-            content_text: "hello".to_string(),
-            content_html: "<p>hello</p>".to_string(),
+            yrs_state,
+            yrs_state_vector,
+            content_text: String::new(),
+            content_html: String::new(),
             metadata: serde_json::json!({"author": "Alice"}),
             deleted_at: None,
             created_at: Some(now),
@@ -156,12 +157,13 @@ mod tests {
     #[test]
     fn test_domain_document_to_proto_summary() {
         let now = Utc::now();
+        let (yrs_state, yrs_state_vector) = crate::yrs::create_empty_document();
         let doc = Document {
             document_id: "doc-123".to_string(),
             organization_id: "org-456".to_string(),
             name: "test doc".to_string(),
-            yrs_state: vec![],
-            yrs_state_vector: vec![],
+            yrs_state,
+            yrs_state_vector,
             content_text: String::new(),
             content_html: String::new(),
             metadata: serde_json::json!({"author": "Alice"}),

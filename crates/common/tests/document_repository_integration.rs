@@ -83,12 +83,13 @@ async fn setup_test_db() -> (
 }
 
 fn make_create_input(id: &str, org_id: &str) -> CreateDocumentRepoInputWithId {
+    let (yrs_state, yrs_state_vector) = common::yrs::create_empty_document();
     CreateDocumentRepoInputWithId {
         document_id: id.to_string(),
         organization_id: org_id.to_string(),
         name: "Manual".to_string(),
-        yrs_state: vec![],
-        yrs_state_vector: vec![],
+        yrs_state,
+        yrs_state_vector,
         content_text: String::new(),
         content_html: String::new(),
         metadata: serde_json::json!({"author": "test"}),
@@ -117,8 +118,8 @@ async fn test_document_crud_operations() {
     assert_eq!(created.document_id, "doc-crud-001");
     assert_eq!(created.organization_id, "org-crud-001");
     assert_eq!(created.name, "Manual");
-    assert!(created.yrs_state.is_empty());
-    assert!(created.yrs_state_vector.is_empty());
+    assert!(!created.yrs_state.is_empty());
+    assert!(!created.yrs_state_vector.is_empty());
     assert_eq!(created.metadata, serde_json::json!({"author": "test"}));
     assert!(created.created_at.is_some());
     assert!(created.updated_at.is_some());
@@ -329,4 +330,42 @@ async fn test_delete_document_with_wrong_organization_returns_not_found() {
         result.is_some(),
         "Document should still exist after failed cross-org delete"
     );
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_document_yrs_state_roundtrip() {
+    let (_container, doc_repo, org_repo) = setup_test_db().await;
+    create_org(&org_repo, "org-yrs-001").await;
+
+    let (original_state, original_sv) = common::yrs::create_empty_document();
+    let create_input = CreateDocumentRepoInputWithId {
+        document_id: "doc-yrs-001".to_string(),
+        organization_id: "org-yrs-001".to_string(),
+        name: "Yrs Test".to_string(),
+        yrs_state: original_state.clone(),
+        yrs_state_vector: original_sv.clone(),
+        content_text: String::new(),
+        content_html: String::new(),
+        metadata: serde_json::json!({}),
+    };
+
+    doc_repo.create_document(create_input).await.unwrap();
+
+    let get_input = GetDocumentRepoInput {
+        document_id: "doc-yrs-001".to_string(),
+        organization_id: "org-yrs-001".to_string(),
+    };
+    let doc = doc_repo.get_document(get_input).await.unwrap().unwrap();
+
+    assert_eq!(
+        doc.yrs_state, original_state,
+        "yrs_state should round-trip through PostgreSQL"
+    );
+    assert_eq!(
+        doc.yrs_state_vector, original_sv,
+        "yrs_state_vector should round-trip through PostgreSQL"
+    );
+    assert!(doc.content_text.is_empty());
+    assert!(doc.content_html.is_empty());
 }

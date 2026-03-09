@@ -293,14 +293,15 @@ mod tests {
     #[test]
     fn test_document_row_to_document_conversion() {
         let now = Utc::now();
+        let (yrs_state, yrs_state_vector) = crate::yrs::create_empty_document();
         let row = DocumentRow {
             document_id: "doc-001".to_string(),
             organization_id: "org-001".to_string(),
             name: "Manual".to_string(),
-            yrs_state: vec![1, 2, 3],
-            yrs_state_vector: vec![4, 5, 6],
-            content_text: "hello".to_string(),
-            content_html: "<p>hello</p>".to_string(),
+            yrs_state: yrs_state.clone(),
+            yrs_state_vector: yrs_state_vector.clone(),
+            content_text: String::new(),
+            content_html: String::new(),
             metadata: serde_json::json!({"author": "test"}),
             deleted_at: None,
             created_at: now,
@@ -312,10 +313,10 @@ mod tests {
         assert_eq!(document.document_id, "doc-001");
         assert_eq!(document.organization_id, "org-001");
         assert_eq!(document.name, "Manual");
-        assert_eq!(document.yrs_state, vec![1, 2, 3]);
-        assert_eq!(document.yrs_state_vector, vec![4, 5, 6]);
-        assert_eq!(document.content_text, "hello");
-        assert_eq!(document.content_html, "<p>hello</p>");
+        assert_eq!(document.yrs_state, yrs_state);
+        assert_eq!(document.yrs_state_vector, yrs_state_vector);
+        assert!(document.content_text.is_empty());
+        assert!(document.content_html.is_empty());
         assert_eq!(document.metadata, serde_json::json!({"author": "test"}));
         assert!(document.deleted_at.is_none());
         assert_eq!(document.created_at, Some(now));
@@ -325,12 +326,13 @@ mod tests {
     #[test]
     fn test_document_row_with_deleted_at() {
         let now = Utc::now();
+        let (yrs_state, yrs_state_vector) = crate::yrs::create_empty_document();
         let row = DocumentRow {
             document_id: "doc-002".to_string(),
             organization_id: "org-001".to_string(),
             name: "Deleted".to_string(),
-            yrs_state: vec![],
-            yrs_state_vector: vec![],
+            yrs_state,
+            yrs_state_vector,
             content_text: String::new(),
             content_html: String::new(),
             metadata: serde_json::json!({}),

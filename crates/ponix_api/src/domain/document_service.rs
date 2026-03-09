@@ -139,12 +139,14 @@ impl DocumentService {
 
         let document_id = xid::new().to_string();
 
+        let (yrs_state, yrs_state_vector) = common::yrs::create_empty_document();
+
         let repo_input = CreateDocumentRepoInputWithId {
             document_id,
             organization_id: request.organization_id,
             name: request.name,
-            yrs_state: vec![],
-            yrs_state_vector: vec![],
+            yrs_state,
+            yrs_state_vector,
             content_text: String::new(),
             content_html: String::new(),
             metadata: request.metadata,
@@ -522,12 +524,13 @@ mod tests {
     }
 
     fn create_test_document(document_id: &str) -> Document {
+        let (yrs_state, yrs_state_vector) = common::yrs::create_empty_document();
         Document {
             document_id: document_id.to_string(),
             organization_id: TEST_ORG_ID.to_string(),
             name: "test doc".to_string(),
-            yrs_state: vec![],
-            yrs_state_vector: vec![],
+            yrs_state,
+            yrs_state_vector,
             content_text: String::new(),
             content_html: String::new(),
             metadata: serde_json::json!({}),
@@ -579,8 +582,10 @@ mod tests {
         assert!(!doc.document_id.is_empty());
         assert_eq!(doc.organization_id, TEST_ORG_ID);
         assert_eq!(doc.name, "test doc");
-        assert!(doc.yrs_state.is_empty());
-        assert!(doc.yrs_state_vector.is_empty());
+        assert!(!doc.yrs_state.is_empty());
+        assert!(!doc.yrs_state_vector.is_empty());
+        assert!(doc.content_text.is_empty());
+        assert!(doc.content_html.is_empty());
     }
 
     #[tokio::test]
@@ -720,12 +725,13 @@ mod tests {
             .returning(move |_| Ok(Some(existing_doc.clone())));
 
         mock_doc_repo.expect_update_document().returning(|input| {
+            let (yrs_state, yrs_state_vector) = common::yrs::create_empty_document();
             Ok(Document {
                 document_id: input.document_id,
                 organization_id: input.organization_id,
                 name: input.name.unwrap_or_else(|| "test doc".to_string()),
-                yrs_state: vec![],
-                yrs_state_vector: vec![],
+                yrs_state,
+                yrs_state_vector,
                 content_text: String::new(),
                 content_html: String::new(),
                 metadata: serde_json::json!({}),
