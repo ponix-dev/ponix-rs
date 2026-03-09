@@ -229,6 +229,18 @@ else
     exit 1
 fi
 
+# Verify list returns full Document (not DocumentSummary) — should have timestamps
+LIST_DOC_HAS_CREATED=$(echo "$LIST_DS_RESPONSE" | jq '.documents[0] | has("createdAt")')
+LIST_DOC_HAS_UPDATED=$(echo "$LIST_DS_RESPONSE" | jq '.documents[0] | has("updatedAt")')
+LIST_DOC_NO_CHECKSUM=$(echo "$LIST_DS_RESPONSE" | jq '.documents[0] | has("checksum")')
+if [ "$LIST_DOC_HAS_CREATED" = "true" ] && [ "$LIST_DOC_HAS_UPDATED" = "true" ] && [ "$LIST_DOC_NO_CHECKSUM" = "false" ]; then
+    print_success "List response returns full Document type (no checksum, has timestamps)"
+else
+    print_error "List response has unexpected shape"
+    echo "$LIST_DS_RESPONSE" | jq '.documents[0] | keys'
+    exit 1
+fi
+
 # GetDocument (standalone)
 print_step "Testing GetDocument (happy path)..."
 
@@ -241,10 +253,60 @@ GET_DOC_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
 
 RETURNED_DOC_NAME=$(echo "$GET_DOC_RESPONSE" | jq -r '.document.name // empty')
 if [ "$RETURNED_DOC_NAME" = "ds-sensor-manual" ]; then
-    print_success "GetDocument returned correct data"
+    print_success "GetDocument returned correct name"
 else
-    print_error "GetDocument returned unexpected data"
+    print_error "GetDocument returned unexpected name"
     echo "$GET_DOC_RESPONSE"
+    exit 1
+fi
+
+# Verify new Yrs-based fields are present in the Document response
+print_step "Verifying Document response shape (new fields present, old fields absent)..."
+
+# New fields: contentText and contentHtml should exist (empty strings for new docs, but present)
+HAS_CONTENT_TEXT=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("contentText")')
+HAS_CONTENT_HTML=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("contentHtml")')
+
+# Proto3 omits default values (empty strings) from JSON — so these fields won't appear
+# until the snapshotter populates them. What matters is the OLD fields are gone.
+
+# Old fields must NOT be present
+HAS_MIME_TYPE=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("mimeType")')
+HAS_SIZE_BYTES=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("sizeBytes")')
+HAS_CHECKSUM=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("checksum")')
+
+if [ "$HAS_MIME_TYPE" = "false" ]; then
+    print_success "Document does not contain mimeType (removed)"
+else
+    print_error "Document still contains mimeType — proto not updated"
+    exit 1
+fi
+
+if [ "$HAS_SIZE_BYTES" = "false" ]; then
+    print_success "Document does not contain sizeBytes (removed)"
+else
+    print_error "Document still contains sizeBytes — proto not updated"
+    exit 1
+fi
+
+if [ "$HAS_CHECKSUM" = "false" ]; then
+    print_success "Document does not contain checksum (removed)"
+else
+    print_error "Document still contains checksum — proto not updated"
+    exit 1
+fi
+
+# Verify required fields are present
+HAS_DOC_ID=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("documentId")')
+HAS_ORG_ID=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("organizationId")')
+HAS_CREATED_AT=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("createdAt")')
+HAS_UPDATED_AT=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("updatedAt")')
+
+if [ "$HAS_DOC_ID" = "true" ] && [ "$HAS_ORG_ID" = "true" ] && [ "$HAS_CREATED_AT" = "true" ] && [ "$HAS_UPDATED_AT" = "true" ]; then
+    print_success "Document contains all expected fields (documentId, organizationId, createdAt, updatedAt)"
+else
+    print_error "Document missing expected fields"
+    echo "$GET_DOC_RESPONSE" | jq '.document | keys'
     exit 1
 fi
 
