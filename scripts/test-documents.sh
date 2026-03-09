@@ -443,6 +443,18 @@ else
     exit 1
 fi
 
+# Verify list returns full Document (not DocumentSummary)
+LIST_DEF_HAS_CREATED=$(echo "$LIST_DEF_RESPONSE" | jq '.documents[0] | has("createdAt")')
+LIST_DEF_NO_CHECKSUM=$(echo "$LIST_DEF_RESPONSE" | jq '.documents[0] | has("checksum")')
+LIST_DEF_NO_MIME=$(echo "$LIST_DEF_RESPONSE" | jq '.documents[0] | has("mimeType")')
+if [ "$LIST_DEF_HAS_CREATED" = "true" ] && [ "$LIST_DEF_NO_CHECKSUM" = "false" ] && [ "$LIST_DEF_NO_MIME" = "false" ]; then
+    print_success "Definition list returns full Document type (no checksum/mimeType)"
+else
+    print_error "Definition list response has unexpected shape"
+    echo "$LIST_DEF_RESPONSE" | jq '.documents[0] | keys'
+    exit 1
+fi
+
 # UpdateDefinitionDocument
 print_step "Testing UpdateDefinitionDocument (happy path)..."
 
@@ -550,6 +562,18 @@ if [ "$WS_DOC_COUNT" -ge 1 ]; then
 else
     print_error "ListWorkspaceDocuments returned no documents"
     echo "$LIST_WS_RESPONSE"
+    exit 1
+fi
+
+# Verify list returns full Document (not DocumentSummary)
+LIST_WS_HAS_CREATED=$(echo "$LIST_WS_RESPONSE" | jq '.documents[0] | has("createdAt")')
+LIST_WS_NO_CHECKSUM=$(echo "$LIST_WS_RESPONSE" | jq '.documents[0] | has("checksum")')
+LIST_WS_NO_MIME=$(echo "$LIST_WS_RESPONSE" | jq '.documents[0] | has("mimeType")')
+if [ "$LIST_WS_HAS_CREATED" = "true" ] && [ "$LIST_WS_NO_CHECKSUM" = "false" ] && [ "$LIST_WS_NO_MIME" = "false" ]; then
+    print_success "Workspace list returns full Document type (no checksum/mimeType)"
+else
+    print_error "Workspace list response has unexpected shape"
+    echo "$LIST_WS_RESPONSE" | jq '.documents[0] | keys'
     exit 1
 fi
 
