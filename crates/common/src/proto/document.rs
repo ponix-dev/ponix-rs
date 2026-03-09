@@ -1,7 +1,6 @@
 use crate::domain::Document;
 use chrono::{DateTime, Utc};
 use ponix_proto_prost::document::v1::Document as ProtoDocument;
-use ponix_proto_prost::document::v1::DocumentSummary as ProtoDocumentSummary;
 use prost_types::{value::Kind, ListValue, Struct, Timestamp, Value};
 
 /// Convert domain Document to protobuf Document
@@ -10,24 +9,9 @@ pub fn to_proto_document(doc: Document) -> ProtoDocument {
         document_id: doc.document_id,
         organization_id: doc.organization_id,
         name: doc.name,
-        mime_type: String::new(),
-        size_bytes: 0,
-        checksum: String::new(),
         metadata: json_value_to_prost_struct(&doc.metadata),
-        created_at: datetime_to_timestamp(doc.created_at),
-        updated_at: datetime_to_timestamp(doc.updated_at),
-    }
-}
-
-/// Convert domain Document to protobuf DocumentSummary (excludes checksum)
-pub fn to_proto_document_summary(doc: Document) -> ProtoDocumentSummary {
-    ProtoDocumentSummary {
-        document_id: doc.document_id,
-        organization_id: doc.organization_id,
-        name: doc.name,
-        mime_type: String::new(),
-        size_bytes: 0,
-        metadata: json_value_to_prost_struct(&doc.metadata),
+        content_text: doc.content_text,
+        content_html: doc.content_html,
         created_at: datetime_to_timestamp(doc.created_at),
         updated_at: datetime_to_timestamp(doc.updated_at),
     }
@@ -130,8 +114,8 @@ mod tests {
             name: "test doc".to_string(),
             yrs_state,
             yrs_state_vector,
-            content_text: String::new(),
-            content_html: String::new(),
+            content_text: "hello world".to_string(),
+            content_html: "<p>hello world</p>".to_string(),
             metadata: serde_json::json!({"author": "Alice"}),
             deleted_at: None,
             created_at: Some(now),
@@ -143,45 +127,14 @@ mod tests {
         assert_eq!(proto.document_id, "doc-123");
         assert_eq!(proto.organization_id, "org-456");
         assert_eq!(proto.name, "test doc");
-        assert!(proto.mime_type.is_empty());
-        assert_eq!(proto.size_bytes, 0);
-        assert!(proto.checksum.is_empty());
+        assert_eq!(proto.content_text, "hello world");
+        assert_eq!(proto.content_html, "<p>hello world</p>");
         assert!(proto.metadata.is_some());
         assert!(proto.created_at.is_some());
         assert!(proto.updated_at.is_some());
 
         let metadata = proto.metadata.unwrap();
         assert!(metadata.fields.contains_key("author"));
-    }
-
-    #[test]
-    fn test_domain_document_to_proto_summary() {
-        let now = Utc::now();
-        let (yrs_state, yrs_state_vector) = crate::yrs::create_empty_document();
-        let doc = Document {
-            document_id: "doc-123".to_string(),
-            organization_id: "org-456".to_string(),
-            name: "test doc".to_string(),
-            yrs_state,
-            yrs_state_vector,
-            content_text: String::new(),
-            content_html: String::new(),
-            metadata: serde_json::json!({"author": "Alice"}),
-            deleted_at: None,
-            created_at: Some(now),
-            updated_at: Some(now),
-        };
-
-        let summary = to_proto_document_summary(doc);
-
-        assert_eq!(summary.document_id, "doc-123");
-        assert_eq!(summary.organization_id, "org-456");
-        assert_eq!(summary.name, "test doc");
-        assert!(summary.mime_type.is_empty());
-        assert_eq!(summary.size_bytes, 0);
-        assert!(summary.metadata.is_some());
-        assert!(summary.created_at.is_some());
-        assert!(summary.updated_at.is_some());
     }
 
     #[test]

@@ -99,10 +99,6 @@ if [ -z "$DATA_STREAM_ID" ] || [ "$DATA_STREAM_ID" = "null" ]; then
 fi
 print_success "Data stream created: $DATA_STREAM_ID"
 
-# Base64-encoded test content ("Hello, Ponix!" in base64)
-TEST_CONTENT=$(echo -n "Hello, Ponix!" | base64)
-UPDATED_CONTENT=$(echo -n "Updated content for Ponix!" | base64)
-
 # ============================================
 # AGE GRAPH VALIDATION HELPERS
 # ============================================
@@ -179,41 +175,39 @@ fi
 # DATA STREAM DOCUMENT TESTS
 # ============================================
 
-# UploadDataStreamDocument
-print_step "Testing UploadDataStreamDocument (happy path)..."
+# CreateDataStreamDocument
+print_step "Testing CreateDataStreamDocument (happy path)..."
 
-UPLOAD_DS_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "document.v1.DocumentService/UploadDataStreamDocument" \
+CREATE_DS_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "document.v1.DocumentService/CreateDataStreamDocument" \
     "{
         \"data_stream_id\": \"$DATA_STREAM_ID\",
         \"organization_id\": \"$ORG_ID\",
         \"workspace_id\": \"$WORKSPACE_ID\",
-        \"name\": \"ds-sensor-manual.pdf\",
-        \"mime_type\": \"application/pdf\",
-        \"content\": \"$TEST_CONTENT\"
+        \"name\": \"ds-sensor-manual\"
     }")
 
-DS_DOC_ID=$(echo "$UPLOAD_DS_RESPONSE" | jq -r '.document.documentId // empty')
+DS_DOC_ID=$(echo "$CREATE_DS_RESPONSE" | jq -r '.document.documentId // empty')
 if [ -n "$DS_DOC_ID" ] && [ "$DS_DOC_ID" != "null" ]; then
-    print_success "Data stream document uploaded: $DS_DOC_ID"
+    print_success "Data stream document created: $DS_DOC_ID"
 else
-    print_error "Failed to upload data stream document"
-    echo "$UPLOAD_DS_RESPONSE"
+    print_error "Failed to create data stream document"
+    echo "$CREATE_DS_RESPONSE"
     exit 1
 fi
 
-# Verify upload response contains expected fields
-DS_DOC_NAME=$(echo "$UPLOAD_DS_RESPONSE" | jq -r '.document.name // empty')
-if [ "$DS_DOC_NAME" = "ds-sensor-manual.pdf" ]; then
-    print_success "Upload response has correct name"
+# Verify create response contains expected fields
+DS_DOC_NAME=$(echo "$CREATE_DS_RESPONSE" | jq -r '.document.name // empty')
+if [ "$DS_DOC_NAME" = "ds-sensor-manual" ]; then
+    print_success "Create response has correct name"
 else
-    print_error "Upload response has unexpected name: $DS_DOC_NAME"
+    print_error "Create response has unexpected name: $DS_DOC_NAME"
     exit 1
 fi
 
 # Verify AGE graph edge created for data stream
 print_step "Verifying AGE graph edge: DataStream -> Document..."
-verify_age_edge_exists "DataStream" "$DATA_STREAM_ID" "$DS_DOC_ID" "upload data stream"
+verify_age_edge_exists "DataStream" "$DATA_STREAM_ID" "$DS_DOC_ID" "create data stream"
 
 # ListDataStreamDocuments
 print_step "Testing ListDataStreamDocuments (happy path)..."
@@ -235,12 +229,16 @@ else
     exit 1
 fi
 
-# Verify list returns DocumentSummary (no checksum field)
-HAS_CHECKSUM=$(echo "$LIST_DS_RESPONSE" | jq '.documents[0] | has("checksum")')
-if [ "$HAS_CHECKSUM" = "false" ]; then
-    print_success "List response uses DocumentSummary (no checksum)"
+# Verify list returns full Document (not DocumentSummary) — should have timestamps
+LIST_DOC_HAS_CREATED=$(echo "$LIST_DS_RESPONSE" | jq '.documents[0] | has("createdAt")')
+LIST_DOC_HAS_UPDATED=$(echo "$LIST_DS_RESPONSE" | jq '.documents[0] | has("updatedAt")')
+LIST_DOC_NO_CHECKSUM=$(echo "$LIST_DS_RESPONSE" | jq '.documents[0] | has("checksum")')
+if [ "$LIST_DOC_HAS_CREATED" = "true" ] && [ "$LIST_DOC_HAS_UPDATED" = "true" ] && [ "$LIST_DOC_NO_CHECKSUM" = "false" ]; then
+    print_success "List response returns full Document type (no checksum, has timestamps)"
 else
-    print_warning "List response may include checksum field"
+    print_error "List response has unexpected shape"
+    echo "$LIST_DS_RESPONSE" | jq '.documents[0] | keys'
+    exit 1
 fi
 
 # GetDocument (standalone)
@@ -254,11 +252,61 @@ GET_DOC_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     }")
 
 RETURNED_DOC_NAME=$(echo "$GET_DOC_RESPONSE" | jq -r '.document.name // empty')
-if [ "$RETURNED_DOC_NAME" = "ds-sensor-manual.pdf" ]; then
-    print_success "GetDocument returned correct data"
+if [ "$RETURNED_DOC_NAME" = "ds-sensor-manual" ]; then
+    print_success "GetDocument returned correct name"
 else
-    print_error "GetDocument returned unexpected data"
+    print_error "GetDocument returned unexpected name"
     echo "$GET_DOC_RESPONSE"
+    exit 1
+fi
+
+# Verify new Yrs-based fields are present in the Document response
+print_step "Verifying Document response shape (new fields present, old fields absent)..."
+
+# New fields: contentText and contentHtml should exist (empty strings for new docs, but present)
+HAS_CONTENT_TEXT=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("contentText")')
+HAS_CONTENT_HTML=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("contentHtml")')
+
+# Proto3 omits default values (empty strings) from JSON — so these fields won't appear
+# until the snapshotter populates them. What matters is the OLD fields are gone.
+
+# Old fields must NOT be present
+HAS_MIME_TYPE=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("mimeType")')
+HAS_SIZE_BYTES=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("sizeBytes")')
+HAS_CHECKSUM=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("checksum")')
+
+if [ "$HAS_MIME_TYPE" = "false" ]; then
+    print_success "Document does not contain mimeType (removed)"
+else
+    print_error "Document still contains mimeType — proto not updated"
+    exit 1
+fi
+
+if [ "$HAS_SIZE_BYTES" = "false" ]; then
+    print_success "Document does not contain sizeBytes (removed)"
+else
+    print_error "Document still contains sizeBytes — proto not updated"
+    exit 1
+fi
+
+if [ "$HAS_CHECKSUM" = "false" ]; then
+    print_success "Document does not contain checksum (removed)"
+else
+    print_error "Document still contains checksum — proto not updated"
+    exit 1
+fi
+
+# Verify required fields are present
+HAS_DOC_ID=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("documentId")')
+HAS_ORG_ID=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("organizationId")')
+HAS_CREATED_AT=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("createdAt")')
+HAS_UPDATED_AT=$(echo "$GET_DOC_RESPONSE" | jq '.document | has("updatedAt")')
+
+if [ "$HAS_DOC_ID" = "true" ] && [ "$HAS_ORG_ID" = "true" ] && [ "$HAS_CREATED_AT" = "true" ] && [ "$HAS_UPDATED_AT" = "true" ]; then
+    print_success "Document contains all expected fields (documentId, organizationId, createdAt, updatedAt)"
+else
+    print_error "Document missing expected fields"
+    echo "$GET_DOC_RESPONSE" | jq '.document | keys'
     exit 1
 fi
 
@@ -271,12 +319,11 @@ UPDATE_DS_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"document_id\": \"$DS_DOC_ID\",
         \"data_stream_id\": \"$DATA_STREAM_ID\",
         \"organization_id\": \"$ORG_ID\",
-        \"workspace_id\": \"$WORKSPACE_ID\",
-        \"name\": \"ds-sensor-manual-v2.pdf\"
+        \"name\": \"ds-sensor-manual-v2\"
     }")
 
 UPDATED_DS_NAME=$(echo "$UPDATE_DS_RESPONSE" | jq -r '.document.name // empty')
-if [ "$UPDATED_DS_NAME" = "ds-sensor-manual-v2.pdf" ]; then
+if [ "$UPDATED_DS_NAME" = "ds-sensor-manual-v2" ]; then
     print_success "Data stream document updated successfully"
 else
     print_error "Data stream document update failed"
@@ -293,7 +340,6 @@ UPDATE_DS_META_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"document_id\": \"$DS_DOC_ID\",
         \"data_stream_id\": \"$DATA_STREAM_ID\",
         \"organization_id\": \"$ORG_ID\",
-        \"workspace_id\": \"$WORKSPACE_ID\",
         \"metadata\": {\"fields\": {\"revision\": {\"numberValue\": 2}}}
     }")
 
@@ -354,31 +400,29 @@ verify_age_edge_removed "DataStream" "$DATA_STREAM_ID" "$DS_DOC_ID" "unlink data
 # DEFINITION DOCUMENT TESTS
 # ============================================
 
-# UploadDefinitionDocument
-print_step "Testing UploadDefinitionDocument (happy path)..."
+# CreateDefinitionDocument
+print_step "Testing CreateDefinitionDocument (happy path)..."
 
-UPLOAD_DEF_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "document.v1.DocumentService/UploadDefinitionDocument" \
+CREATE_DEF_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "document.v1.DocumentService/CreateDefinitionDocument" \
     "{
         \"definition_id\": \"$DEFINITION_ID\",
         \"organization_id\": \"$ORG_ID\",
-        \"name\": \"definition-spec.md\",
-        \"mime_type\": \"text/markdown\",
-        \"content\": \"$TEST_CONTENT\"
+        \"name\": \"definition-spec\"
     }")
 
-DEF_DOC_ID=$(echo "$UPLOAD_DEF_RESPONSE" | jq -r '.document.documentId // empty')
+DEF_DOC_ID=$(echo "$CREATE_DEF_RESPONSE" | jq -r '.document.documentId // empty')
 if [ -n "$DEF_DOC_ID" ] && [ "$DEF_DOC_ID" != "null" ]; then
-    print_success "Definition document uploaded: $DEF_DOC_ID"
+    print_success "Definition document created: $DEF_DOC_ID"
 else
-    print_error "Failed to upload definition document"
-    echo "$UPLOAD_DEF_RESPONSE"
+    print_error "Failed to create definition document"
+    echo "$CREATE_DEF_RESPONSE"
     exit 1
 fi
 
 # Verify AGE graph edge created for definition
 print_step "Verifying AGE graph edge: DataStreamDefinition -> Document..."
-verify_age_edge_exists "DataStreamDefinition" "$DEFINITION_ID" "$DEF_DOC_ID" "upload definition"
+verify_age_edge_exists "DataStreamDefinition" "$DEFINITION_ID" "$DEF_DOC_ID" "create definition"
 
 # ListDefinitionDocuments
 print_step "Testing ListDefinitionDocuments (happy path)..."
@@ -399,6 +443,18 @@ else
     exit 1
 fi
 
+# Verify list returns full Document (not DocumentSummary)
+LIST_DEF_HAS_CREATED=$(echo "$LIST_DEF_RESPONSE" | jq '.documents[0] | has("createdAt")')
+LIST_DEF_NO_CHECKSUM=$(echo "$LIST_DEF_RESPONSE" | jq '.documents[0] | has("checksum")')
+LIST_DEF_NO_MIME=$(echo "$LIST_DEF_RESPONSE" | jq '.documents[0] | has("mimeType")')
+if [ "$LIST_DEF_HAS_CREATED" = "true" ] && [ "$LIST_DEF_NO_CHECKSUM" = "false" ] && [ "$LIST_DEF_NO_MIME" = "false" ]; then
+    print_success "Definition list returns full Document type (no checksum/mimeType)"
+else
+    print_error "Definition list response has unexpected shape"
+    echo "$LIST_DEF_RESPONSE" | jq '.documents[0] | keys'
+    exit 1
+fi
+
 # UpdateDefinitionDocument
 print_step "Testing UpdateDefinitionDocument (happy path)..."
 
@@ -408,11 +464,11 @@ UPDATE_DEF_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"document_id\": \"$DEF_DOC_ID\",
         \"definition_id\": \"$DEFINITION_ID\",
         \"organization_id\": \"$ORG_ID\",
-        \"name\": \"definition-spec-v2.md\"
+        \"name\": \"definition-spec-v2\"
     }")
 
 UPDATED_DEF_NAME=$(echo "$UPDATE_DEF_RESPONSE" | jq -r '.document.name // empty')
-if [ "$UPDATED_DEF_NAME" = "definition-spec-v2.md" ]; then
+if [ "$UPDATED_DEF_NAME" = "definition-spec-v2" ]; then
     print_success "Definition document updated successfully"
 else
     print_error "Definition document update failed"
@@ -466,31 +522,29 @@ verify_age_edge_removed "DataStreamDefinition" "$DEFINITION_ID" "$DEF_DOC_ID" "u
 # WORKSPACE DOCUMENT TESTS
 # ============================================
 
-# UploadWorkspaceDocument
-print_step "Testing UploadWorkspaceDocument (happy path)..."
+# CreateWorkspaceDocument
+print_step "Testing CreateWorkspaceDocument (happy path)..."
 
-UPLOAD_WS_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "document.v1.DocumentService/UploadWorkspaceDocument" \
+CREATE_WS_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "document.v1.DocumentService/CreateWorkspaceDocument" \
     "{
         \"workspace_id\": \"$WORKSPACE_ID\",
         \"organization_id\": \"$ORG_ID\",
-        \"name\": \"workspace-notes.txt\",
-        \"mime_type\": \"text/plain\",
-        \"content\": \"$TEST_CONTENT\"
+        \"name\": \"workspace-notes\"
     }")
 
-WS_DOC_ID=$(echo "$UPLOAD_WS_RESPONSE" | jq -r '.document.documentId // empty')
+WS_DOC_ID=$(echo "$CREATE_WS_RESPONSE" | jq -r '.document.documentId // empty')
 if [ -n "$WS_DOC_ID" ] && [ "$WS_DOC_ID" != "null" ]; then
-    print_success "Workspace document uploaded: $WS_DOC_ID"
+    print_success "Workspace document created: $WS_DOC_ID"
 else
-    print_error "Failed to upload workspace document"
-    echo "$UPLOAD_WS_RESPONSE"
+    print_error "Failed to create workspace document"
+    echo "$CREATE_WS_RESPONSE"
     exit 1
 fi
 
 # Verify AGE graph edge created for workspace
 print_step "Verifying AGE graph edge: Workspace -> Document..."
-verify_age_edge_exists "Workspace" "$WORKSPACE_ID" "$WS_DOC_ID" "upload workspace"
+verify_age_edge_exists "Workspace" "$WORKSPACE_ID" "$WS_DOC_ID" "create workspace"
 
 # ListWorkspaceDocuments
 print_step "Testing ListWorkspaceDocuments (happy path)..."
@@ -511,6 +565,18 @@ else
     exit 1
 fi
 
+# Verify list returns full Document (not DocumentSummary)
+LIST_WS_HAS_CREATED=$(echo "$LIST_WS_RESPONSE" | jq '.documents[0] | has("createdAt")')
+LIST_WS_NO_CHECKSUM=$(echo "$LIST_WS_RESPONSE" | jq '.documents[0] | has("checksum")')
+LIST_WS_NO_MIME=$(echo "$LIST_WS_RESPONSE" | jq '.documents[0] | has("mimeType")')
+if [ "$LIST_WS_HAS_CREATED" = "true" ] && [ "$LIST_WS_NO_CHECKSUM" = "false" ] && [ "$LIST_WS_NO_MIME" = "false" ]; then
+    print_success "Workspace list returns full Document type (no checksum/mimeType)"
+else
+    print_error "Workspace list response has unexpected shape"
+    echo "$LIST_WS_RESPONSE" | jq '.documents[0] | keys'
+    exit 1
+fi
+
 # UpdateWorkspaceDocument
 print_step "Testing UpdateWorkspaceDocument (happy path)..."
 
@@ -520,11 +586,11 @@ UPDATE_WS_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         \"document_id\": \"$WS_DOC_ID\",
         \"workspace_id\": \"$WORKSPACE_ID\",
         \"organization_id\": \"$ORG_ID\",
-        \"name\": \"workspace-notes-v2.txt\"
+        \"name\": \"workspace-notes-v2\"
     }")
 
 UPDATED_WS_NAME=$(echo "$UPDATE_WS_RESPONSE" | jq -r '.document.name // empty')
-if [ "$UPDATED_WS_NAME" = "workspace-notes-v2.txt" ]; then
+if [ "$UPDATED_WS_NAME" = "workspace-notes-v2" ]; then
     print_success "Workspace document updated successfully"
 else
     print_error "Workspace document update failed"
@@ -578,22 +644,20 @@ verify_age_edge_removed "Workspace" "$WORKSPACE_ID" "$WS_DOC_ID" "unlink workspa
 # DELETE DOCUMENT TEST
 # ============================================
 
-# Upload a document to delete
+# Create a document to delete
 print_step "Testing DeleteDocument (happy path)..."
 
-UPLOAD_DELETE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "document.v1.DocumentService/UploadWorkspaceDocument" \
+CREATE_DELETE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "document.v1.DocumentService/CreateWorkspaceDocument" \
     "{
         \"workspace_id\": \"$WORKSPACE_ID\",
         \"organization_id\": \"$ORG_ID\",
-        \"name\": \"to-delete.txt\",
-        \"mime_type\": \"text/plain\",
-        \"content\": \"$TEST_CONTENT\"
+        \"name\": \"to-delete\"
     }")
 
-DELETE_DOC_ID=$(echo "$UPLOAD_DELETE_RESPONSE" | jq -r '.document.documentId // empty')
+DELETE_DOC_ID=$(echo "$CREATE_DELETE_RESPONSE" | jq -r '.document.documentId // empty')
 if [ -z "$DELETE_DOC_ID" ] || [ "$DELETE_DOC_ID" = "null" ]; then
-    print_error "Failed to upload document for delete test"
+    print_error "Failed to create document for delete test"
     exit 1
 fi
 
@@ -632,28 +696,26 @@ else
 fi
 
 # ============================================
-# UPLOAD WITH METADATA TEST
+# CREATE WITH METADATA TEST
 # ============================================
 
-print_step "Testing upload with metadata..."
+print_step "Testing create with metadata..."
 
-UPLOAD_META_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "document.v1.DocumentService/UploadWorkspaceDocument" \
+CREATE_META_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "document.v1.DocumentService/CreateWorkspaceDocument" \
     "{
         \"workspace_id\": \"$WORKSPACE_ID\",
         \"organization_id\": \"$ORG_ID\",
-        \"name\": \"with-metadata.json\",
-        \"mime_type\": \"application/json\",
-        \"metadata\": {\"fields\": {\"author\": {\"stringValue\": \"test-user\"}, \"version\": {\"numberValue\": 1}}},
-        \"content\": \"$TEST_CONTENT\"
+        \"name\": \"with-metadata\",
+        \"metadata\": {\"fields\": {\"author\": {\"stringValue\": \"test-user\"}, \"version\": {\"numberValue\": 1}}}
     }")
 
-META_DOC_ID=$(echo "$UPLOAD_META_RESPONSE" | jq -r '.document.documentId // empty')
+META_DOC_ID=$(echo "$CREATE_META_RESPONSE" | jq -r '.document.documentId // empty')
 if [ -n "$META_DOC_ID" ] && [ "$META_DOC_ID" != "null" ]; then
-    print_success "Document with metadata uploaded: $META_DOC_ID"
+    print_success "Document with metadata created: $META_DOC_ID"
 else
-    print_error "Failed to upload document with metadata"
-    echo "$UPLOAD_META_RESPONSE"
+    print_error "Failed to create document with metadata"
+    echo "$CREATE_META_RESPONSE"
     exit 1
 fi
 
@@ -686,10 +748,10 @@ test_unauthenticated \
     "document.v1.DocumentService/DeleteDocument" \
     "{\"document_id\": \"$DS_DOC_ID\", \"organization_id\": \"$ORG_ID\"}"
 
-print_step "Testing UploadDataStreamDocument without auth..."
+print_step "Testing CreateDataStreamDocument without auth..."
 test_unauthenticated \
-    "document.v1.DocumentService/UploadDataStreamDocument" \
-    "{\"data_stream_id\": \"$DATA_STREAM_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"name\": \"unauthorized.txt\", \"mime_type\": \"text/plain\", \"content\": \"$TEST_CONTENT\"}"
+    "document.v1.DocumentService/CreateDataStreamDocument" \
+    "{\"data_stream_id\": \"$DATA_STREAM_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"name\": \"unauthorized\"}"
 
 print_step "Testing ListDataStreamDocuments without auth..."
 test_unauthenticated \
@@ -701,20 +763,20 @@ test_unauthenticated \
     "document.v1.DocumentService/UnlinkDocumentFromDataStream" \
     "{\"document_id\": \"$DS_DOC_ID\", \"data_stream_id\": \"$DATA_STREAM_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}"
 
-print_step "Testing UploadDefinitionDocument without auth..."
+print_step "Testing CreateDefinitionDocument without auth..."
 test_unauthenticated \
-    "document.v1.DocumentService/UploadDefinitionDocument" \
-    "{\"definition_id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"unauthorized.txt\", \"mime_type\": \"text/plain\", \"content\": \"$TEST_CONTENT\"}"
+    "document.v1.DocumentService/CreateDefinitionDocument" \
+    "{\"definition_id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"unauthorized\"}"
 
 print_step "Testing ListDefinitionDocuments without auth..."
 test_unauthenticated \
     "document.v1.DocumentService/ListDefinitionDocuments" \
     "{\"definition_id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\"}"
 
-print_step "Testing UploadWorkspaceDocument without auth..."
+print_step "Testing CreateWorkspaceDocument without auth..."
 test_unauthenticated \
-    "document.v1.DocumentService/UploadWorkspaceDocument" \
-    "{\"workspace_id\": \"$WORKSPACE_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"unauthorized.txt\", \"mime_type\": \"text/plain\", \"content\": \"$TEST_CONTENT\"}"
+    "document.v1.DocumentService/CreateWorkspaceDocument" \
+    "{\"workspace_id\": \"$WORKSPACE_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"unauthorized\"}"
 
 print_step "Testing ListWorkspaceDocuments without auth..."
 test_unauthenticated \
@@ -730,20 +792,20 @@ test_invalid_token \
     "document.v1.DocumentService/GetDocument" \
     "{\"document_id\": \"$DS_DOC_ID\", \"organization_id\": \"$ORG_ID\"}"
 
-print_step "Testing UploadDataStreamDocument with invalid token..."
+print_step "Testing CreateDataStreamDocument with invalid token..."
 test_invalid_token \
-    "document.v1.DocumentService/UploadDataStreamDocument" \
-    "{\"data_stream_id\": \"$DATA_STREAM_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"name\": \"invalid.txt\", \"mime_type\": \"text/plain\", \"content\": \"$TEST_CONTENT\"}"
+    "document.v1.DocumentService/CreateDataStreamDocument" \
+    "{\"data_stream_id\": \"$DATA_STREAM_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"name\": \"invalid\"}"
 
-print_step "Testing UploadDefinitionDocument with invalid token..."
+print_step "Testing CreateDefinitionDocument with invalid token..."
 test_invalid_token \
-    "document.v1.DocumentService/UploadDefinitionDocument" \
-    "{\"definition_id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"invalid.txt\", \"mime_type\": \"text/plain\", \"content\": \"$TEST_CONTENT\"}"
+    "document.v1.DocumentService/CreateDefinitionDocument" \
+    "{\"definition_id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"invalid\"}"
 
-print_step "Testing UploadWorkspaceDocument with invalid token..."
+print_step "Testing CreateWorkspaceDocument with invalid token..."
 test_invalid_token \
-    "document.v1.DocumentService/UploadWorkspaceDocument" \
-    "{\"workspace_id\": \"$WORKSPACE_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"invalid.txt\", \"mime_type\": \"text/plain\", \"content\": \"$TEST_CONTENT\"}"
+    "document.v1.DocumentService/CreateWorkspaceDocument" \
+    "{\"workspace_id\": \"$WORKSPACE_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"invalid\"}"
 
 # ============================================
 # SUMMARY
