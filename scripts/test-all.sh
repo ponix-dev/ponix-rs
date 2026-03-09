@@ -64,6 +64,9 @@ run_test "test-documents.sh" "Document Tests"
 run_test "test-mqtt-pipeline.sh" "MQTT Pipeline Test"
 run_test "test-multi-contract-pipeline.sh" "Multi-Contract Pipeline Test"
 
+# Infrastructure tests
+run_test "test-document-updates-stream.sh" "Document Updates Stream Test"
+
 # Summary
 echo -e "${BLUE}==========================================${NC}"
 echo -e "${BLUE}              Test Summary               ${NC}"

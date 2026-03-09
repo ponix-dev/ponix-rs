@@ -466,22 +466,92 @@ async fn create_clickhouse_client(config: &ServiceConfig) -> anyhow::Result<Clic
 }
 
 async fn ensure_nats_streams(client: &NatsClient, config: &ServiceConfig) -> anyhow::Result<()> {
+    use common::nats::StreamConfig;
+
     client
-        .ensure_stream(&config.processed_envelopes_stream)
+        .ensure_stream(StreamConfig {
+            name: config.processed_envelopes_stream.clone(),
+            subjects: vec![format!("{}.*", config.processed_envelopes_stream)],
+            description: Some("Processed envelope events for ClickHouse ingestion".to_string()),
+            ..Default::default()
+        })
         .await?;
-    client.ensure_stream(&config.nats_raw_stream).await?;
-    client.ensure_stream(&config.nats_gateway_stream).await?;
-    client.ensure_stream(&config.nats_workspace_stream).await?;
+
     client
-        .ensure_stream(&config.nats_data_streams_stream)
+        .ensure_stream(StreamConfig {
+            name: config.nats_raw_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_raw_stream)],
+            description: Some("Raw envelope events for CEL transformation".to_string()),
+            ..Default::default()
+        })
         .await?;
+
     client
-        .ensure_stream(&config.nats_organization_stream)
+        .ensure_stream(StreamConfig {
+            name: config.nats_gateway_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_gateway_stream)],
+            description: Some("Gateway CDC events".to_string()),
+            ..Default::default()
+        })
         .await?;
-    client.ensure_stream(&config.nats_user_stream).await?;
+
     client
-        .ensure_stream(&config.nats_data_stream_definitions_stream)
+        .ensure_stream(StreamConfig {
+            name: config.nats_workspace_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_workspace_stream)],
+            description: Some("Workspace CDC events".to_string()),
+            ..Default::default()
+        })
         .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_data_streams_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_data_streams_stream)],
+            description: Some("Data stream CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_organization_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_organization_stream)],
+            description: Some("Organization CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_user_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_user_stream)],
+            description: Some("User CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_data_stream_definitions_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_data_stream_definitions_stream)],
+            description: Some("Data stream definition CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_document_updates_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_document_updates_stream)],
+            description: Some(
+                "Yrs document sync updates for collaboration and snapshotting".to_string(),
+            ),
+            max_age: std::time::Duration::from_secs(config.nats_document_updates_max_age_secs),
+            ..Default::default()
+        })
+        .await?;
+
     Ok(())
 }
 
