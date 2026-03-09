@@ -56,6 +56,18 @@ pub struct ServiceConfig {
     #[serde(default = "default_nats_data_stream_definitions_stream")]
     pub nats_data_stream_definitions_stream: String,
 
+    /// NATS JetStream stream name for document sync updates (Yrs collaboration)
+    #[serde(default = "default_nats_document_updates_stream")]
+    pub nats_document_updates_stream: String,
+
+    /// NATS consumer name for document updates (used by snapshotter)
+    #[serde(default = "default_nats_document_updates_consumer_name")]
+    pub nats_document_updates_consumer_name: String,
+
+    /// Max age for document updates stream messages (in seconds, default 7 days)
+    #[serde(default = "default_nats_document_updates_max_age_secs")]
+    pub nats_document_updates_max_age_secs: u64,
+
     /// Batch size for consumer
     #[serde(default = "default_nats_batch_size")]
     pub nats_batch_size: usize,
@@ -318,6 +330,18 @@ fn default_nats_data_stream_definitions_stream() -> String {
     "data_stream_definitions".to_string()
 }
 
+fn default_nats_document_updates_stream() -> String {
+    "document_sync".to_string()
+}
+
+fn default_nats_document_updates_consumer_name() -> String {
+    "document-snapshotter".to_string()
+}
+
+fn default_nats_document_updates_max_age_secs() -> u64 {
+    604800 // 7 days
+}
+
 fn default_nats_batch_size() -> usize {
     30
 }
@@ -555,6 +579,18 @@ mod tests {
 
         let config = ServiceConfig::from_env().unwrap();
         assert_eq!(config.log_level, "info");
+    }
+
+    #[test]
+    fn test_document_updates_config_defaults() {
+        let _lock = TEST_LOCK.lock().unwrap();
+        let config = ServiceConfig::from_env().unwrap();
+        assert_eq!(config.nats_document_updates_stream, "document_sync");
+        assert_eq!(
+            config.nats_document_updates_consumer_name,
+            "document-snapshotter"
+        );
+        assert_eq!(config.nats_document_updates_max_age_secs, 604800);
     }
 
     #[test]

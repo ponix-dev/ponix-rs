@@ -28,23 +28,17 @@ impl NatsClient {
         Ok(Self { client, jetstream })
     }
 
-    pub async fn ensure_stream(&self, stream_name: &str) -> Result<()> {
+    pub async fn ensure_stream(&self, config: StreamConfig) -> Result<()> {
+        let stream_name = config.name.clone();
         debug!(stream = %stream_name, "ensuring stream exists");
 
-        let stream_config = StreamConfig {
-            name: stream_name.to_string(),
-            subjects: vec![format!("{}.*", stream_name)],
-            description: Some("stream for processed envelopes".to_string()),
-            ..Default::default()
-        };
-
-        match self.jetstream.get_stream(stream_name).await {
+        match self.jetstream.get_stream(&stream_name).await {
             Ok(_) => {
                 debug!(stream = %stream_name, "stream already exists");
             }
             Err(_) => {
                 self.jetstream
-                    .create_stream(stream_config)
+                    .create_stream(config)
                     .await
                     .context("failed to create stream")?;
                 debug!(stream = %stream_name, "created stream");

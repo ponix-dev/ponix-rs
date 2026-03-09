@@ -164,8 +164,13 @@ async fn setup_test_env() -> TestEnvironment {
     );
 
     // Create stream configuration
+    use async_nats::jetstream::stream::Config as StreamConfig;
     nats_client
-        .ensure_stream(STREAM_NAME)
+        .ensure_stream(StreamConfig {
+            name: STREAM_NAME.to_string(),
+            subjects: vec![format!("{}.*", STREAM_NAME)],
+            ..Default::default()
+        })
         .await
         .expect("Failed to create NATS stream");
 
