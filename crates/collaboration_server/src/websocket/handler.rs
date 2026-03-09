@@ -5,8 +5,8 @@ use axum::http::StatusCode;
 use axum::response::Response;
 use common::auth::AuthTokenProvider;
 
-use crate::nats::NatsDocumentRelay;
 use crate::domain::RoomManager;
+use crate::nats::NatsDocumentRelay;
 use crate::websocket::connection::handle_connection;
 
 pub struct AppState {

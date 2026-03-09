@@ -64,10 +64,7 @@ run_test "test-documents.sh" "Document Tests"
 run_test "test-mqtt-pipeline.sh" "MQTT Pipeline Test"
 run_test "test-multi-contract-pipeline.sh" "Multi-Contract Pipeline Test"
 
-# Infrastructure tests
-run_test "test-document-updates-stream.sh" "Document Updates Stream Test"
-
-# Collaboration server tests
+# Collaboration server tests (includes NATS infra, WebSocket, snapshotter persistence)
 run_test "test-collaboration.sh" "Collaboration Server Test"
 
 # Summary

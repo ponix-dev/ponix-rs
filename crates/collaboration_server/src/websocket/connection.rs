@@ -5,9 +5,9 @@ use common::auth::AuthTokenProvider;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 
-use crate::nats::NatsDocumentRelay;
-use crate::domain::{DocumentRoom, RoomManager};
 use crate::domain::{decode_sync_message, encode_sync_step1, encode_sync_step2, SyncMessage};
+use crate::domain::{DocumentRoom, RoomManager};
+use crate::nats::NatsDocumentRelay;
 use crate::websocket::auth::authenticate_first_message;
 
 pub async fn handle_connection(

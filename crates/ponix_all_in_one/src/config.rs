@@ -68,6 +68,14 @@ pub struct ServiceConfig {
     #[serde(default = "default_nats_document_updates_max_age_secs")]
     pub nats_document_updates_max_age_secs: u64,
 
+    /// Snapshotter compaction interval in seconds (default: 30)
+    #[serde(default = "default_snapshotter_compaction_interval_secs")]
+    pub snapshotter_compaction_interval_secs: u64,
+
+    /// Snapshotter idle document eviction timeout in seconds (default: 300)
+    #[serde(default = "default_snapshotter_idle_eviction_secs")]
+    pub snapshotter_idle_eviction_secs: u64,
+
     /// Batch size for consumer
     #[serde(default = "default_nats_batch_size")]
     pub nats_batch_size: usize,
@@ -353,6 +361,14 @@ fn default_nats_document_updates_consumer_name() -> String {
 
 fn default_nats_document_updates_max_age_secs() -> u64 {
     604800 // 7 days
+}
+
+fn default_snapshotter_compaction_interval_secs() -> u64 {
+    30
+}
+
+fn default_snapshotter_idle_eviction_secs() -> u64 {
+    300 // 5 minutes
 }
 
 fn default_nats_batch_size() -> usize {

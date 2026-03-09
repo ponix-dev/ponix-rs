@@ -49,6 +49,15 @@ services:
       # gRPC configuration
       PONIX_GRPC_HOST: "0.0.0.0"
       PONIX_GRPC_PORT: "50051"
+      PONIX_GRPC_WEB_ENABLED: "true"
+      PONIX_GRPC_CORS_ALLOWED_ORIGINS: "*"
+
+      # Document sync / Snapshotter configuration
+      PONIX_NATS_DOCUMENT_UPDATES_STREAM: "document_sync"
+      PONIX_NATS_DOCUMENT_UPDATES_CONSUMER_NAME: "document-snapshotter"
+      PONIX_NATS_DOCUMENT_UPDATES_MAX_AGE_SECS: "604800"
+      PONIX_SNAPSHOTTER_COMPACTION_INTERVAL_SECS: "5"
+      PONIX_SNAPSHOTTER_IDLE_EVICTION_SECS: "300"
 
       # Collaboration server configuration
       PONIX_COLLAB_HOST: "0.0.0.0"

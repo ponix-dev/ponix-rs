@@ -1,7 +1,7 @@
 use crate::domain::{
     CreateDocumentRepoInputWithId, DeleteDocumentRepoInput, Document, DocumentRepository,
     DomainError, DomainResult, GetDocumentRepoInput, ListDocumentsRepoInput,
-    UpdateDocumentRepoInput,
+    UpdateDocumentRepoInput, UpdateYrsStateInput,
 };
 use crate::postgres::PostgresClient;
 use async_trait::async_trait;
@@ -312,6 +312,63 @@ impl DocumentRepository for PostgresDocumentRepository {
 
         debug!(count = documents.len(), "listed documents from database");
         Ok(documents)
+    }
+
+    #[instrument(skip(self, input), fields(document_id = %input.document_id, organization_id = %input.organization_id))]
+    async fn update_yrs_state(&self, input: UpdateYrsStateInput) -> DomainResult<bool> {
+        debug!(document_id = %input.document_id, "updating yrs state with advisory lock");
+
+        let mut conn = self
+            .client
+            .get_connection()
+            .await
+            .map_err(DomainError::RepositoryError)?;
+
+        let txn = conn
+            .transaction()
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        // Try to acquire advisory lock for this document
+        let lock_row = txn
+            .query_one(
+                "SELECT pg_try_advisory_xact_lock(hashtext($1))",
+                &[&input.document_id],
+            )
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        let acquired: bool = lock_row.get(0);
+        if !acquired {
+            txn.commit()
+                .await
+                .map_err(|e| DomainError::RepositoryError(e.into()))?;
+            debug!(document_id = %input.document_id, "advisory lock not acquired, skipping");
+            return Ok(false);
+        }
+
+        let now = Utc::now();
+        txn.execute(
+            "UPDATE documents SET yrs_state = $1, yrs_state_vector = $2, content_text = $3, content_html = $4, updated_at = $5 WHERE document_id = $6 AND organization_id = $7 AND deleted_at IS NULL",
+            &[
+                &input.yrs_state,
+                &input.yrs_state_vector,
+                &input.content_text,
+                &input.content_html,
+                &now,
+                &input.document_id,
+                &input.organization_id,
+            ],
+        )
+        .await
+        .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        txn.commit()
+            .await
+            .map_err(|e| DomainError::RepositoryError(e.into()))?;
+
+        debug!(document_id = %input.document_id, "yrs state updated successfully");
+        Ok(true)
     }
 }
 

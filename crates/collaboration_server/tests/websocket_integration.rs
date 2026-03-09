@@ -3,9 +3,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use collaboration_server::nats::NatsDocumentRelay;
 use collaboration_server::domain::RoomManager;
 use collaboration_server::domain::{decode_sync_message, encode_update, SyncMessage};
+use collaboration_server::nats::NatsDocumentRelay;
 use collaboration_server::websocket::{build_router, AppState};
 use common::auth::AuthTokenProvider;
 use common::domain::{
@@ -71,6 +71,13 @@ impl DocumentRepository for InMemoryDocumentRepository {
         &self,
         _input: common::domain::ListDocumentsRepoInput,
     ) -> DomainResult<Vec<Document>> {
+        unimplemented!()
+    }
+
+    async fn update_yrs_state(
+        &self,
+        _input: common::domain::UpdateYrsStateInput,
+    ) -> DomainResult<bool> {
         unimplemented!()
     }
 }
@@ -391,9 +398,7 @@ async fn test_client_disconnect_cleanup() {
 async fn test_new_client_receives_existing_content() {
     let (ws_url, doc_repo) = setup_test_server().await;
 
-    doc_repo
-        .insert(make_test_document("doc-content"))
-        .await;
+    doc_repo.insert(make_test_document("doc-content")).await;
 
     // Client A connects and writes content
     let (mut ws_a, _) =

@@ -60,6 +60,17 @@ pub struct ListDocumentsRepoInput {
     pub organization_id: String,
 }
 
+/// Repository input for updating Yrs CRDT state (used by Document Snapshotter)
+#[derive(Debug, Clone, PartialEq)]
+pub struct UpdateYrsStateInput {
+    pub document_id: String,
+    pub organization_id: String,
+    pub yrs_state: Vec<u8>,
+    pub yrs_state_vector: Vec<u8>,
+    pub content_text: String,
+    pub content_html: String,
+}
+
 /// Repository trait for document persistence operations
 #[cfg_attr(any(test, feature = "testing"), mockall::automock)]
 #[async_trait]
@@ -83,4 +94,8 @@ pub trait DocumentRepository: Send + Sync {
 
     /// List documents by organization (excludes soft deleted)
     async fn list_documents(&self, input: ListDocumentsRepoInput) -> DomainResult<Vec<Document>>;
+
+    /// Update Yrs CRDT state with advisory lock protection.
+    /// Returns `true` if write succeeded, `false` if advisory lock was not acquired.
+    async fn update_yrs_state(&self, input: UpdateYrsStateInput) -> DomainResult<bool>;
 }

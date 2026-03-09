@@ -4,8 +4,8 @@ use common::auth::AuthTokenProvider;
 use common::domain::DocumentRepository;
 use ponix_runner::AppProcess;
 
-use crate::nats::NatsDocumentRelay;
 use crate::domain::RoomManager;
+use crate::nats::NatsDocumentRelay;
 use crate::websocket::{build_router, AppState};
 
 pub struct CollaborationServerConfig {
