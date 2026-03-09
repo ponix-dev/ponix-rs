@@ -25,7 +25,10 @@ impl NatsClient {
         let jetstream = jetstream::new(client.clone());
 
         debug!("successfully connected to nats");
-        Ok(Self { _client: client, jetstream })
+        Ok(Self {
+            _client: client,
+            jetstream,
+        })
     }
 
     pub async fn ensure_stream(&self, config: StreamConfig) -> Result<()> {

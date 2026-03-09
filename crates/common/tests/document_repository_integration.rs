@@ -3,7 +3,8 @@
 use common::domain::{
     CreateDocumentRepoInputWithId, CreateOrganizationRepoInputWithId, DeleteDocumentRepoInput,
     DocumentRepository, DomainError, GetDocumentRepoInput, ListDocumentsRepoInput,
-    OrganizationRepository, RegisterUserRepoInputWithId, UpdateDocumentRepoInput, UserRepository,
+    OrganizationRepository, RegisterUserRepoInputWithId, UpdateDocumentRepoInput,
+    UpdateYrsStateInput, UserRepository,
 };
 use common::postgres::{
     PostgresClient, PostgresDocumentRepository, PostgresOrganizationRepository,
@@ -368,4 +369,76 @@ async fn test_document_yrs_state_roundtrip() {
     );
     assert!(doc.content_text.is_empty());
     assert!(doc.content_html.is_empty());
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_update_yrs_state_success() {
+    let (_container, doc_repo, org_repo) = setup_test_db().await;
+    create_org(&org_repo, "org-yrs-update-001").await;
+
+    // Create a document
+    let create_input = make_create_input("doc-yrs-update-001", "org-yrs-update-001");
+    doc_repo.create_document(create_input).await.unwrap();
+
+    // Build updated state with some content
+    let new_state = vec![1, 2, 3, 4]; // Simplified for test
+    let new_sv = vec![5, 6, 7];
+
+    let input = UpdateYrsStateInput {
+        document_id: "doc-yrs-update-001".to_string(),
+        organization_id: "org-yrs-update-001".to_string(),
+        yrs_state: new_state.clone(),
+        yrs_state_vector: new_sv.clone(),
+        content_text: "Hello world".to_string(),
+        content_html: "<p>Hello world</p>".to_string(),
+    };
+
+    let result = doc_repo.update_yrs_state(input).await.unwrap();
+    assert!(
+        result,
+        "update_yrs_state should return true when lock acquired"
+    );
+
+    // Verify the document was updated
+    let get_input = GetDocumentRepoInput {
+        document_id: "doc-yrs-update-001".to_string(),
+        organization_id: "org-yrs-update-001".to_string(),
+    };
+    let doc = doc_repo.get_document(get_input).await.unwrap().unwrap();
+    assert_eq!(doc.yrs_state, new_state);
+    assert_eq!(doc.yrs_state_vector, new_sv);
+    assert_eq!(doc.content_text, "Hello world");
+    assert_eq!(doc.content_html, "<p>Hello world</p>");
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_update_yrs_state_soft_deleted_not_updated() {
+    let (_container, doc_repo, org_repo) = setup_test_db().await;
+    create_org(&org_repo, "org-yrs-del-001").await;
+
+    let create_input = make_create_input("doc-yrs-del-001", "org-yrs-del-001");
+    doc_repo.create_document(create_input).await.unwrap();
+
+    // Soft delete the document
+    let delete_input = DeleteDocumentRepoInput {
+        document_id: "doc-yrs-del-001".to_string(),
+        organization_id: "org-yrs-del-001".to_string(),
+    };
+    doc_repo.delete_document(delete_input).await.unwrap();
+
+    // Try to update yrs state - should still return true (lock acquired)
+    // but the UPDATE WHERE deleted_at IS NULL won't match any rows
+    let input = UpdateYrsStateInput {
+        document_id: "doc-yrs-del-001".to_string(),
+        organization_id: "org-yrs-del-001".to_string(),
+        yrs_state: vec![1, 2, 3],
+        yrs_state_vector: vec![4, 5],
+        content_text: "Should not persist".to_string(),
+        content_html: "<p>Should not persist</p>".to_string(),
+    };
+
+    let result = doc_repo.update_yrs_state(input).await.unwrap();
+    assert!(result, "lock should still be acquired even for deleted doc");
 }

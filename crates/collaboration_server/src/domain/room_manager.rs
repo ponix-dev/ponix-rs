@@ -4,8 +4,8 @@ use tokio::sync::RwLock;
 
 use common::domain::DocumentRepository;
 
-use crate::nats::NatsDocumentRelay;
 use crate::domain::DocumentRoom;
+use crate::nats::NatsDocumentRelay;
 
 pub struct RoomManager {
     rooms: RwLock<HashMap<String, Arc<DocumentRoom>>>,

@@ -6,9 +6,10 @@ use cdc_worker::domain::{
     CdcConfig, DataStreamConverter, DataStreamDefinitionConverter, EntityConfig, GatewayConverter,
     OrganizationConverter, UserConverter, WorkspaceConverter,
 };
-use collaboration_server::CollaborationServerConfig;
 use collaboration_server::nats::NatsDocumentRelay;
-use collaboration_server::CollaborationServer;
+use collaboration_server::{
+    CollaborationServer, CollaborationServerConfig, DocumentSnapshotter, DocumentSnapshotterConfig,
+};
 use common::auth::{
     Argon2PasswordService, CasbinAuthorizationService, CryptoRefreshTokenProvider,
     JwtAuthTokenProvider, JwtConfig,
@@ -320,6 +321,29 @@ async fn main() {
         nats_relay,
     );
 
+    // Create document snapshotter
+    let document_snapshotter = match DocumentSnapshotter::new(
+        postgres_repos.document.clone() as Arc<dyn common::domain::DocumentRepository>,
+        nats_client.clone(),
+        DocumentSnapshotterConfig {
+            document_updates_stream: config.nats_document_updates_stream.clone(),
+            consumer_name: config.nats_document_updates_consumer_name.clone(),
+            filter_subject: format!("{}.*", config.nats_document_updates_stream),
+            batch_size: config.nats_batch_size,
+            batch_wait_secs: config.nats_batch_wait_secs,
+            compaction_interval_secs: config.snapshotter_compaction_interval_secs,
+            idle_eviction_secs: config.snapshotter_idle_eviction_secs,
+        },
+    )
+    .await
+    {
+        Ok(snapshotter) => snapshotter,
+        Err(e) => {
+            error!("Failed to initialize document snapshotter: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     // Build runner with all processes
     let mut runner = Runner::new();
 
@@ -340,6 +364,12 @@ async fn main() {
         "collaboration_server",
         collaboration_server.into_runner_process(),
     );
+
+    // Add Document Snapshotter processes (consumer + compaction loop)
+    let snapshotter_processes = document_snapshotter.into_runner_processes();
+    for (i, process) in snapshotter_processes.into_iter().enumerate() {
+        runner = runner.with_named_process(format!("document_snapshotter_{}", i), process);
+    }
 
     // Add Analytics Ingester processes
     let analytics_processes = analytics_ingester.into_runner_processes();
