@@ -4,12 +4,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use collaboration_server::domain::RoomManager;
-use collaboration_server::domain::{decode_sync_message, encode_update, SyncMessage};
+use collaboration_server::domain::{decode_sync_message, encode_update, SyncMessage, MSG_AWARENESS};
 use collaboration_server::nats::NatsDocumentRelay;
 use collaboration_server::websocket::{build_router, AppState};
 use common::auth::AuthTokenProvider;
 use common::domain::{
-    CreateDocumentRepoInputWithId, Document, DocumentRepository, DomainResult, GetDocumentRepoInput,
+    CreateDocumentRepoInputWithId, Document, DocumentRepository, DomainResult,
+    GetDocumentRepoInput, GetUserByEmailRepoInput, GetUserRepoInput,
+    RegisterUserRepoInputWithId, User, UserRepository,
 };
 use common::yrs::create_empty_document;
 use futures_util::{SinkExt, StreamExt};
@@ -82,6 +84,31 @@ impl DocumentRepository for InMemoryDocumentRepository {
     }
 }
 
+/// Simple in-memory user repository for integration tests
+struct InMemoryUserRepository;
+
+#[async_trait::async_trait]
+impl UserRepository for InMemoryUserRepository {
+    async fn register_user(&self, _input: RegisterUserRepoInputWithId) -> DomainResult<User> {
+        unimplemented!()
+    }
+
+    async fn get_user(&self, input: GetUserRepoInput) -> DomainResult<Option<User>> {
+        Ok(Some(User {
+            id: input.user_id.clone(),
+            email: format!("{}@test.com", input.user_id),
+            password_hash: String::new(),
+            name: format!("Test User {}", input.user_id),
+            created_at: None,
+            updated_at: None,
+        }))
+    }
+
+    async fn get_user_by_email(&self, _input: GetUserByEmailRepoInput) -> DomainResult<Option<User>> {
+        unimplemented!()
+    }
+}
+
 /// Simple auth provider that accepts "valid-token" and rejects everything else
 struct TestAuthTokenProvider;
 
@@ -109,6 +136,7 @@ async fn setup_test_server() -> (String, Arc<InMemoryDocumentRepository>) {
     let doc_repo = Arc::new(InMemoryDocumentRepository::new());
     let nats_relay = Arc::new(NatsDocumentRelay::new_stub());
     let auth_provider: Arc<dyn AuthTokenProvider> = Arc::new(TestAuthTokenProvider);
+    let user_repo: Arc<dyn UserRepository> = Arc::new(InMemoryUserRepository);
 
     let room_manager = Arc::new(RoomManager::new(
         doc_repo.clone() as Arc<dyn DocumentRepository>,
@@ -119,7 +147,9 @@ async fn setup_test_server() -> (String, Arc<InMemoryDocumentRepository>) {
     let app_state = Arc::new(AppState {
         room_manager,
         nats_relay,
+        awareness_relay: None,
         auth_token_provider: auth_provider,
+        user_repository: user_repo,
     });
 
     let router = build_router(app_state, "*");
@@ -149,6 +179,25 @@ fn make_test_document(document_id: &str) -> Document {
         created_at: Some(chrono::Utc::now()),
         updated_at: Some(chrono::Utc::now()),
     }
+}
+
+/// Drain all initial messages (SyncStep1 + SyncStep2 + awareness state).
+/// Returns binary messages received within the timeout.
+async fn drain_initial_messages(
+    ws: &mut futures_util::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
+) -> Vec<Vec<u8>> {
+    let mut messages = Vec::new();
+    loop {
+        match tokio::time::timeout(Duration::from_millis(500), ws.next()).await {
+            Ok(Some(Ok(tungstenite::Message::Binary(data)))) => messages.push(data.to_vec()),
+            _ => break,
+        }
+    }
+    messages
 }
 
 #[tokio::test]
@@ -257,32 +306,39 @@ async fn test_two_client_sync() {
     doc_repo.insert(make_test_document("doc-sync")).await;
 
     // Connect client A
-    let (mut ws_a, _) =
+    let (ws_a_raw, _) =
         tokio_tungstenite::connect_async(format!("{}/ws/documents/doc-sync", ws_url))
             .await
             .unwrap();
 
-    ws_a.send(tungstenite::Message::Text("valid-token".into()))
+    let (mut ws_a_write, mut ws_a_read) = ws_a_raw.split();
+
+    ws_a_write
+        .send(tungstenite::Message::Text("valid-token".into()))
         .await
         .unwrap();
 
-    // Drain initial sync messages (SyncStep1 + SyncStep2)
-    let _ = tokio::time::timeout(Duration::from_secs(2), ws_a.next()).await;
-    let _ = tokio::time::timeout(Duration::from_secs(2), ws_a.next()).await;
+    // Drain initial sync messages (SyncStep1 + SyncStep2 + awareness)
+    drain_initial_messages(&mut ws_a_read).await;
 
     // Connect client B
-    let (mut ws_b, _) =
+    let (ws_b_raw, _) =
         tokio_tungstenite::connect_async(format!("{}/ws/documents/doc-sync", ws_url))
             .await
             .unwrap();
 
-    ws_b.send(tungstenite::Message::Text("valid-token".into()))
+    let (mut ws_b_write, mut ws_b_read) = ws_b_raw.split();
+
+    ws_b_write
+        .send(tungstenite::Message::Text("valid-token".into()))
         .await
         .unwrap();
 
-    // Drain initial sync messages for B
-    let _ = tokio::time::timeout(Duration::from_secs(2), ws_b.next()).await;
-    let _ = tokio::time::timeout(Duration::from_secs(2), ws_b.next()).await;
+    // Drain initial sync messages for B (+ awareness)
+    drain_initial_messages(&mut ws_b_read).await;
+
+    // Also drain B's awareness update that A might receive
+    let _ = tokio::time::timeout(Duration::from_millis(200), ws_a_read.next()).await;
 
     // Client A sends an update
     let doc = yrs::Doc::new();
@@ -300,51 +356,52 @@ async fn test_two_client_sync() {
     };
 
     let sync_update = encode_update(&update_bytes);
-    ws_a.send(tungstenite::Message::Binary(sync_update.into()))
+    ws_a_write
+        .send(tungstenite::Message::Binary(sync_update.into()))
         .await
         .unwrap();
 
-    // Client B should receive the update and be able to apply it
-    let msg = tokio::time::timeout(Duration::from_secs(5), ws_b.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    // Client B should receive the update (may also receive awareness messages first)
+    let mut found_update = false;
+    for _ in 0..5 {
+        let msg = tokio::time::timeout(Duration::from_secs(5), ws_b_read.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
 
-    match msg {
-        tungstenite::Message::Binary(data) => {
-            let decoded = decode_sync_message(&data).unwrap();
-            match decoded {
-                Some(SyncMessage::Update(update_data)) => {
-                    // Apply the received update to a fresh doc and verify content
-                    let doc_b = yrs::Doc::new();
-                    let (initial_state, _) = create_empty_document();
-                    {
-                        let mut txn = doc_b.transact_mut();
-                        let u = yrs::Update::decode_v1(&initial_state).unwrap();
-                        txn.apply_update(u).unwrap();
-                    }
-                    {
-                        let mut txn = doc_b.transact_mut();
-                        let u = yrs::Update::decode_v1(&update_data).unwrap();
-                        txn.apply_update(u).unwrap();
-                    }
-                    let text_b = doc_b.get_or_insert_text("content");
-                    let txn = doc_b.transact();
-                    assert_eq!(
-                        text_b.get_string(&txn),
-                        "hello from A",
-                        "Client B should see the text written by Client A"
-                    );
+        if let tungstenite::Message::Binary(data) = msg {
+            if let Ok(Some(SyncMessage::Update(update_data))) = decode_sync_message(&data) {
+                // Apply the received update to a fresh doc and verify content
+                let doc_b = yrs::Doc::new();
+                let (initial_state, _) = create_empty_document();
+                {
+                    let mut txn = doc_b.transact_mut();
+                    let u = yrs::Update::decode_v1(&initial_state).unwrap();
+                    txn.apply_update(u).unwrap();
                 }
-                other => panic!("Expected SyncMessage::Update, got: {:?}", other),
+                {
+                    let mut txn = doc_b.transact_mut();
+                    let u = yrs::Update::decode_v1(&update_data).unwrap();
+                    txn.apply_update(u).unwrap();
+                }
+                let text_b = doc_b.get_or_insert_text("content");
+                let txn = doc_b.transact();
+                assert_eq!(
+                    text_b.get_string(&txn),
+                    "hello from A",
+                    "Client B should see the text written by Client A"
+                );
+                found_update = true;
+                break;
             }
+            // Otherwise it was an awareness message — continue
         }
-        other => panic!("Expected binary update message, got: {:?}", other),
     }
+    assert!(found_update, "Client B should have received the sync update");
 
-    ws_a.close(None).await.unwrap();
-    ws_b.close(None).await.unwrap();
+    ws_a_write.close().await.unwrap();
+    ws_b_write.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -353,21 +410,23 @@ async fn test_client_disconnect_cleanup() {
 
     doc_repo.insert(make_test_document("doc-cleanup")).await;
 
-    let (mut ws, _) =
+    let (ws_raw, _) =
         tokio_tungstenite::connect_async(format!("{}/ws/documents/doc-cleanup", ws_url))
             .await
             .unwrap();
 
-    ws.send(tungstenite::Message::Text("valid-token".into()))
+    let (mut ws_write, mut ws_read) = ws_raw.split();
+
+    ws_write
+        .send(tungstenite::Message::Text("valid-token".into()))
         .await
         .unwrap();
 
-    // Drain initial sync
-    let _ = tokio::time::timeout(Duration::from_secs(2), ws.next()).await;
-    let _ = tokio::time::timeout(Duration::from_secs(2), ws.next()).await;
+    // Drain initial sync + awareness
+    drain_initial_messages(&mut ws_read).await;
 
     // Disconnect
-    ws.close(None).await.unwrap();
+    ws_write.close().await.unwrap();
 
     // Give server time to clean up
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -401,18 +460,20 @@ async fn test_new_client_receives_existing_content() {
     doc_repo.insert(make_test_document("doc-content")).await;
 
     // Client A connects and writes content
-    let (mut ws_a, _) =
+    let (ws_a_raw, _) =
         tokio_tungstenite::connect_async(format!("{}/ws/documents/doc-content", ws_url))
             .await
             .unwrap();
 
-    ws_a.send(tungstenite::Message::Text("valid-token".into()))
+    let (mut ws_a_write, mut ws_a_read) = ws_a_raw.split();
+
+    ws_a_write
+        .send(tungstenite::Message::Text("valid-token".into()))
         .await
         .unwrap();
 
-    // Drain initial sync messages (SyncStep1 + SyncStep2)
-    let _ = tokio::time::timeout(Duration::from_secs(2), ws_a.next()).await;
-    let _ = tokio::time::timeout(Duration::from_secs(2), ws_a.next()).await;
+    // Drain initial sync messages (SyncStep1 + SyncStep2 + awareness)
+    drain_initial_messages(&mut ws_a_read).await;
 
     // Create a Yrs update with content
     let doc_a = yrs::Doc::new();
@@ -431,7 +492,8 @@ async fn test_new_client_receives_existing_content() {
 
     // Send the update
     let sync_update = encode_update(&update_bytes);
-    ws_a.send(tungstenite::Message::Binary(sync_update.into()))
+    ws_a_write
+        .send(tungstenite::Message::Binary(sync_update.into()))
         .await
         .unwrap();
 
@@ -439,55 +501,46 @@ async fn test_new_client_receives_existing_content() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Client B connects — should receive full state including A's content via SyncStep2
-    let (mut ws_b, _) =
+    let (ws_b_raw, _) =
         tokio_tungstenite::connect_async(format!("{}/ws/documents/doc-content", ws_url))
             .await
             .unwrap();
 
-    ws_b.send(tungstenite::Message::Text("valid-token".into()))
+    let (mut ws_b_write, mut ws_b_read) = ws_b_raw.split();
+
+    ws_b_write
+        .send(tungstenite::Message::Text("valid-token".into()))
         .await
         .unwrap();
 
-    // Receive SyncStep1 (state vector)
-    let _ = tokio::time::timeout(Duration::from_secs(5), ws_b.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    // Receive all initial messages and find SyncStep2 with full doc state
+    let initial_msgs = drain_initial_messages(&mut ws_b_read).await;
 
-    // Receive SyncStep2 (full document state)
-    let step2_msg = tokio::time::timeout(Duration::from_secs(5), ws_b.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-
-    match step2_msg {
-        tungstenite::Message::Binary(data) => {
-            let decoded = decode_sync_message(&data).unwrap();
-            match decoded {
-                Some(SyncMessage::SyncStep2(full_state)) => {
-                    // Apply the full state to a fresh doc and verify content
-                    let doc_b = yrs::Doc::new();
-                    {
-                        let mut txn = doc_b.transact_mut();
-                        let u = yrs::Update::decode_v1(&full_state).unwrap();
-                        txn.apply_update(u).unwrap();
-                    }
-                    let text_b = doc_b.get_or_insert_text("content");
-                    let txn = doc_b.transact();
-                    assert_eq!(
-                        text_b.get_string(&txn),
-                        "persistent content",
-                        "New client should receive existing content via initial sync"
-                    );
-                }
-                other => panic!("Expected SyncStep2, got: {:?}", other),
+    let mut found_content = false;
+    for data in &initial_msgs {
+        if let Ok(Some(SyncMessage::SyncStep2(full_state))) = decode_sync_message(data) {
+            let doc_b = yrs::Doc::new();
+            {
+                let mut txn = doc_b.transact_mut();
+                let u = yrs::Update::decode_v1(&full_state).unwrap();
+                txn.apply_update(u).unwrap();
             }
+            let text_b = doc_b.get_or_insert_text("content");
+            let txn = doc_b.transact();
+            assert_eq!(
+                text_b.get_string(&txn),
+                "persistent content",
+                "New client should receive existing content via initial sync"
+            );
+            found_content = true;
+            break;
         }
-        other => panic!("Expected binary message, got: {:?}", other),
     }
+    assert!(
+        found_content,
+        "Should have found SyncStep2 with content in initial messages"
+    );
 
-    ws_a.close(None).await.unwrap();
-    ws_b.close(None).await.unwrap();
+    ws_a_write.close().await.unwrap();
+    ws_b_write.close().await.unwrap();
 }

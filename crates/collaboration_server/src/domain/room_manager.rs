@@ -4,11 +4,13 @@ use tokio::sync::RwLock;
 
 use common::domain::DocumentRepository;
 
+use crate::domain::DocumentAwarenessManager;
 use crate::domain::DocumentRoom;
 use crate::nats::NatsDocumentRelay;
 
 pub struct RoomManager {
     rooms: RwLock<HashMap<String, Arc<DocumentRoom>>>,
+    awareness_managers: RwLock<HashMap<String, Arc<DocumentAwarenessManager>>>,
     document_repository: Arc<dyn DocumentRepository>,
     nats_relay: Arc<NatsDocumentRelay>,
     document_updates_stream: String,
@@ -22,6 +24,7 @@ impl RoomManager {
     ) -> Self {
         Self {
             rooms: RwLock::new(HashMap::new()),
+            awareness_managers: RwLock::new(HashMap::new()),
             document_repository,
             nats_relay,
             document_updates_stream,
@@ -82,6 +85,34 @@ impl RoomManager {
     /// Remove a room (called when last client disconnects)
     pub async fn remove_room(&self, document_id: &str) {
         self.rooms.write().await.remove(document_id);
+    }
+
+    /// Get or create a per-document awareness manager
+    pub async fn get_or_create_awareness(
+        &self,
+        document_id: &str,
+    ) -> Arc<DocumentAwarenessManager> {
+        {
+            let managers = self.awareness_managers.read().await;
+            if let Some(manager) = managers.get(document_id) {
+                return manager.clone();
+            }
+        }
+
+        let mut managers = self.awareness_managers.write().await;
+        // Double-check after acquiring write lock
+        if let Some(manager) = managers.get(document_id) {
+            return manager.clone();
+        }
+
+        let manager = Arc::new(DocumentAwarenessManager::new(document_id.to_string()));
+        managers.insert(document_id.to_string(), manager.clone());
+        manager
+    }
+
+    /// Remove awareness manager (called when last client disconnects)
+    pub async fn remove_awareness(&self, document_id: &str) {
+        self.awareness_managers.write().await.remove(document_id);
     }
 
     /// Check active room count (for health checks)

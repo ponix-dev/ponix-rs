@@ -4,15 +4,18 @@ use axum::extract::{Path, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::Response;
 use common::auth::AuthTokenProvider;
+use common::domain::UserRepository;
 
 use crate::domain::RoomManager;
-use crate::nats::NatsDocumentRelay;
+use crate::nats::{AwarenessRelay, NatsDocumentRelay};
 use crate::websocket::connection::handle_connection;
 
 pub struct AppState {
     pub room_manager: Arc<RoomManager>,
     pub nats_relay: Arc<NatsDocumentRelay>,
+    pub awareness_relay: Option<Arc<AwarenessRelay>>,
     pub auth_token_provider: Arc<dyn AuthTokenProvider>,
+    pub user_repository: Arc<dyn UserRepository>,
 }
 
 pub async fn ws_handler(
@@ -38,7 +41,9 @@ pub async fn ws_handler(
             room,
             state.room_manager.clone(),
             state.nats_relay.clone(),
+            state.awareness_relay.clone(),
             state.auth_token_provider.clone(),
+            state.user_repository.clone(),
         )
     }))
 }

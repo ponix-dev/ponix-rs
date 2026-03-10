@@ -159,6 +159,13 @@ impl DocumentRoom {
         self.clients.read().await.len()
     }
 
+    /// Get read access to the clients map (for awareness broadcasting)
+    pub async fn clients_read(
+        &self,
+    ) -> tokio::sync::RwLockReadGuard<'_, HashMap<ClientId, ConnectedClient>> {
+        self.clients.read().await
+    }
+
     pub fn document_id(&self) -> &str {
         &self.document_id
     }
