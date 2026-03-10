@@ -71,11 +71,7 @@ async fn main() -> Result<()> {
 
     // Read up to 5 messages within a timeout to handle sync + awareness
     for _ in 0..5 {
-        let msg = match tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            stream.next(),
-        )
-        .await
+        let msg = match tokio::time::timeout(std::time::Duration::from_secs(3), stream.next()).await
         {
             Ok(Some(Ok(msg))) => msg,
             Ok(Some(Err(e))) => bail!("error receiving message: {}", e),
@@ -159,8 +155,7 @@ async fn main() -> Result<()> {
             println!("{}", content.get_string(&txn));
         }
         Command::Listen { duration } => {
-            let deadline =
-                tokio::time::Instant::now() + std::time::Duration::from_secs(duration);
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(duration);
 
             loop {
                 tokio::select! {
@@ -200,8 +195,7 @@ async fn main() -> Result<()> {
             }
 
             // Listen for more awareness messages
-            let deadline =
-                tokio::time::Instant::now() + std::time::Duration::from_secs(duration);
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(duration);
 
             loop {
                 tokio::select! {
@@ -251,8 +245,7 @@ fn decode_awareness_json(data: &[u8]) -> Option<String> {
         offset += 8;
         let _clock = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
         offset += 4;
-        let state_len =
-            u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?) as usize;
+        let state_len = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?) as usize;
         offset += 4;
 
         if state_len > 0 && offset + state_len <= data.len() {

@@ -4,14 +4,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use collaboration_server::domain::RoomManager;
-use collaboration_server::domain::{decode_sync_message, encode_update, SyncMessage, MSG_AWARENESS};
+use collaboration_server::domain::{
+    decode_sync_message, encode_update, SyncMessage, MSG_AWARENESS,
+};
 use collaboration_server::nats::NatsDocumentRelay;
 use collaboration_server::websocket::{build_router, AppState};
 use common::auth::AuthTokenProvider;
 use common::domain::{
     CreateDocumentRepoInputWithId, Document, DocumentRepository, DomainResult,
-    GetDocumentRepoInput, GetUserByEmailRepoInput, GetUserRepoInput,
-    RegisterUserRepoInputWithId, User, UserRepository,
+    GetDocumentRepoInput, GetUserByEmailRepoInput, GetUserRepoInput, RegisterUserRepoInputWithId,
+    User, UserRepository,
 };
 use common::yrs::create_empty_document;
 use futures_util::{SinkExt, StreamExt};
@@ -104,7 +106,10 @@ impl UserRepository for InMemoryUserRepository {
         }))
     }
 
-    async fn get_user_by_email(&self, _input: GetUserByEmailRepoInput) -> DomainResult<Option<User>> {
+    async fn get_user_by_email(
+        &self,
+        _input: GetUserByEmailRepoInput,
+    ) -> DomainResult<Option<User>> {
         unimplemented!()
     }
 }
@@ -398,7 +403,10 @@ async fn test_two_client_sync() {
             // Otherwise it was an awareness message — continue
         }
     }
-    assert!(found_update, "Client B should have received the sync update");
+    assert!(
+        found_update,
+        "Client B should have received the sync update"
+    );
 
     ws_a_write.close().await.unwrap();
     ws_b_write.close().await.unwrap();

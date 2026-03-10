@@ -39,9 +39,13 @@ impl DocumentConverter {
             .to_string();
 
         // metadata is JSONB — CDC delivers as JSON value
-        let metadata = data
-            .get("metadata")
-            .and_then(|v| if v.is_null() { None } else { json_value_to_prost_struct(v) });
+        let metadata = data.get("metadata").and_then(|v| {
+            if v.is_null() {
+                None
+            } else {
+                json_value_to_prost_struct(v)
+            }
+        });
 
         let created_at = data
             .get("created_at")

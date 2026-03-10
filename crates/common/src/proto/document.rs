@@ -143,8 +143,8 @@ pub fn parse_document_cdc_event(
     use anyhow::anyhow;
     use prost::Message;
 
-    let proto_document = ProtoDocument::decode(payload)
-        .map_err(|e| anyhow!("Failed to decode protobuf: {}", e))?;
+    let proto_document =
+        ProtoDocument::decode(payload).map_err(|e| anyhow!("Failed to decode protobuf: {}", e))?;
 
     let document = proto_to_domain_document(&proto_document);
 
@@ -307,6 +307,9 @@ mod tests {
 
         let result = parse_document_cdc_event("documents.unknown", &payload);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unknown CDC subject"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unknown CDC subject"));
     }
 }
