@@ -3,8 +3,8 @@ mod config;
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{
-    CdcConfig, DataStreamConverter, DataStreamDefinitionConverter, EntityConfig, GatewayConverter,
-    OrganizationConverter, UserConverter, WorkspaceConverter,
+    CdcConfig, DataStreamConverter, DataStreamDefinitionConverter, DocumentConverter, EntityConfig,
+    GatewayConverter, OrganizationConverter, UserConverter, WorkspaceConverter,
 };
 use collaboration_server::nats::{AwarenessRelay, NatsDocumentRelay};
 use collaboration_server::{
@@ -260,6 +260,11 @@ async fn main() {
         table_name: config.cdc_data_stream_definition_table_name.clone(),
         converter: Box::new(DataStreamDefinitionConverter::new()),
     };
+    let document_entity_config = EntityConfig {
+        entity_name: config.cdc_document_entity_name.clone(),
+        table_name: config.cdc_document_table_name.clone(),
+        converter: Box::new(DocumentConverter::new()),
+    };
     let cdc_worker = CdcWorker::new(
         nats_client.clone(),
         CdcWorkerConfig {
@@ -271,6 +276,7 @@ async fn main() {
                 organization_entity_config,
                 user_entity_config,
                 data_stream_definition_entity_config,
+                document_entity_config,
             ],
         },
     );
@@ -615,6 +621,15 @@ async fn ensure_nats_streams(client: &NatsClient, config: &ServiceConfig) -> any
                 "Yrs document sync updates for collaboration and snapshotting".to_string(),
             ),
             max_age: std::time::Duration::from_secs(config.nats_document_updates_max_age_secs),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.cdc_document_entity_name.clone(),
+            subjects: vec![format!("{}.*", config.cdc_document_entity_name)],
+            description: Some("Document CDC events".to_string()),
             ..Default::default()
         })
         .await?;

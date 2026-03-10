@@ -272,9 +272,15 @@ if [ $CLIENT_EXIT -ne 0 ]; then
 fi
 print_info "Edit sent: \"$EDIT_TEXT\""
 
+# Start CDC listener to catch the update from snapshotter writing content
+start_cdc_listener "documents"
+
 # Wait for snapshotter compaction cycle (runs every 5s, plus margin)
 print_info "Waiting for snapshotter compaction cycle..."
 sleep 10
+
+# Verify CDC update event (snapshotter writing content_text triggers CDC)
+wait_for_cdc_event "documents" "update"
 
 # Read document back via gRPC and verify content_text
 PERSISTED_DOC=$(grpc_call "$AUTH_TOKEN" "document.v1.DocumentService/GetDocument" \

@@ -471,6 +471,8 @@ PONIX_GRPC_WEB_ENABLED=true                    # Enable gRPC-Web for browser cli
 PONIX_GRPC_CORS_ALLOWED_ORIGINS=*              # CORS allowed origins (comma-separated, "*" for all)
 
 # CDC
+PONIX_CDC_DOCUMENT_ENTITY_NAME=documents
+PONIX_CDC_DOCUMENT_TABLE_NAME=documents
 PONIX_CDC_PUBLICATION_NAME=ponix_cdc_publication
 PONIX_CDC_SLOT_NAME=ponix_cdc_slot
 PONIX_CDC_BATCH_SIZE=100

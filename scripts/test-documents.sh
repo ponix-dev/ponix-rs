@@ -178,6 +178,9 @@ fi
 # CreateDataStreamDocument
 print_step "Testing CreateDataStreamDocument (happy path)..."
 
+# Start CDC listener before creating document
+start_cdc_listener "documents"
+
 CREATE_DS_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "document.v1.DocumentService/CreateDataStreamDocument" \
     "{
@@ -193,8 +196,12 @@ if [ -n "$DS_DOC_ID" ] && [ "$DS_DOC_ID" != "null" ]; then
 else
     print_error "Failed to create data stream document"
     echo "$CREATE_DS_RESPONSE"
+    cleanup_cdc_listener
     exit 1
 fi
+
+# Verify CDC create event
+wait_for_cdc_event "documents" "create"
 
 # Verify create response contains expected fields
 DS_DOC_NAME=$(echo "$CREATE_DS_RESPONSE" | jq -r '.document.name // empty')
@@ -661,6 +668,9 @@ if [ -z "$DELETE_DOC_ID" ] || [ "$DELETE_DOC_ID" = "null" ]; then
     exit 1
 fi
 
+# Start CDC listener before deleting document
+start_cdc_listener "documents"
+
 set +e
 DELETE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "document.v1.DocumentService/DeleteDocument" \
@@ -676,8 +686,12 @@ if [ $DELETE_EXIT -eq 0 ]; then
 else
     print_error "Failed to delete document"
     echo "$DELETE_RESPONSE"
+    cleanup_cdc_listener
     exit 1
 fi
+
+# Verify CDC delete event (soft delete triggers an UPDATE in CDC)
+wait_for_cdc_event "documents" "update"
 
 # Verify deleted document returns not found
 set +e
