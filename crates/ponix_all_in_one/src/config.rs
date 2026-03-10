@@ -242,6 +242,14 @@ pub struct ServiceConfig {
     #[serde(default = "default_cdc_data_stream_definition_table_name")]
     pub cdc_data_stream_definition_table_name: String,
 
+    /// CDC entity name for document events
+    #[serde(default = "default_cdc_document_entity_name")]
+    pub cdc_document_entity_name: String,
+
+    /// CDC table name for document events
+    #[serde(default = "default_cdc_document_table_name")]
+    pub cdc_document_table_name: String,
+
     /// CDC publication name
     #[serde(default = "default_cdc_publication_name")]
     pub cdc_publication_name: String,
@@ -535,6 +543,14 @@ fn default_cdc_data_stream_definition_entity_name() -> String {
 
 fn default_cdc_data_stream_definition_table_name() -> String {
     "data_stream_definitions".to_string()
+}
+
+fn default_cdc_document_entity_name() -> String {
+    "documents".to_string()
+}
+
+fn default_cdc_document_table_name() -> String {
+    "documents".to_string()
 }
 
 fn default_cdc_publication_name() -> String {

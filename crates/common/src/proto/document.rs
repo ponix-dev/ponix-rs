@@ -99,6 +99,68 @@ fn prost_value_to_json(value: &Value) -> Option<serde_json::Value> {
     })
 }
 
+/// Convert protobuf Document to domain Document.
+///
+/// Used for CDC event parsing. Content fields and Yrs state fields
+/// are set from the proto — for CDC payloads these will be empty
+/// since the converter intentionally excludes them.
+fn proto_to_domain_document(proto: &ProtoDocument) -> Document {
+    let metadata = prost_struct_to_json_value(proto.metadata.clone());
+
+    let created_at = proto
+        .created_at
+        .as_ref()
+        .and_then(|ts| DateTime::from_timestamp(ts.seconds, ts.nanos as u32));
+
+    let updated_at = proto
+        .updated_at
+        .as_ref()
+        .and_then(|ts| DateTime::from_timestamp(ts.seconds, ts.nanos as u32));
+
+    Document {
+        document_id: proto.document_id.clone(),
+        organization_id: proto.organization_id.clone(),
+        name: proto.name.clone(),
+        yrs_state: vec![],
+        yrs_state_vector: vec![],
+        content_text: proto.content_text.clone(),
+        content_html: proto.content_html.clone(),
+        metadata,
+        deleted_at: None,
+        created_at,
+        updated_at,
+    }
+}
+
+/// Parse a document CDC event from a NATS message subject and payload.
+///
+/// Decodes the protobuf Document, converts to domain Document,
+/// and determines the event type from the subject suffix.
+pub fn parse_document_cdc_event(
+    subject: &str,
+    payload: &[u8],
+) -> anyhow::Result<crate::domain::DocumentCdcEvent> {
+    use anyhow::anyhow;
+    use prost::Message;
+
+    let proto_document = ProtoDocument::decode(payload)
+        .map_err(|e| anyhow!("Failed to decode protobuf: {}", e))?;
+
+    let document = proto_to_domain_document(&proto_document);
+
+    if subject.ends_with(".create") {
+        Ok(crate::domain::DocumentCdcEvent::Created { document })
+    } else if subject.ends_with(".update") {
+        Ok(crate::domain::DocumentCdcEvent::Updated { document })
+    } else if subject.ends_with(".delete") {
+        Ok(crate::domain::DocumentCdcEvent::Deleted {
+            document_id: document.document_id,
+        })
+    } else {
+        Err(anyhow!("Unknown CDC subject: {}", subject))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,5 +227,86 @@ mod tests {
     fn test_prost_struct_to_json_value_none() {
         let result = prost_struct_to_json_value(None);
         assert_eq!(result, serde_json::json!({}));
+    }
+
+    fn make_test_proto_document() -> ProtoDocument {
+        ProtoDocument {
+            document_id: "doc-abc".to_string(),
+            organization_id: "org-123".to_string(),
+            name: "Test Doc".to_string(),
+            metadata: None,
+            content_text: String::new(),
+            content_html: String::new(),
+            created_at: Some(prost_types::Timestamp {
+                seconds: 1704067200,
+                nanos: 0,
+            }),
+            updated_at: Some(prost_types::Timestamp {
+                seconds: 1704067200,
+                nanos: 0,
+            }),
+        }
+    }
+
+    #[test]
+    fn test_parse_document_cdc_event_create() {
+        use prost::Message;
+
+        let proto = make_test_proto_document();
+        let payload = proto.encode_to_vec();
+
+        let event = parse_document_cdc_event("documents.create", &payload).unwrap();
+        match event {
+            crate::domain::DocumentCdcEvent::Created { document } => {
+                assert_eq!(document.document_id, "doc-abc");
+                assert_eq!(document.organization_id, "org-123");
+                assert_eq!(document.name, "Test Doc");
+            }
+            _ => panic!("Expected Created event"),
+        }
+    }
+
+    #[test]
+    fn test_parse_document_cdc_event_update() {
+        use prost::Message;
+
+        let proto = make_test_proto_document();
+        let payload = proto.encode_to_vec();
+
+        let event = parse_document_cdc_event("documents.update", &payload).unwrap();
+        match event {
+            crate::domain::DocumentCdcEvent::Updated { document } => {
+                assert_eq!(document.document_id, "doc-abc");
+            }
+            _ => panic!("Expected Updated event"),
+        }
+    }
+
+    #[test]
+    fn test_parse_document_cdc_event_delete() {
+        use prost::Message;
+
+        let proto = make_test_proto_document();
+        let payload = proto.encode_to_vec();
+
+        let event = parse_document_cdc_event("documents.delete", &payload).unwrap();
+        match event {
+            crate::domain::DocumentCdcEvent::Deleted { document_id } => {
+                assert_eq!(document_id, "doc-abc");
+            }
+            _ => panic!("Expected Deleted event"),
+        }
+    }
+
+    #[test]
+    fn test_parse_document_cdc_event_unknown_subject() {
+        use prost::Message;
+
+        let proto = make_test_proto_document();
+        let payload = proto.encode_to_vec();
+
+        let result = parse_document_cdc_event("documents.unknown", &payload);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unknown CDC subject"));
     }
 }

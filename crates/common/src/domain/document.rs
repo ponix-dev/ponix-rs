@@ -99,3 +99,21 @@ pub trait DocumentRepository: Send + Sync {
     /// Returns `true` if write succeeded, `false` if advisory lock was not acquired.
     async fn update_yrs_state(&self, input: UpdateYrsStateInput) -> DomainResult<bool>;
 }
+
+/// Domain representation of a document CDC event
+#[derive(Debug, Clone)]
+pub enum DocumentCdcEvent {
+    Created { document: Document },
+    Updated { document: Document },
+    Deleted { document_id: String },
+}
+
+impl DocumentCdcEvent {
+    pub fn document_id(&self) -> &str {
+        match self {
+            DocumentCdcEvent::Created { document } => &document.document_id,
+            DocumentCdcEvent::Updated { document } => &document.document_id,
+            DocumentCdcEvent::Deleted { document_id } => document_id,
+        }
+    }
+}
