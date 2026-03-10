@@ -1,6 +1,8 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use collaboration_server::domain::{decode_sync_message, encode_update, SyncMessage, MSG_SYNC};
+use collaboration_server::domain::{
+    decode_sync_message, encode_update, SyncMessage, MSG_AWARENESS, MSG_SYNC,
+};
 use common::yrs::ROOT_TEXT_NAME;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
@@ -39,6 +41,12 @@ enum Command {
         #[arg(long, default_value = "5")]
         duration: u64,
     },
+    /// Connect and print presence/awareness info as JSON lines to stdout
+    Presence {
+        /// How long to listen for awareness messages in seconds
+        #[arg(long, default_value = "5")]
+        duration: u64,
+    },
 }
 
 #[tokio::main]
@@ -56,21 +64,36 @@ async fn main() -> Result<()> {
         .await
         .context("failed to send auth token")?;
 
-    // Step 2: Receive SyncStep1 + SyncStep2 from server
+    // Step 2: Receive initial messages (SyncStep1 + SyncStep2 + awareness)
     let doc = Doc::new();
     let mut received_step2 = false;
+    let mut awareness_messages: Vec<Vec<u8>> = Vec::new();
 
-    for i in 0..2 {
-        let msg = stream
-            .next()
-            .await
-            .context("connection closed before initial sync")?
-            .context("error receiving sync message")?;
+    // Read up to 5 messages within a timeout to handle sync + awareness
+    for _ in 0..5 {
+        let msg = match tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            stream.next(),
+        )
+        .await
+        {
+            Ok(Some(Ok(msg))) => msg,
+            Ok(Some(Err(e))) => bail!("error receiving message: {}", e),
+            Ok(None) => bail!("connection closed before initial sync"),
+            Err(_) => break, // Timeout — done receiving init messages
+        };
 
         match msg {
             Message::Binary(data) => {
-                if data.len() < 2 || data[0] != MSG_SYNC {
-                    bail!("unexpected binary message during sync (message {})", i);
+                if data.is_empty() {
+                    continue;
+                }
+                if data[0] == MSG_AWARENESS {
+                    awareness_messages.push(data.to_vec());
+                    continue;
+                }
+                if data[0] != MSG_SYNC {
+                    continue;
                 }
                 match decode_sync_message(&data) {
                     Ok(Some(SyncMessage::SyncStep1(_))) => {
@@ -84,18 +107,20 @@ async fn main() -> Result<()> {
                             .context("failed to apply SyncStep2")?;
                         received_step2 = true;
                     }
-                    Ok(Some(SyncMessage::Update(_))) => {
-                        bail!("unexpected Update message during init sync");
-                    }
-                    Ok(None) => {} // Non-sync message, ignore
+                    Ok(Some(SyncMessage::Update(_))) => {}
+                    Ok(None) => {}
                     Err(e) => bail!("failed to decode sync message during init: {}", e),
+                }
+                // Once we have both step1 and step2, check if we should stop
+                if received_step2 && awareness_messages.len() >= 1 {
+                    break;
                 }
             }
             Message::Close(frame) => {
                 let reason = frame.map(|f| f.reason.to_string()).unwrap_or_default();
                 bail!("server closed connection during sync: {}", reason);
             }
-            _ => bail!("unexpected message type during sync"),
+            _ => {}
         }
     }
 
@@ -134,7 +159,8 @@ async fn main() -> Result<()> {
             println!("{}", content.get_string(&txn));
         }
         Command::Listen { duration } => {
-            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(duration);
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(duration);
 
             loop {
                 tokio::select! {
@@ -165,9 +191,81 @@ async fn main() -> Result<()> {
             let txn = doc.transact();
             println!("{}", content.get_string(&txn));
         }
+        Command::Presence { duration } => {
+            // Print awareness messages received during init
+            for awareness_data in &awareness_messages {
+                if let Some(json) = decode_awareness_json(awareness_data) {
+                    println!("{}", json);
+                }
+            }
+
+            // Listen for more awareness messages
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(duration);
+
+            loop {
+                tokio::select! {
+                    _ = tokio::time::sleep_until(deadline) => break,
+                    msg = stream.next() => {
+                        match msg {
+                            Some(Ok(Message::Binary(data))) => {
+                                if !data.is_empty() && data[0] == MSG_AWARENESS {
+                                    if let Some(json) = decode_awareness_json(&data) {
+                                        println!("{}", json);
+                                    }
+                                }
+                            }
+                            Some(Ok(Message::Close(_))) | None => break,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Graceful close
     let _ = sink.send(Message::Close(None)).await;
     Ok(())
+}
+
+/// Decode awareness wire format and return the JSON presence entries.
+/// Wire format: [MSG_AWARENESS][num_clients: u32_le][...entries...]
+/// Each entry: [client_id: u64_le][clock: u32_le][state_len: u32_le][state_json]
+fn decode_awareness_json(data: &[u8]) -> Option<String> {
+    // Skip MSG_AWARENESS byte
+    let data = &data[1..];
+    if data.len() < 4 {
+        return None;
+    }
+
+    let num_clients = u32::from_le_bytes(data[0..4].try_into().ok()?) as usize;
+    let mut offset = 4;
+    let mut entries = Vec::new();
+
+    for _ in 0..num_clients {
+        if offset + 16 > data.len() {
+            break;
+        }
+        let _client_id = u64::from_le_bytes(data[offset..offset + 8].try_into().ok()?);
+        offset += 8;
+        let _clock = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
+        offset += 4;
+        let state_len =
+            u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?) as usize;
+        offset += 4;
+
+        if state_len > 0 && offset + state_len <= data.len() {
+            if let Ok(json_str) = std::str::from_utf8(&data[offset..offset + state_len]) {
+                entries.push(json_str.to_string());
+            }
+        }
+        offset += state_len;
+    }
+
+    if entries.is_empty() {
+        None
+    } else {
+        Some(format!("[{}]", entries.join(",")))
+    }
 }

@@ -6,7 +6,7 @@ use cdc_worker::domain::{
     CdcConfig, DataStreamConverter, DataStreamDefinitionConverter, EntityConfig, GatewayConverter,
     OrganizationConverter, UserConverter, WorkspaceConverter,
 };
-use collaboration_server::nats::NatsDocumentRelay;
+use collaboration_server::nats::{AwarenessRelay, NatsDocumentRelay};
 use collaboration_server::{
     CollaborationServer, CollaborationServerConfig, DocumentSnapshotter, DocumentSnapshotterConfig,
 };
@@ -314,11 +314,18 @@ async fn main() {
         document_updates_stream: config.nats_document_updates_stream.clone(),
     };
 
+    let awareness_relay = Arc::new(AwarenessRelay::new(
+        nats_client.client().clone(),
+        xid::new().to_string(),
+    ));
+
     let collaboration_server = CollaborationServer::new(
         collab_config,
         postgres_repos.document.clone() as Arc<dyn common::domain::DocumentRepository>,
         auth_token_provider_for_collab,
+        postgres_repos.user.clone() as Arc<dyn common::domain::UserRepository>,
         nats_relay,
+        Some(awareness_relay),
     );
 
     // Create document snapshotter

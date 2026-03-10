@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tracing::{debug, error};
 
 pub struct NatsClient {
-    _client: async_nats::Client,
+    client: async_nats::Client,
     jetstream: jetstream::Context,
 }
 
@@ -25,10 +25,7 @@ impl NatsClient {
         let jetstream = jetstream::new(client.clone());
 
         debug!("successfully connected to nats");
-        Ok(Self {
-            _client: client,
-            jetstream,
-        })
+        Ok(Self { client, jetstream })
     }
 
     pub async fn ensure_stream(&self, config: StreamConfig) -> Result<()> {
@@ -49,6 +46,10 @@ impl NatsClient {
         }
 
         Ok(())
+    }
+
+    pub fn client(&self) -> &async_nats::Client {
+        &self.client
     }
 
     pub fn jetstream(&self) -> &jetstream::Context {
