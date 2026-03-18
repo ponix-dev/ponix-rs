@@ -32,6 +32,7 @@ End-to-end paths through the system.
 
 | Document | Description |
 |----------|-------------|
+| [Documentation Lifecycle](data-flows/documentation-lifecycle.md) | How project documentation is created, discovered, and kept in sync with code changes through Claude Code skills |
 | [Envelope Processing Pipeline](data-flows/envelope-pipeline.md) | End-to-end data flow for ingesting raw IoT payloads, transforming them via CEL expressions, and storing structured results in ClickHouse |
 
 ## Operations
