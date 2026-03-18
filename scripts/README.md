@@ -1,6 +1,6 @@
 # Test Scripts
 
-This directory contains test scripts for the Ponix gRPC API, organized by domain area.
+This directory contains test scripts for the Ponix gRPC API and collaboration server, organized by domain area.
 
 ## Quick Start
 
@@ -12,9 +12,12 @@ This directory contains test scripts for the Ponix gRPC API, organized by domain
 ./scripts/test-auth.sh
 ./scripts/test-organizations.sh
 ./scripts/test-workspaces.sh
-./scripts/test-devices.sh
+./scripts/test-data-streams.sh
 ./scripts/test-gateways.sh
+./scripts/test-documents.sh
+./scripts/test-collaboration.sh
 ./scripts/test-mqtt-pipeline.sh
+./scripts/test-multi-contract-pipeline.sh
 ```
 
 ## Prerequisites
@@ -30,24 +33,30 @@ This directory contains test scripts for the Ponix gRPC API, organized by domain
 | `test-auth.sh` | UserService | Authentication flow (register, login, refresh, logout, GetUser) |
 | `test-organizations.sh` | OrganizationService | Organization CRUD operations |
 | `test-workspaces.sh` | WorkspaceService | Workspace CRUD operations |
-| `test-devices.sh` | EndDeviceService, EndDeviceDefinitionService | Device and definition CRUD |
+| `test-data-streams.sh` | DataStreamService, DataStreamDefinitionService | Data stream and definition CRUD |
 | `test-gateways.sh` | GatewayService | Gateway CRUD operations |
+| `test-documents.sh` | DocumentService | Document CRUD across contexts (data stream, definition, workspace), metadata, AGE graph validation, CDC events |
+| `test-collaboration.sh` | CollaborationServer, DocumentSnapshotter | WebSocket auth, single/multi-client editing, Yrs persistence, awareness/presence, reconnect recovery |
 | `test-mqtt-pipeline.sh` | E2E | MQTT -> NATS -> ClickHouse pipeline test |
+| `test-multi-contract-pipeline.sh` | E2E | Multi-protocol payload contract pipeline test |
 
 ## Directory Structure
 
 ```
 scripts/
-├── README.md              # This file
+├── README.md                       # This file
 ├── lib/
-│   └── common.sh          # Shared utilities (colors, auth helpers, test functions)
-├── test-all.sh            # Runner script
-├── test-auth.sh           # UserService tests
-├── test-organizations.sh  # OrganizationService tests
-├── test-workspaces.sh     # WorkspaceService tests
-├── test-devices.sh        # EndDevice + Definition tests
-├── test-gateways.sh       # GatewayService tests
-└── test-mqtt-pipeline.sh  # E2E MQTT pipeline test
+│   └── common.sh                   # Shared utilities (colors, auth helpers, test functions)
+├── test-all.sh                     # Runner script
+├── test-auth.sh                    # UserService tests
+├── test-organizations.sh           # OrganizationService tests
+├── test-workspaces.sh              # WorkspaceService tests
+├── test-data-streams.sh            # DataStream + Definition tests
+├── test-gateways.sh                # GatewayService tests
+├── test-documents.sh               # DocumentService tests (CRUD, associations, CDC)
+├── test-collaboration.sh           # CollaborationServer tests (WebSocket, Yrs, awareness)
+├── test-mqtt-pipeline.sh           # E2E MQTT pipeline test
+└── test-multi-contract-pipeline.sh # E2E multi-contract pipeline test
 ```
 
 ## Test Coverage
@@ -57,22 +66,26 @@ Each domain test script includes:
 - **UNAUTHENTICATED tests**: Verify all protected endpoints reject requests without tokens
 - **Invalid token tests**: Verify endpoints reject invalid JWT tokens
 
-### API Coverage (28 RPC methods)
+### API Coverage
 
 | Service | Methods | Script |
 |---------|---------|--------|
 | UserService | RegisterUser, Login, Refresh, Logout, GetUser | test-auth.sh |
 | OrganizationService | Create, Get, Delete, List, UserOrganizations | test-organizations.sh |
 | WorkspaceService | Create, Get, Update, Delete, List | test-workspaces.sh |
-| EndDeviceDefinitionService | Create, Get, Update, Delete, List | test-devices.sh |
-| EndDeviceService | Create, Get, List | test-devices.sh |
+| DataStreamDefinitionService | Create, Get, Update, Delete, List | test-data-streams.sh |
+| DataStreamService | Create, Get, List | test-data-streams.sh |
 | GatewayService | Create, Get, Update, Delete, List | test-gateways.sh |
+| DocumentService | CreateDataStreamDocument, CreateDefinitionDocument, CreateWorkspaceDocument, ListDocuments, UpdateDocument, UnlinkDocument, DeleteDocument | test-documents.sh |
+| CollaborationServer | WebSocket connect, JWT auth, Yrs sync, awareness presence | test-collaboration.sh |
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GRPC_HOST` | `localhost:50051` | gRPC server address |
+| `COLLAB_HOST` | `localhost` | Collaboration server host |
+| `COLLAB_PORT` | `50052` | Collaboration server WebSocket port |
 | `PONIX_MQTT_HOST` | `localhost` | MQTT broker host |
 | `PONIX_MQTT_PORT` | `1883` | MQTT broker port |
 | `PONIX_GATEWAY_BROKER_URL` | `mqtt://ponix-emqx:1883` | Gateway broker URL (Docker network) |
@@ -153,7 +166,11 @@ docker exec -it ponix-postgres psql -U ponix -d ponix -c \
 
 ### Subscribe to CDC Events
 ```bash
+# Gateway CDC events
 nats sub 'gateway.>'
+
+# Document CDC events
+nats sub 'documents.>'
 ```
 
 ## gRPC Reflection
@@ -165,8 +182,8 @@ gRPC reflection is enabled, allowing grpcurl to discover services:
 grpcurl -plaintext localhost:50051 list
 
 # List methods for a service
-grpcurl -plaintext localhost:50051 list organization.v1.OrganizationService
+grpcurl -plaintext localhost:50051 list data_stream.v1.DataStreamService
 
 # Describe a method
-grpcurl -plaintext localhost:50051 describe organization.v1.OrganizationService.CreateOrganization
+grpcurl -plaintext localhost:50051 describe data_stream.v1.DataStreamService.CreateDataStream
 ```
