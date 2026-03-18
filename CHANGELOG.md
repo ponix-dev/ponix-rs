@@ -1,3 +1,9 @@
+## [1.28.0](https://github.com/ponix-dev/ponix-rs/compare/v1.27.0...v1.28.0) (2026-03-18)
+
+### Features
+
+* project documentation system with Claude Code skills ([#192](https://github.com/ponix-dev/ponix-rs/issues/192)) ([8937b2e](https://github.com/ponix-dev/ponix-rs/commit/8937b2e66ef4512951d623f0f62993c30b6012cc)), closes [#191](https://github.com/ponix-dev/ponix-rs/issues/191)
+
 ## [1.27.0](https://github.com/ponix-dev/ponix-rs/compare/v1.26.0...v1.27.0) (2026-03-18)
 
 ### Features
