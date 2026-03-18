@@ -39,15 +39,20 @@ mise run test:unit
 
 If tests fail, fix the failing tests or underlying code, then re-run.
 
-### 4. Report
+### 4. Doc Gardening
+
+Run the `/doc-gardening` skill to sync documentation with code changes on the current branch. This ensures docs stay up to date before pushing.
+
+### 5. Report
 
 Present a summary to the user:
 
 ```
 Pre-flight checks:
-- Format:  PASS/FAIL
-- Clippy:  PASS/FAIL
-- Tests:   PASS/FAIL
+- Format:        PASS/FAIL
+- Clippy:        PASS/FAIL
+- Tests:         PASS/FAIL
+- Doc Gardening: X updated, Y created, Z warnings
 ```
 
 If all checks pass, let the user know they're clear to push or create a PR.
