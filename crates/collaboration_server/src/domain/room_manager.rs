@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use common::domain::DocumentRepository;
 
@@ -11,6 +11,8 @@ use crate::nats::NatsDocumentRelay;
 pub struct RoomManager {
     rooms: RwLock<HashMap<String, Arc<DocumentRoom>>>,
     awareness_managers: RwLock<HashMap<String, Arc<DocumentAwarenessManager>>>,
+    creating_rooms: Mutex<HashSet<String>>,
+    creating_awareness: Mutex<HashSet<String>>,
     document_repository: Arc<dyn DocumentRepository>,
     nats_relay: Arc<NatsDocumentRelay>,
     document_updates_stream: String,
@@ -25,6 +27,8 @@ impl RoomManager {
         Self {
             rooms: RwLock::new(HashMap::new()),
             awareness_managers: RwLock::new(HashMap::new()),
+            creating_rooms: Mutex::new(HashSet::new()),
+            creating_awareness: Mutex::new(HashSet::new()),
             document_repository,
             nats_relay,
             document_updates_stream,
@@ -34,19 +38,48 @@ impl RoomManager {
     /// Get or create a room for a document.
     /// If creating: loads yrs_state from PG, replays JetStream, starts NATS subscription.
     /// Returns None if document doesn't exist.
+    ///
+    /// Uses per-document creation locking to prevent duplicate I/O and leaked NATS subscriptions
+    /// when multiple tasks request the same document concurrently.
     pub async fn get_or_create_room(
         &self,
         document_id: &str,
     ) -> Result<Option<Arc<DocumentRoom>>, anyhow::Error> {
-        // Fast path: room already exists
-        {
-            let rooms = self.rooms.read().await;
-            if let Some(room) = rooms.get(document_id) {
-                return Ok(Some(room.clone()));
+        loop {
+            // Fast path: room already exists
+            {
+                let rooms = self.rooms.read().await;
+                if let Some(room) = rooms.get(document_id) {
+                    return Ok(Some(room.clone()));
+                }
             }
-        }
 
-        // Slow path: load document from PG and create room
+            // Acquire per-document creation lock
+            {
+                let mut creating = self.creating_rooms.lock().await;
+                if creating.contains(document_id) {
+                    // Another task is creating this room — yield and retry
+                    drop(creating);
+                    tokio::task::yield_now().await;
+                    continue;
+                }
+                creating.insert(document_id.to_string());
+            }
+
+            // We hold the creation lock — ensure cleanup on all paths
+            let result = self.create_room(document_id).await;
+
+            // Remove from creating set
+            self.creating_rooms.lock().await.remove(document_id);
+
+            return result;
+        }
+    }
+
+    async fn create_room(
+        &self,
+        document_id: &str,
+    ) -> Result<Option<Arc<DocumentRoom>>, anyhow::Error> {
         let document = self
             .document_repository
             .get_document_by_id(document_id)
@@ -87,27 +120,44 @@ impl RoomManager {
         self.rooms.write().await.remove(document_id);
     }
 
-    /// Get or create a per-document awareness manager
+    /// Get or create a per-document awareness manager.
+    ///
+    /// Uses per-document creation locking for consistency with `get_or_create_room`.
     pub async fn get_or_create_awareness(
         &self,
         document_id: &str,
     ) -> Arc<DocumentAwarenessManager> {
-        {
-            let managers = self.awareness_managers.read().await;
-            if let Some(manager) = managers.get(document_id) {
-                return manager.clone();
+        loop {
+            // Fast path: manager already exists
+            {
+                let managers = self.awareness_managers.read().await;
+                if let Some(manager) = managers.get(document_id) {
+                    return manager.clone();
+                }
             }
-        }
 
-        let mut managers = self.awareness_managers.write().await;
-        // Double-check after acquiring write lock
-        if let Some(manager) = managers.get(document_id) {
-            return manager.clone();
-        }
+            // Acquire per-document creation lock
+            {
+                let mut creating = self.creating_awareness.lock().await;
+                if creating.contains(document_id) {
+                    drop(creating);
+                    tokio::task::yield_now().await;
+                    continue;
+                }
+                creating.insert(document_id.to_string());
+            }
 
-        let manager = Arc::new(DocumentAwarenessManager::new(document_id.to_string()));
-        managers.insert(document_id.to_string(), manager.clone());
-        manager
+            let manager = Arc::new(DocumentAwarenessManager::new(document_id.to_string()));
+
+            self.awareness_managers
+                .write()
+                .await
+                .insert(document_id.to_string(), manager.clone());
+
+            self.creating_awareness.lock().await.remove(document_id);
+
+            return manager;
+        }
     }
 
     /// Remove awareness manager (called when last client disconnects)
