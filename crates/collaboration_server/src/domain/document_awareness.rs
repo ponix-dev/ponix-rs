@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::RwLock;
 
-use crate::domain::awareness::{CursorPosition, UserPresence};
+use crate::domain::awareness::UserPresence;
 use crate::domain::connected_user::ConnectedUser;
 
 pub struct AwarenessClientState {
@@ -58,7 +58,7 @@ impl DocumentAwarenessManager {
     pub async fn apply_client_cursor_update(
         &self,
         client_id: u64,
-        cursor: Option<CursorPosition>,
+        cursor: Option<serde_json::Value>,
     ) -> Option<Vec<u8>> {
         let mut clients = self.clients.write().await;
         if let Some(state) = clients.get_mut(&client_id) {
@@ -175,7 +175,7 @@ fn decode_awareness_update(data: &[u8]) -> anyhow::Result<(u64, u32, UserPresenc
 
 /// Decode an awareness message from a WebSocket client.
 /// Extracts cursor/selection data only (identity is server-authoritative).
-pub fn decode_client_awareness_cursor(data: &[u8]) -> Option<Option<CursorPosition>> {
+pub fn decode_client_awareness_cursor(data: &[u8]) -> Option<Option<serde_json::Value>> {
     // data starts after the MSG_AWARENESS byte (already stripped by caller)
     if data.len() < 20 {
         return None;
@@ -189,11 +189,7 @@ pub fn decode_client_awareness_cursor(data: &[u8]) -> Option<Option<CursorPositi
 
     // Parse the JSON state — we only care about the cursor field
     let value: serde_json::Value = serde_json::from_slice(&data[20..20 + state_len]).ok()?;
-    let cursor = value
-        .get("cursor")
-        .and_then(|c| serde_json::from_value::<CursorPosition>(c.clone()).ok());
-
-    Some(cursor)
+    Some(value.get("cursor").cloned())
 }
 
 #[cfg(test)]
@@ -252,10 +248,7 @@ mod tests {
 
         let (client_id, _) = manager.add_client(&user).await;
 
-        let cursor = CursorPosition {
-            index: 5,
-            length: 3,
-        };
+        let cursor = serde_json::json!({ "index": 5, "length": 3 });
         let update = manager
             .apply_client_cursor_update(client_id, Some(cursor.clone()))
             .await
@@ -307,10 +300,7 @@ mod tests {
 
     #[test]
     fn test_decode_client_awareness_cursor_with_valid_cursor() {
-        let cursor = CursorPosition {
-            index: 10,
-            length: 5,
-        };
+        let cursor = serde_json::json!({ "index": 10, "length": 5 });
         let state = serde_json::json!({ "cursor": cursor });
         let state_bytes = serde_json::to_vec(&state).unwrap();
 
@@ -351,6 +341,27 @@ mod tests {
         data.extend_from_slice(&0u32.to_le_bytes()); // state_len = 0
 
         assert_eq!(decode_client_awareness_cursor(&data), None);
+    }
+
+    #[test]
+    fn test_decode_client_awareness_cursor_with_relative_position() {
+        // slate-yjs sends Yjs RelativePosition-encoded cursors, not {index, length}
+        let cursor = serde_json::json!({
+            "anchor": {"type": {"client": 1, "clock": 0}, "tname": null, "item": {"client": 1, "clock": 5}},
+            "focus": {"type": {"client": 1, "clock": 0}, "tname": null, "item": {"client": 1, "clock": 8}}
+        });
+        let state = serde_json::json!({ "cursor": cursor });
+        let state_bytes = serde_json::to_vec(&state).unwrap();
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&42u64.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&(state_bytes.len() as u32).to_le_bytes());
+        data.extend_from_slice(&state_bytes);
+
+        let result = decode_client_awareness_cursor(&data);
+        assert_eq!(result, Some(Some(cursor)));
     }
 
     #[tokio::test]

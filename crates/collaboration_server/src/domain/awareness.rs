@@ -1,12 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CursorPosition {
-    pub index: u32,
-    pub length: u32,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPresence {
     pub user_id: String,
@@ -14,7 +8,7 @@ pub struct UserPresence {
     pub email: String,
     pub color: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cursor: Option<CursorPosition>,
+    pub cursor: Option<serde_json::Value>,
 }
 
 pub fn derive_user_color(user_id: &str) -> String {
@@ -81,27 +75,22 @@ mod tests {
 
     #[test]
     fn test_user_presence_json_roundtrip() {
+        let cursor_value = serde_json::json!({
+            "anchor": {"type": {"client": 1, "clock": 0}, "tname": null, "item": {"client": 1, "clock": 5}},
+            "focus": {"type": {"client": 1, "clock": 0}, "tname": null, "item": {"client": 1, "clock": 8}}
+        });
         let presence = UserPresence {
             user_id: "user-1".to_string(),
             name: "Alice".to_string(),
             email: "alice@example.com".to_string(),
             color: "#ff0000".to_string(),
-            cursor: Some(CursorPosition {
-                index: 10,
-                length: 5,
-            }),
+            cursor: Some(cursor_value.clone()),
         };
 
         let json = serde_json::to_string(&presence).unwrap();
         let decoded: UserPresence = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.user_id, "user-1");
-        assert_eq!(
-            decoded.cursor,
-            Some(CursorPosition {
-                index: 10,
-                length: 5
-            })
-        );
+        assert_eq!(decoded.cursor, Some(cursor_value));
     }
 
     #[test]
