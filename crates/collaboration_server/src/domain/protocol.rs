@@ -61,6 +61,14 @@ pub fn encode_update(update: &[u8]) -> Vec<u8> {
     buf
 }
 
+/// Encode an awareness message (MSG_AWARENESS prefix + data)
+pub fn encode_awareness_message(data: &[u8]) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(1 + data.len());
+    buf.push(MSG_AWARENESS);
+    buf.extend_from_slice(data);
+    buf
+}
+
 /// Decode a raw WebSocket binary message into a SyncMessage.
 /// Returns `Ok(None)` for non-sync messages (e.g., awareness — handled by #178).
 pub fn decode_sync_message(data: &[u8]) -> Result<Option<SyncMessage>, SyncError> {

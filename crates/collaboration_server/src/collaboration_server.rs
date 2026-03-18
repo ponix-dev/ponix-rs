@@ -4,8 +4,7 @@ use common::auth::AuthTokenProvider;
 use common::domain::{DocumentRepository, UserRepository};
 use ponix_runner::AppProcess;
 
-use crate::domain::RoomManager;
-use crate::nats::{AwarenessRelay, NatsDocumentRelay};
+use crate::domain::{DocumentRelay, RoomManager};
 use crate::websocket::{build_router, AppState};
 
 pub struct CollaborationServerConfig {
@@ -26,19 +25,17 @@ impl CollaborationServer {
         document_repository: Arc<dyn DocumentRepository>,
         auth_token_provider: Arc<dyn AuthTokenProvider>,
         user_repository: Arc<dyn UserRepository>,
-        nats_relay: Arc<NatsDocumentRelay>,
-        awareness_relay: Option<Arc<AwarenessRelay>>,
+        relay: Arc<dyn DocumentRelay>,
     ) -> Self {
         let room_manager = Arc::new(RoomManager::new(
             document_repository,
-            nats_relay.clone(),
+            relay.clone(),
             config.document_updates_stream.clone(),
         ));
 
         let app_state = Arc::new(AppState {
             room_manager,
-            nats_relay,
-            awareness_relay,
+            relay,
             auth_token_provider,
             user_repository,
         });

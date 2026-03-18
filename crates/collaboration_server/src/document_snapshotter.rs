@@ -1,12 +1,11 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use common::domain::DocumentRepository;
 use common::nats::NatsClient;
 use ponix_runner::AppProcess;
 
-use crate::domain::{CompactionWorker, DocumentCache, SnapshotterService};
+use crate::domain::{CompactionWorker, SnapshotterService};
 use crate::nats::DocumentUpdateConsumer;
 
 /// Configuration for the Document Snapshotter.
@@ -36,8 +35,7 @@ impl DocumentSnapshotter {
         nats_client: Arc<NatsClient>,
         config: DocumentSnapshotterConfig,
     ) -> anyhow::Result<Self> {
-        let cache: DocumentCache = Arc::new(Mutex::new(HashMap::new()));
-        let snapshotter_service = Arc::new(SnapshotterService::new(document_repo, cache));
+        let snapshotter_service = Arc::new(SnapshotterService::new(document_repo));
 
         let consumer = DocumentUpdateConsumer::new(
             nats_client,

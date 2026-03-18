@@ -154,16 +154,27 @@ impl DocumentRoom {
         }
     }
 
+    /// Broadcast data to ALL local clients
+    pub async fn broadcast_to_all(&self, data: Vec<u8>) {
+        let clients = self.clients.read().await;
+        for client in clients.values() {
+            let _ = client.sender.try_send(data.clone());
+        }
+    }
+
+    /// Broadcast data to all local clients except one
+    pub async fn broadcast_to_others(&self, exclude_client: ClientId, data: Vec<u8>) {
+        let clients = self.clients.read().await;
+        for (&id, client) in clients.iter() {
+            if id != exclude_client {
+                let _ = client.sender.try_send(data.clone());
+            }
+        }
+    }
+
     /// Current client count
     pub async fn client_count(&self) -> usize {
         self.clients.read().await.len()
-    }
-
-    /// Get read access to the clients map (for awareness broadcasting)
-    pub async fn clients_read(
-        &self,
-    ) -> tokio::sync::RwLockReadGuard<'_, HashMap<ClientId, ConnectedClient>> {
-        self.clients.read().await
     }
 
     pub fn document_id(&self) -> &str {

@@ -9,19 +9,17 @@ use tokio::sync::mpsc;
 use crate::domain::connected_user::ConnectedUser;
 use crate::domain::protocol::MSG_AWARENESS;
 use crate::domain::{
-    decode_client_awareness_cursor, decode_sync_message, encode_sync_step1, encode_sync_step2,
-    SyncMessage,
+    decode_client_awareness_cursor, decode_sync_message, encode_awareness_message,
+    encode_sync_step1, encode_sync_step2, DocumentRelay, SyncMessage,
 };
 use crate::domain::{DocumentRoom, RoomManager};
-use crate::nats::{AwarenessRelay, NatsDocumentRelay};
 use crate::websocket::auth::authenticate_first_message;
 
 pub async fn handle_connection(
     mut socket: WebSocket,
     room: Arc<DocumentRoom>,
     room_manager: Arc<RoomManager>,
-    nats_relay: Arc<NatsDocumentRelay>,
-    awareness_relay: Option<Arc<AwarenessRelay>>,
+    relay: Arc<dyn DocumentRelay>,
     auth_token_provider: Arc<dyn AuthTokenProvider>,
     user_repository: Arc<dyn UserRepository>,
 ) {
@@ -45,8 +43,10 @@ pub async fn handle_connection(
                     .await;
                 // Clean up room if no clients
                 if room.client_count().await == 0 {
-                    nats_relay.unsubscribe(&document_id).await;
+                    relay.unsubscribe_updates(&document_id).await;
+                    relay.unsubscribe_awareness(&document_id).await;
                     room_manager.remove_room(&document_id).await;
+                    room_manager.remove_awareness(&document_id).await;
                 }
                 return;
             }
@@ -69,8 +69,10 @@ pub async fn handle_connection(
                     })))
                     .await;
                 if room.client_count().await == 0 {
-                    nats_relay.unsubscribe(&document_id).await;
+                    relay.unsubscribe_updates(&document_id).await;
+                    relay.unsubscribe_awareness(&document_id).await;
                     room_manager.remove_room(&document_id).await;
+                    room_manager.remove_awareness(&document_id).await;
                 }
                 return;
             }
@@ -103,69 +105,40 @@ pub async fn handle_connection(
     }
 
     // 6. Set up awareness
-    let awareness_manager = room_manager.get_or_create_awareness(&document_id).await;
-    let (awareness_client_id, awareness_add_update) =
-        awareness_manager.add_client(&connected_user).await;
+    let awareness_manager = room_manager.get_awareness(&document_id).await;
+    let (awareness_client_id, awareness_add_update) = match &awareness_manager {
+        Some(mgr) => {
+            let (id, update) = mgr.add_client(&connected_user).await;
+            (Some(id), Some(update))
+        }
+        None => (None, None),
+    };
 
     // Send full awareness state to new client
-    let full_awareness = awareness_manager.encode_full_state().await;
-    let awareness_msg = encode_awareness_message(&full_awareness);
-    if ws_sender
-        .send(Message::Binary(awareness_msg.into()))
-        .await
-        .is_err()
-    {
-        awareness_manager.remove_client(awareness_client_id).await;
-        room.remove_client(client_id).await;
-        return;
-    }
-
-    // Broadcast new user's presence to other local clients
-    broadcast_awareness_to_room(&room, client_id, &awareness_add_update).await;
-
-    // Publish to NATS for cross-instance relay
-    if let Some(relay) = &awareness_relay {
-        if let Err(e) = relay.publish(&document_id, &awareness_add_update).await {
-            tracing::warn!(error = %e, "failed to publish awareness to NATS");
+    if let Some(mgr) = &awareness_manager {
+        let full_awareness = mgr.encode_full_state().await;
+        let awareness_msg = encode_awareness_message(&full_awareness);
+        if ws_sender
+            .send(Message::Binary(awareness_msg.into()))
+            .await
+            .is_err()
+        {
+            if let Some(aid) = awareness_client_id {
+                mgr.remove_client(aid).await;
+            }
+            room.remove_client(client_id).await;
+            return;
         }
     }
 
-    // 7. Start NATS awareness subscription relay (if first client needs it)
-    let awareness_relay_clone = awareness_relay.clone();
-    let awareness_mgr_clone = awareness_manager.clone();
-    let room_clone = room.clone();
-    let awareness_sub_cancel = tokio_util::sync::CancellationToken::new();
-    let awareness_sub_cancel_clone = awareness_sub_cancel.clone();
+    // Broadcast new user's presence to other local clients
+    if let Some(update) = &awareness_add_update {
+        let msg = encode_awareness_message(update);
+        room.broadcast_to_others(client_id, msg).await;
 
-    if let Some(relay) = &awareness_relay_clone {
-        if let Ok(mut subscriber) = relay.subscribe(&document_id).await {
-            let relay_for_sub = relay.clone();
-            let cancel = awareness_sub_cancel_clone.clone();
-            tokio::spawn(async move {
-                loop {
-                    tokio::select! {
-                        _ = cancel.cancelled() => break,
-                        msg = subscriber.next() => {
-                            let Some(msg) = msg else { break };
-                            if relay_for_sub.is_from_self(&msg) {
-                                continue;
-                            }
-                            match awareness_mgr_clone.apply_remote_update(&msg.payload).await {
-                                Ok(update) => {
-                                    let encoded = encode_awareness_message(&update);
-                                    let clients = room_clone.clients_read().await;
-                                    for client in clients.values() {
-                                        let _ = client.sender.try_send(encoded.clone());
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::warn!(error = %e, "failed to apply remote awareness update");
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+        // Publish to NATS for cross-instance relay
+        if let Err(e) = relay.publish_awareness(&document_id, update).await {
+            tracing::warn!(error = %e, "failed to publish awareness to NATS");
         }
     }
 
@@ -188,18 +161,18 @@ pub async fn handle_connection(
 
                 if data[0] == MSG_AWARENESS {
                     // Awareness message from client
-                    let awareness_data = &data[1..];
-                    if let Some(cursor) = decode_client_awareness_cursor(awareness_data) {
-                        if let Some(update) = awareness_manager
-                            .apply_client_cursor_update(awareness_client_id, cursor)
-                            .await
-                        {
-                            // Broadcast to other local clients
-                            broadcast_awareness_to_room(&room, client_id, &update).await;
+                    if let (Some(mgr), Some(aid)) = (&awareness_manager, awareness_client_id) {
+                        let awareness_data = &data[1..];
+                        if let Some(cursor) = decode_client_awareness_cursor(awareness_data) {
+                            if let Some(update) = mgr.apply_client_cursor_update(aid, cursor).await
+                            {
+                                // Broadcast to other local clients
+                                let msg = encode_awareness_message(&update);
+                                room.broadcast_to_others(client_id, msg).await;
 
-                            // Relay to other instances
-                            if let Some(relay) = &awareness_relay {
-                                if let Err(e) = relay.publish(&document_id, &update).await {
+                                // Relay to other instances
+                                if let Err(e) = relay.publish_awareness(&document_id, &update).await
+                                {
                                     tracing::warn!(error = %e, "failed to publish awareness to NATS");
                                 }
                             }
@@ -225,7 +198,7 @@ pub async fn handle_connection(
                         match room.handle_client_update(client_id, &update).await {
                             Ok(raw_update) => {
                                 if let Err(e) =
-                                    nats_relay.publish_update(&document_id, &raw_update).await
+                                    relay.publish_update(&document_id, &raw_update).await
                                 {
                                     tracing::warn!(error = %e, "failed to publish update to NATS");
                                 }
@@ -248,13 +221,13 @@ pub async fn handle_connection(
 
     // Cleanup
     send_task.abort();
-    awareness_sub_cancel.cancel();
 
     // Remove from awareness and broadcast removal
-    if let Some(removal_update) = awareness_manager.remove_client(awareness_client_id).await {
-        broadcast_awareness_to_room(&room, client_id, &removal_update).await;
-        if let Some(relay) = &awareness_relay {
-            if let Err(e) = relay.publish(&document_id, &removal_update).await {
+    if let (Some(mgr), Some(aid)) = (&awareness_manager, awareness_client_id) {
+        if let Some(removal_update) = mgr.remove_client(aid).await {
+            let msg = encode_awareness_message(&removal_update);
+            room.broadcast_to_others(client_id, msg).await;
+            if let Err(e) = relay.publish_awareness(&document_id, &removal_update).await {
                 tracing::warn!(error = %e, "failed to publish awareness removal to NATS");
             }
         }
@@ -272,26 +245,10 @@ pub async fn handle_connection(
 
     // If no clients remain, destroy the room and awareness
     if remaining == 0 {
-        nats_relay.unsubscribe(&document_id).await;
+        relay.unsubscribe_updates(&document_id).await;
+        relay.unsubscribe_awareness(&document_id).await;
         room_manager.remove_room(&document_id).await;
         room_manager.remove_awareness(&document_id).await;
         tracing::info!(document_id = %document_id, "room destroyed");
-    }
-}
-
-fn encode_awareness_message(data: &[u8]) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(1 + data.len());
-    buf.push(MSG_AWARENESS);
-    buf.extend_from_slice(data);
-    buf
-}
-
-async fn broadcast_awareness_to_room(room: &DocumentRoom, exclude_client: u64, update: &[u8]) {
-    let msg = encode_awareness_message(update);
-    let clients = room.clients_read().await;
-    for (&id, client) in clients.iter() {
-        if id != exclude_client {
-            let _ = client.sender.try_send(msg.clone());
-        }
     }
 }

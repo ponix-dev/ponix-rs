@@ -177,7 +177,7 @@ fn decode_awareness_update(data: &[u8]) -> anyhow::Result<(u64, u32, UserPresenc
 /// Extracts cursor/selection data only (identity is server-authoritative).
 pub fn decode_client_awareness_cursor(data: &[u8]) -> Option<Option<CursorPosition>> {
     // data starts after the MSG_AWARENESS byte (already stripped by caller)
-    if data.len() < 16 {
+    if data.len() < 20 {
         return None;
     }
 
@@ -294,6 +294,63 @@ mod tests {
 
         manager.remove_client(id).await;
         assert_eq!(manager.client_count().await, 0);
+    }
+
+    #[test]
+    fn test_decode_client_awareness_cursor_rejects_short_data() {
+        // Less than 20 bytes should return None, not panic
+        assert_eq!(decode_client_awareness_cursor(&[]), None);
+        assert_eq!(decode_client_awareness_cursor(&[0; 15]), None);
+        assert_eq!(decode_client_awareness_cursor(&[0; 16]), None);
+        assert_eq!(decode_client_awareness_cursor(&[0; 19]), None);
+    }
+
+    #[test]
+    fn test_decode_client_awareness_cursor_with_valid_cursor() {
+        let cursor = CursorPosition {
+            index: 10,
+            length: 5,
+        };
+        let state = serde_json::json!({ "cursor": cursor });
+        let state_bytes = serde_json::to_vec(&state).unwrap();
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&1u32.to_le_bytes()); // num_updates
+        data.extend_from_slice(&42u64.to_le_bytes()); // client_id
+        data.extend_from_slice(&1u32.to_le_bytes()); // clock
+        data.extend_from_slice(&(state_bytes.len() as u32).to_le_bytes());
+        data.extend_from_slice(&state_bytes);
+
+        let result = decode_client_awareness_cursor(&data);
+        assert_eq!(result, Some(Some(cursor)));
+    }
+
+    #[test]
+    fn test_decode_client_awareness_cursor_without_cursor_field() {
+        let state = serde_json::json!({ "name": "Alice" });
+        let state_bytes = serde_json::to_vec(&state).unwrap();
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&42u64.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&(state_bytes.len() as u32).to_le_bytes());
+        data.extend_from_slice(&state_bytes);
+
+        let result = decode_client_awareness_cursor(&data);
+        assert_eq!(result, Some(None));
+    }
+
+    #[test]
+    fn test_decode_client_awareness_cursor_empty_state() {
+        // state_len = 0 should return None
+        let mut data = Vec::new();
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&42u64.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes()); // state_len = 0
+
+        assert_eq!(decode_client_awareness_cursor(&data), None);
     }
 
     #[tokio::test]

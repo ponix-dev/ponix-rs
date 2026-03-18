@@ -44,6 +44,7 @@ Give the platform memory beyond raw time-series. Documents with collaborative ed
 - [x] #176 — JetStream `document_sync` stream setup with improved `ensure_stream` API
 - [x] #177 — Document snapshotter for Yrs state persistence and content extraction
 - [x] #178 — Awareness protocol for presence and cursors
+- [ ] #189 — Fix cursor format mismatch between awareness protocol and slate-yjs — server expects `{ index, length }` but `@slate-yjs/core` sends Yjs RelativePositions. Either custom frontend cursor layer or server-side format change
 - [x] #109 — Document CDC — triggers on `content_text` changes (written by Yrs compaction), CDC payload contains text directly — no NATS Object Store fetch needed. Feeds embedding pipeline #124
 - [ ] #112 — Ollama + embedding service — local LLM inference and embedding generation
 - [ ] #124 — Document embedding pipeline — when `content_text` changes (via CDC #109), chunk the text directly from the CDC payload, embed chunks with `nomic-embed-text`, store vectors in pgvector. Re-embed on meaningful edits. Low-volume — documents are edited occasionally, not thousands per second

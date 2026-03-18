@@ -4,33 +4,32 @@ use tokio::sync::{Mutex, RwLock};
 
 use common::domain::DocumentRepository;
 
+use crate::domain::encode_awareness_message;
 use crate::domain::DocumentAwarenessManager;
+use crate::domain::DocumentRelay;
 use crate::domain::DocumentRoom;
-use crate::nats::NatsDocumentRelay;
 
 pub struct RoomManager {
     rooms: RwLock<HashMap<String, Arc<DocumentRoom>>>,
     awareness_managers: RwLock<HashMap<String, Arc<DocumentAwarenessManager>>>,
     creating_rooms: Mutex<HashSet<String>>,
-    creating_awareness: Mutex<HashSet<String>>,
     document_repository: Arc<dyn DocumentRepository>,
-    nats_relay: Arc<NatsDocumentRelay>,
+    relay: Arc<dyn DocumentRelay>,
     document_updates_stream: String,
 }
 
 impl RoomManager {
     pub fn new(
         document_repository: Arc<dyn DocumentRepository>,
-        nats_relay: Arc<NatsDocumentRelay>,
+        relay: Arc<dyn DocumentRelay>,
         document_updates_stream: String,
     ) -> Self {
         Self {
             rooms: RwLock::new(HashMap::new()),
             awareness_managers: RwLock::new(HashMap::new()),
             creating_rooms: Mutex::new(HashSet::new()),
-            creating_awareness: Mutex::new(HashSet::new()),
             document_repository,
-            nats_relay,
+            relay,
             document_updates_stream,
         }
     }
@@ -96,14 +95,56 @@ impl RoomManager {
             &document.yrs_state,
         )?);
 
+        // Build sync callback: applies remote updates to room and broadcasts to local clients
+        let sync_room = room.clone();
+        let sync_handler: crate::domain::RemoteUpdateHandler = Box::new(move |update: Vec<u8>| {
+            let room = sync_room.clone();
+            Box::pin(async move {
+                if let Err(e) = room.handle_remote_update(&update).await {
+                    tracing::warn!(error = %e, "failed to apply remote update");
+                }
+            })
+        });
+
         // Start JetStream subscription for cross-instance relay (replays from updated_at then continues)
-        self.nats_relay
-            .subscribe(
+        self.relay
+            .subscribe_updates(
                 document_id,
-                room.clone(),
                 document.updated_at,
                 &self.document_updates_stream,
+                sync_handler,
             )
+            .await?;
+
+        // Create awareness manager and start NATS awareness subscription (one per room)
+        let awareness_manager = Arc::new(DocumentAwarenessManager::new(document_id.to_string()));
+        self.awareness_managers
+            .write()
+            .await
+            .insert(document_id.to_string(), awareness_manager.clone());
+
+        // Build awareness callback: applies remote awareness and broadcasts to local clients
+        let awareness_room = room.clone();
+        let awareness_mgr = awareness_manager.clone();
+        let awareness_handler: crate::domain::RemoteUpdateHandler =
+            Box::new(move |data: Vec<u8>| {
+                let room = awareness_room.clone();
+                let mgr = awareness_mgr.clone();
+                Box::pin(async move {
+                    match mgr.apply_remote_update(&data).await {
+                        Ok(update) => {
+                            let encoded = encode_awareness_message(&update);
+                            room.broadcast_to_all(encoded).await;
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "failed to apply remote awareness update");
+                        }
+                    }
+                })
+            });
+
+        self.relay
+            .subscribe_awareness(document_id, awareness_handler)
             .await?;
 
         // Insert into map
@@ -120,44 +161,18 @@ impl RoomManager {
         self.rooms.write().await.remove(document_id);
     }
 
-    /// Get or create a per-document awareness manager.
-    ///
-    /// Uses per-document creation locking for consistency with `get_or_create_room`.
-    pub async fn get_or_create_awareness(
-        &self,
-        document_id: &str,
-    ) -> Arc<DocumentAwarenessManager> {
-        loop {
-            // Fast path: manager already exists
-            {
-                let managers = self.awareness_managers.read().await;
-                if let Some(manager) = managers.get(document_id) {
-                    return manager.clone();
-                }
-            }
+    /// Get the relay (for publish/unsubscribe from connection handler)
+    pub fn relay(&self) -> &Arc<dyn DocumentRelay> {
+        &self.relay
+    }
 
-            // Acquire per-document creation lock
-            {
-                let mut creating = self.creating_awareness.lock().await;
-                if creating.contains(document_id) {
-                    drop(creating);
-                    tokio::task::yield_now().await;
-                    continue;
-                }
-                creating.insert(document_id.to_string());
-            }
-
-            let manager = Arc::new(DocumentAwarenessManager::new(document_id.to_string()));
-
-            self.awareness_managers
-                .write()
-                .await
-                .insert(document_id.to_string(), manager.clone());
-
-            self.creating_awareness.lock().await.remove(document_id);
-
-            return manager;
-        }
+    /// Get the per-document awareness manager (created alongside the room in `create_room`).
+    pub async fn get_awareness(&self, document_id: &str) -> Option<Arc<DocumentAwarenessManager>> {
+        self.awareness_managers
+            .read()
+            .await
+            .get(document_id)
+            .cloned()
     }
 
     /// Remove awareness manager (called when last client disconnects)
@@ -177,6 +192,8 @@ mod tests {
     use common::domain::{Document, MockDocumentRepository};
     use common::yrs::create_empty_document;
 
+    use crate::nats::NatsDocumentRelay;
+
     fn make_test_document(document_id: &str) -> Document {
         let (yrs_state, yrs_state_vector) = create_empty_document();
         Document {
@@ -194,7 +211,7 @@ mod tests {
         }
     }
 
-    fn make_nats_relay_stub() -> Arc<NatsDocumentRelay> {
+    fn make_relay_stub() -> Arc<dyn DocumentRelay> {
         Arc::new(NatsDocumentRelay::new_stub())
     }
 
@@ -207,7 +224,7 @@ mod tests {
 
         let manager = RoomManager::new(
             Arc::new(mock_repo),
-            make_nats_relay_stub(),
+            make_relay_stub(),
             "document_sync".to_string(),
         );
 
@@ -224,7 +241,7 @@ mod tests {
 
         let manager = RoomManager::new(
             Arc::new(mock_repo),
-            make_nats_relay_stub(),
+            make_relay_stub(),
             "document_sync".to_string(),
         );
 
@@ -243,7 +260,7 @@ mod tests {
 
         let manager = RoomManager::new(
             Arc::new(mock_repo),
-            make_nats_relay_stub(),
+            make_relay_stub(),
             "document_sync".to_string(),
         );
 
@@ -261,7 +278,7 @@ mod tests {
 
         let manager = RoomManager::new(
             Arc::new(mock_repo),
-            make_nats_relay_stub(),
+            make_relay_stub(),
             "document_sync".to_string(),
         );
 

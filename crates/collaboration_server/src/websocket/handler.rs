@@ -6,14 +6,12 @@ use axum::response::Response;
 use common::auth::AuthTokenProvider;
 use common::domain::UserRepository;
 
-use crate::domain::RoomManager;
-use crate::nats::{AwarenessRelay, NatsDocumentRelay};
+use crate::domain::{DocumentRelay, RoomManager};
 use crate::websocket::connection::handle_connection;
 
 pub struct AppState {
     pub room_manager: Arc<RoomManager>,
-    pub nats_relay: Arc<NatsDocumentRelay>,
-    pub awareness_relay: Option<Arc<AwarenessRelay>>,
+    pub relay: Arc<dyn DocumentRelay>,
     pub auth_token_provider: Arc<dyn AuthTokenProvider>,
     pub user_repository: Arc<dyn UserRepository>,
 }
@@ -40,8 +38,7 @@ pub async fn ws_handler(
             socket,
             room,
             state.room_manager.clone(),
-            state.nats_relay.clone(),
-            state.awareness_relay.clone(),
+            state.relay.clone(),
             state.auth_token_provider.clone(),
             state.user_repository.clone(),
         )

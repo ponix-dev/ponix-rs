@@ -3,8 +3,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use collaboration_server::domain::RoomManager;
 use collaboration_server::domain::{decode_sync_message, encode_update, SyncMessage};
+use collaboration_server::domain::{DocumentRelay, RoomManager};
 use collaboration_server::nats::NatsDocumentRelay;
 use collaboration_server::websocket::{build_router, AppState};
 use common::auth::AuthTokenProvider;
@@ -137,20 +137,19 @@ impl AuthTokenProvider for TestAuthTokenProvider {
 
 async fn setup_test_server() -> (String, Arc<InMemoryDocumentRepository>) {
     let doc_repo = Arc::new(InMemoryDocumentRepository::new());
-    let nats_relay = Arc::new(NatsDocumentRelay::new_stub());
+    let relay: Arc<dyn DocumentRelay> = Arc::new(NatsDocumentRelay::new_stub());
     let auth_provider: Arc<dyn AuthTokenProvider> = Arc::new(TestAuthTokenProvider);
     let user_repo: Arc<dyn UserRepository> = Arc::new(InMemoryUserRepository);
 
     let room_manager = Arc::new(RoomManager::new(
         doc_repo.clone() as Arc<dyn DocumentRepository>,
-        nats_relay.clone(),
+        relay.clone(),
         "document_sync".to_string(),
     ));
 
     let app_state = Arc::new(AppState {
         room_manager,
-        nats_relay,
-        awareness_relay: None,
+        relay,
         auth_token_provider: auth_provider,
         user_repository: user_repo,
     });
