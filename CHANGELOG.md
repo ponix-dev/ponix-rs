@@ -1,3 +1,9 @@
+## [1.27.0](https://github.com/ponix-dev/ponix-rs/compare/v1.26.0...v1.27.0) (2026-03-18)
+
+### Features
+
+* Yrs collaborative document editing ([#188](https://github.com/ponix-dev/ponix-rs/issues/188)) ([21c2f4a](https://github.com/ponix-dev/ponix-rs/commit/21c2f4a0a2199cacca4ef29a701cc654a1b4777d)), closes [#168](https://github.com/ponix-dev/ponix-rs/issues/168) [#179](https://github.com/ponix-dev/ponix-rs/issues/179) [#168](https://github.com/ponix-dev/ponix-rs/issues/168) [#168](https://github.com/ponix-dev/ponix-rs/issues/168)
+
 ## [1.26.0](https://github.com/ponix-dev/ponix-rs/compare/v1.25.0...v1.26.0) (2026-03-02)
 
 ### Features
