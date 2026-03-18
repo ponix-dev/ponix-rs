@@ -273,8 +273,21 @@ async fn initialize_services(
     let nats_client = Arc::new(NatsClient::connect(nats_url, Duration::from_secs(30)).await?);
 
     // Ensure streams exist (JetStream must be enabled in NATS)
-    nats_client.ensure_stream("raw_envelopes").await?;
-    nats_client.ensure_stream("processed_envelopes").await?;
+    use common::nats::StreamConfig;
+    nats_client
+        .ensure_stream(StreamConfig {
+            name: "raw_envelopes".to_string(),
+            subjects: vec!["raw_envelopes.*".to_string()],
+            ..Default::default()
+        })
+        .await?;
+    nats_client
+        .ensure_stream(StreamConfig {
+            name: "processed_envelopes".to_string(),
+            subjects: vec!["processed_envelopes.*".to_string()],
+            ..Default::default()
+        })
+        .await?;
 
     // ProcessedEnvelopeProducer for RawEnvelopeService
     let processed_producer = Arc::new(ProcessedEnvelopeProducer::new(

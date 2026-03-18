@@ -160,15 +160,16 @@ async fn create_definition(client: &PostgresClient, org_id: &str, def_id: &str) 
 }
 
 async fn create_doc(doc_repo: &PostgresDocumentRepository, doc_id: &str, org_id: &str) {
+    let (yrs_state, yrs_state_vector) = common::yrs::create_empty_document();
     doc_repo
         .create_document(CreateDocumentRepoInputWithId {
             document_id: doc_id.to_string(),
             organization_id: org_id.to_string(),
-            name: format!("{}.pdf", doc_id),
-            mime_type: "application/pdf".to_string(),
-            size_bytes: 1024,
-            object_store_key: format!("{}/{}/file.pdf", org_id, doc_id),
-            checksum: "sha256-abc123".to_string(),
+            name: doc_id.to_string(),
+            yrs_state,
+            yrs_state_vector,
+            content_text: String::new(),
+            content_html: String::new(),
             metadata: serde_json::json!({}),
         })
         .await

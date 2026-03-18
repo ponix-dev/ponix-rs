@@ -1,30 +1,25 @@
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use tracing::{debug, instrument};
 
 use crate::domain::{
-    DeleteDocumentRequest, DocumentService, DownloadDocumentRequest, GetDocumentRequest,
+    CreateDocumentRequest, DeleteDocumentRequest, DocumentService, GetDocumentRequest,
     LinkDocumentRequest, ListDocumentsByTargetRequest, UnlinkDocumentRequest,
-    UpdateDocumentRequest, UploadDocumentRequest,
+    UpdateDocumentRequest,
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
-use common::proto::{prost_struct_to_json_value, to_proto_document, to_proto_document_summary};
+use common::proto::{prost_struct_to_json_value, to_proto_document};
 use ponix_proto_prost::document::v1::{
-    self as proto, DeleteDocumentResponse, DownloadDocumentResponse, GetDocumentResponse,
+    self as proto, CreateDataStreamDocumentResponse, CreateDefinitionDocumentResponse,
+    CreateWorkspaceDocumentResponse, DeleteDocumentResponse, GetDocumentResponse,
     ListDataStreamDocumentsResponse, ListDefinitionDocumentsResponse,
     ListWorkspaceDocumentsResponse, UnlinkDocumentFromDataStreamResponse,
     UnlinkDocumentFromDefinitionResponse, UnlinkDocumentFromWorkspaceResponse,
     UpdateDataStreamDocumentResponse, UpdateDefinitionDocumentResponse,
-    UpdateWorkspaceDocumentResponse, UploadDataStreamDocumentResponse,
-    UploadDefinitionDocumentResponse, UploadWorkspaceDocumentResponse,
+    UpdateWorkspaceDocumentResponse,
 };
 use ponix_proto_tonic::document::v1::tonic::document_service_server::DocumentService as DocumentServiceTrait;
-
-/// 64 KB chunk size for download streaming
-const DOWNLOAD_CHUNK_SIZE: usize = 64 * 1024;
 
 /// gRPC handler for DocumentService
 pub struct DocumentServiceHandler {
@@ -91,75 +86,24 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         Ok(Response::new(DeleteDocumentResponse {}))
     }
 
-    type DownloadDocumentStream = ReceiverStream<Result<DownloadDocumentResponse, Status>>;
-
-    #[instrument(name = "DownloadDocument", skip(self, request), fields(document_id = %request.get_ref().document_id, organization_id = %request.get_ref().organization_id))]
-    async fn download_document(
-        &self,
-        request: Request<proto::DownloadDocumentRequest>,
-    ) -> Result<Response<Self::DownloadDocumentStream>, Status> {
-        let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
-        let req = request.into_inner();
-
-        let (document, content) = self
-            .domain_service
-            .download_document(DownloadDocumentRequest {
-                user_id: user_context.user_id,
-                document_id: req.document_id,
-                organization_id: req.organization_id,
-            })
-            .await
-            .map_err(domain_error_to_status)?;
-
-        let (tx, rx) = mpsc::channel(16);
-
-        tokio::spawn(async move {
-            // First message: metadata
-            let metadata_msg = DownloadDocumentResponse {
-                data: Some(proto::download_document_response::Data::Metadata(
-                    to_proto_document(document),
-                )),
-            };
-            if tx.send(Ok(metadata_msg)).await.is_err() {
-                return;
-            }
-
-            // Subsequent messages: content chunks
-            for chunk in content.chunks(DOWNLOAD_CHUNK_SIZE) {
-                let chunk_msg = DownloadDocumentResponse {
-                    data: Some(proto::download_document_response::Data::Chunk(
-                        chunk.to_vec().into(),
-                    )),
-                };
-                if tx.send(Ok(chunk_msg)).await.is_err() {
-                    return;
-                }
-            }
-        });
-
-        Ok(Response::new(ReceiverStream::new(rx)))
-    }
-
     // --- Data Stream document operations ---
 
-    #[instrument(name = "UploadDataStreamDocument", skip(self, request), fields(data_stream_id = %request.get_ref().data_stream_id, organization_id = %request.get_ref().organization_id))]
-    async fn upload_data_stream_document(
+    #[instrument(name = "CreateDataStreamDocument", skip(self, request), fields(data_stream_id = %request.get_ref().data_stream_id, organization_id = %request.get_ref().organization_id))]
+    async fn create_data_stream_document(
         &self,
-        request: Request<proto::UploadDataStreamDocumentRequest>,
-    ) -> Result<Response<UploadDataStreamDocumentResponse>, Status> {
+        request: Request<proto::CreateDataStreamDocumentRequest>,
+    ) -> Result<Response<CreateDataStreamDocumentResponse>, Status> {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
         let user_id = user_context.user_id;
         let document = self
             .domain_service
-            .upload_document(UploadDocumentRequest {
+            .create_document(CreateDocumentRequest {
                 user_id: user_id.clone(),
                 organization_id: req.organization_id.clone(),
                 name: req.name,
-                mime_type: req.mime_type,
                 metadata: prost_struct_to_json_value(req.metadata),
-                content: req.content,
             })
             .await
             .map_err(domain_error_to_status)?;
@@ -178,10 +122,10 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         debug!(
             document_id = %document.document_id,
             data_stream_id = %req.data_stream_id,
-            "Document uploaded and linked to data stream"
+            "Document created and linked to data stream"
         );
 
-        Ok(Response::new(UploadDataStreamDocumentResponse {
+        Ok(Response::new(CreateDataStreamDocumentResponse {
             document: Some(to_proto_document(document)),
         }))
     }
@@ -201,9 +145,7 @@ impl DocumentServiceTrait for DocumentServiceHandler {
                 document_id: req.document_id,
                 organization_id: req.organization_id,
                 name: req.name,
-                mime_type: req.mime_type,
                 metadata: req.metadata.map(|s| prost_struct_to_json_value(Some(s))),
-                content: req.content,
             })
             .await
             .map_err(domain_error_to_status)?;
@@ -253,33 +195,28 @@ impl DocumentServiceTrait for DocumentServiceHandler {
             .map_err(domain_error_to_status)?;
 
         Ok(Response::new(ListDataStreamDocumentsResponse {
-            documents: documents
-                .into_iter()
-                .map(to_proto_document_summary)
-                .collect(),
+            documents: documents.into_iter().map(to_proto_document).collect(),
         }))
     }
 
     // --- Definition document operations ---
 
-    #[instrument(name = "UploadDefinitionDocument", skip(self, request), fields(definition_id = %request.get_ref().definition_id, organization_id = %request.get_ref().organization_id))]
-    async fn upload_definition_document(
+    #[instrument(name = "CreateDefinitionDocument", skip(self, request), fields(definition_id = %request.get_ref().definition_id, organization_id = %request.get_ref().organization_id))]
+    async fn create_definition_document(
         &self,
-        request: Request<proto::UploadDefinitionDocumentRequest>,
-    ) -> Result<Response<UploadDefinitionDocumentResponse>, Status> {
+        request: Request<proto::CreateDefinitionDocumentRequest>,
+    ) -> Result<Response<CreateDefinitionDocumentResponse>, Status> {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
         let user_id = user_context.user_id;
         let document = self
             .domain_service
-            .upload_document(UploadDocumentRequest {
+            .create_document(CreateDocumentRequest {
                 user_id: user_id.clone(),
                 organization_id: req.organization_id.clone(),
                 name: req.name,
-                mime_type: req.mime_type,
                 metadata: prost_struct_to_json_value(req.metadata),
-                content: req.content,
             })
             .await
             .map_err(domain_error_to_status)?;
@@ -298,10 +235,10 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         debug!(
             document_id = %document.document_id,
             definition_id = %req.definition_id,
-            "Document uploaded and linked to definition"
+            "Document created and linked to definition"
         );
 
-        Ok(Response::new(UploadDefinitionDocumentResponse {
+        Ok(Response::new(CreateDefinitionDocumentResponse {
             document: Some(to_proto_document(document)),
         }))
     }
@@ -321,9 +258,7 @@ impl DocumentServiceTrait for DocumentServiceHandler {
                 document_id: req.document_id,
                 organization_id: req.organization_id,
                 name: req.name,
-                mime_type: req.mime_type,
                 metadata: req.metadata.map(|s| prost_struct_to_json_value(Some(s))),
-                content: req.content,
             })
             .await
             .map_err(domain_error_to_status)?;
@@ -373,33 +308,28 @@ impl DocumentServiceTrait for DocumentServiceHandler {
             .map_err(domain_error_to_status)?;
 
         Ok(Response::new(ListDefinitionDocumentsResponse {
-            documents: documents
-                .into_iter()
-                .map(to_proto_document_summary)
-                .collect(),
+            documents: documents.into_iter().map(to_proto_document).collect(),
         }))
     }
 
     // --- Workspace document operations ---
 
-    #[instrument(name = "UploadWorkspaceDocument", skip(self, request), fields(workspace_id = %request.get_ref().workspace_id, organization_id = %request.get_ref().organization_id))]
-    async fn upload_workspace_document(
+    #[instrument(name = "CreateWorkspaceDocument", skip(self, request), fields(workspace_id = %request.get_ref().workspace_id, organization_id = %request.get_ref().organization_id))]
+    async fn create_workspace_document(
         &self,
-        request: Request<proto::UploadWorkspaceDocumentRequest>,
-    ) -> Result<Response<UploadWorkspaceDocumentResponse>, Status> {
+        request: Request<proto::CreateWorkspaceDocumentRequest>,
+    ) -> Result<Response<CreateWorkspaceDocumentResponse>, Status> {
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
         let user_id = user_context.user_id;
         let document = self
             .domain_service
-            .upload_document(UploadDocumentRequest {
+            .create_document(CreateDocumentRequest {
                 user_id: user_id.clone(),
                 organization_id: req.organization_id.clone(),
                 name: req.name,
-                mime_type: req.mime_type,
                 metadata: prost_struct_to_json_value(req.metadata),
-                content: req.content,
             })
             .await
             .map_err(domain_error_to_status)?;
@@ -418,10 +348,10 @@ impl DocumentServiceTrait for DocumentServiceHandler {
         debug!(
             document_id = %document.document_id,
             workspace_id = %req.workspace_id,
-            "Document uploaded and linked to workspace"
+            "Document created and linked to workspace"
         );
 
-        Ok(Response::new(UploadWorkspaceDocumentResponse {
+        Ok(Response::new(CreateWorkspaceDocumentResponse {
             document: Some(to_proto_document(document)),
         }))
     }
@@ -441,9 +371,7 @@ impl DocumentServiceTrait for DocumentServiceHandler {
                 document_id: req.document_id,
                 organization_id: req.organization_id,
                 name: req.name,
-                mime_type: req.mime_type,
                 metadata: req.metadata.map(|s| prost_struct_to_json_value(Some(s))),
-                content: req.content,
             })
             .await
             .map_err(domain_error_to_status)?;
@@ -493,10 +421,7 @@ impl DocumentServiceTrait for DocumentServiceHandler {
             .map_err(domain_error_to_status)?;
 
         Ok(Response::new(ListWorkspaceDocumentsResponse {
-            documents: documents
-                .into_iter()
-                .map(to_proto_document_summary)
-                .collect(),
+            documents: documents.into_iter().map(to_proto_document).collect(),
         }))
     }
 }

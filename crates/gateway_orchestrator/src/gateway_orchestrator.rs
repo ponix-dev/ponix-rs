@@ -78,16 +78,7 @@ impl GatewayOrchestrator {
         Ok(Self { cdc_consumer })
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn into_runner_process(
-        self,
-    ) -> Box<
-        dyn FnOnce(
-                CancellationToken,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>,
-            > + Send,
-    > {
+    pub fn into_runner_process(self) -> ponix_runner::AppProcess {
         // Gateway CDC Consumer process - handles NATS CDC events and orchestrates gateways
         Box::new({
             let cdc_consumer = self.cdc_consumer;

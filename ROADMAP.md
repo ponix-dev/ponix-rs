@@ -33,15 +33,19 @@ Give the platform memory beyond raw time-series. Documents with collaborative ed
 - [x] #107 — NATS Object Storage — binary document content storage
 - [x] #106 — Document entity + repository — metadata for manuals, datasheets, config files
 - [x] #108 — Document service + upload + associations — gRPC metadata + HTTP file upload + document association RPCs (link documents to data streams, definitions, workspaces) with dedicated junction tables and transactional AGE graph writes (subsumes #110/#111 for document relationships)
-- [ ] #168 — Migrate Document entity to Yrs-based collaborative schema — replace file columns (`object_store_key`, `checksum`, `size_bytes`, `mime_type`) with Yrs columns (`yrs_state`, `yrs_state_vector`, `content_text`, `content_html`). Migration + domain entity + repository. Associations unchanged
-- [ ] #169 — Update DocumentService for Yrs document lifecycle — replace upload/download with create (empty Yrs doc) + metadata-only get. Content editing via WebSocket, not gRPC
-- [ ] #170 — Update Document proto and gRPC for Yrs-based documents — replace Upload RPCs with Create RPCs, remove DownloadDocument streaming, update Document message fields
-- [ ] #171 — Remove NATS Object Store document dependency — remove `DocumentContentStore` from document path, clean up object store init in `ponix_all_in_one`
-- [ ] #172 — Collaboration server with Yrs WebSocket endpoint — new `collaboration_server` crate. WebSocket at `/ws/documents/{document_id}`. Loads/persists Yrs state from PostgreSQL, extracts `content_text`/`content_html` on compaction. Runner process
+- [x] #168 — Migrate Document entity to Yrs-based collaborative schema — replace file columns (`object_store_key`, `checksum`, `size_bytes`, `mime_type`) with Yrs columns (`yrs_state`, `yrs_state_vector`, `content_text`, `content_html`). Migration + domain entity + repository. Associations unchanged
+- [x] #169 — Update DocumentService for Yrs document lifecycle — replace upload/download with create (empty Yrs doc) + metadata-only get. Content editing via WebSocket, not gRPC
+- [x] #170 — Update Document proto and gRPC for Yrs-based documents — replace Upload RPCs with Create RPCs, remove DownloadDocument streaming, update Document message fields
+- [x] #171 — Remove NATS Object Store document dependency — remove `DocumentContentStore` from document path, clean up object store init in `ponix_all_in_one`
+- [x] #172 — Collaboration server with Yrs WebSocket endpoint — new `collaboration_server` crate. WebSocket at `/ws/documents/{document_id}`. Loads/persists Yrs state from PostgreSQL, extracts `content_text`/`content_html` on compaction. Runner process
 - [ ] #173 — Document comments with Yrs StickyIndex anchoring — `document_comments` table, threaded replies, resolve/unresolve. Domain entity + repository + gRPC RPCs
 - [ ] #174 — Document version snapshots — `document_versions` table with full Yrs state snapshots. Create/list/get/restore via gRPC
 - [x] #175 — Plate + Yrs frontend integration guide — `docs/frontend-integration-guide.md` in `ponix-ui` — Plate setup, `slate-yjs` binding, comment UI mapping, version history patterns. Handoff doc for frontend agent
-- [ ] #109 — Document CDC — triggers on `content_text` changes (written by Yrs compaction), CDC payload contains text directly — no NATS Object Store fetch needed. Feeds embedding pipeline #124
+- [x] #176 — JetStream `document_sync` stream setup with improved `ensure_stream` API
+- [x] #177 — Document snapshotter for Yrs state persistence and content extraction
+- [x] #178 — Awareness protocol for presence and cursors
+- [x] #189 — Fix cursor format mismatch between awareness protocol and slate-yjs — server expects `{ index, length }` but `@slate-yjs/core` sends Yjs RelativePositions. Either custom frontend cursor layer or server-side format change
+- [x] #109 — Document CDC — triggers on `content_text` changes (written by Yrs compaction), CDC payload contains text directly — no NATS Object Store fetch needed. Feeds embedding pipeline #124
 - [ ] #112 — Ollama + embedding service — local LLM inference and embedding generation
 - [ ] #124 — Document embedding pipeline — when `content_text` changes (via CDC #109), chunk the text directly from the CDC payload, embed chunks with `nomic-embed-text`, store vectors in pgvector. Re-embed on meaningful edits. Low-volume — documents are edited occasionally, not thousands per second
 

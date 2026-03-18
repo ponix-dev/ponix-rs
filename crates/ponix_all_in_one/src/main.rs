@@ -3,8 +3,13 @@ mod config;
 use analytics_worker::analytics_worker::{AnalyticsWorker, AnalyticsWorkerConfig};
 use cdc_worker::cdc_worker::{CdcWorker, CdcWorkerConfig};
 use cdc_worker::domain::{
-    CdcConfig, DataStreamConverter, DataStreamDefinitionConverter, EntityConfig, GatewayConverter,
-    OrganizationConverter, UserConverter, WorkspaceConverter,
+    CdcConfig, DataStreamConverter, DataStreamDefinitionConverter, DocumentConverter, EntityConfig,
+    GatewayConverter, OrganizationConverter, UserConverter, WorkspaceConverter,
+};
+use collaboration_server::domain::DocumentRelay;
+use collaboration_server::nats::NatsDocumentRelay;
+use collaboration_server::{
+    CollaborationServer, CollaborationServerConfig, DocumentSnapshotter, DocumentSnapshotterConfig,
 };
 use common::auth::{
     Argon2PasswordService, CasbinAuthorizationService, CryptoRefreshTokenProvider,
@@ -13,7 +18,6 @@ use common::auth::{
 use common::clickhouse::ClickHouseClient;
 use common::grpc::{CorsConfig, GrpcLoggingConfig, GrpcServerConfig, GrpcTracingConfig};
 use common::nats::NatsClient;
-use common::nats::NatsObjectStoreClient;
 use common::postgres::create_postgres_authorization_adapter;
 use common::postgres::{
     PostgresClient, PostgresDataStreamDefinitionRepository, PostgresDataStreamRepository,
@@ -70,7 +74,7 @@ async fn main() {
     debug!("Configuration: {:?}", config);
 
     // Initialize shared dependencies
-    let (postgres_repos, postgres_client, clickhouse_client, nats_client, object_store_client) =
+    let (postgres_repos, postgres_client, clickhouse_client, nats_client) =
         match initialize_shared_dependencies(&config).await {
             Ok(deps) => deps,
             Err(e) => {
@@ -124,6 +128,7 @@ async fn main() {
     let jwt_config = JwtConfig::new(config.jwt_secret.clone(), config.jwt_expiration_hours);
     let auth_token_provider: Arc<dyn common::auth::AuthTokenProvider> =
         Arc::new(JwtAuthTokenProvider::new(jwt_config));
+    let auth_token_provider_for_collab = auth_token_provider.clone();
     let password_service: Arc<dyn common::auth::PasswordService> =
         Arc::new(Argon2PasswordService::new());
     let refresh_token_provider: Arc<dyn common::auth::RefreshTokenProvider> =
@@ -144,7 +149,6 @@ async fn main() {
     ));
     let document_service = Arc::new(DocumentService::new(
         postgres_repos.document.clone(),
-        Arc::new(object_store_client),
         postgres_repos.document_association.clone(),
         postgres_repos.organization.clone(),
         authorization_service.clone(),
@@ -257,6 +261,11 @@ async fn main() {
         table_name: config.cdc_data_stream_definition_table_name.clone(),
         converter: Box::new(DataStreamDefinitionConverter::new()),
     };
+    let document_entity_config = EntityConfig {
+        entity_name: config.cdc_document_entity_name.clone(),
+        table_name: config.cdc_document_table_name.clone(),
+        converter: Box::new(DocumentConverter::new()),
+    };
     let cdc_worker = CdcWorker::new(
         nats_client.clone(),
         CdcWorkerConfig {
@@ -268,6 +277,7 @@ async fn main() {
                 organization_entity_config,
                 user_entity_config,
                 data_stream_definition_entity_config,
+                document_entity_config,
             ],
         },
     );
@@ -298,6 +308,51 @@ async fn main() {
         }
     };
 
+    // Create collaboration server
+    let nats_relay: Arc<dyn DocumentRelay> = Arc::new(NatsDocumentRelay::new(
+        nats_client.client().clone(),
+        nats_client.create_publisher_client(),
+        nats_client.jetstream().clone(),
+    ));
+
+    let collab_config = CollaborationServerConfig {
+        host: config.collab_host.clone(),
+        port: config.collab_port,
+        cors_allowed_origins: config.collab_cors_allowed_origins.clone(),
+        document_updates_stream: config.nats_document_updates_stream.clone(),
+    };
+
+    let collaboration_server = CollaborationServer::new(
+        collab_config,
+        postgres_repos.document.clone() as Arc<dyn common::domain::DocumentRepository>,
+        auth_token_provider_for_collab,
+        postgres_repos.user.clone() as Arc<dyn common::domain::UserRepository>,
+        nats_relay,
+    );
+
+    // Create document snapshotter
+    let document_snapshotter = match DocumentSnapshotter::new(
+        postgres_repos.document.clone() as Arc<dyn common::domain::DocumentRepository>,
+        nats_client.clone(),
+        DocumentSnapshotterConfig {
+            document_updates_stream: config.nats_document_updates_stream.clone(),
+            consumer_name: config.nats_document_updates_consumer_name.clone(),
+            filter_subject: format!("{}.*", config.nats_document_updates_stream),
+            batch_size: config.nats_batch_size,
+            batch_wait_secs: config.nats_batch_wait_secs,
+            compaction_interval_secs: config.snapshotter_compaction_interval_secs,
+            idle_eviction_secs: config.snapshotter_idle_eviction_secs,
+        },
+    )
+    .await
+    {
+        Ok(snapshotter) => snapshotter,
+        Err(e) => {
+            error!("Failed to initialize document snapshotter: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     // Build runner with all processes
     let mut runner = Runner::new();
 
@@ -312,6 +367,18 @@ async fn main() {
 
     // Add CDC Worker process (handles Postgres → NATS CDC events)
     runner = runner.with_named_process("cdc_worker", cdc_worker.into_runner_process());
+
+    // Add Collaboration Server process
+    runner = runner.with_named_process(
+        "collaboration_server",
+        collaboration_server.into_runner_process(),
+    );
+
+    // Add Document Snapshotter processes (consumer + compaction loop)
+    let snapshotter_processes = document_snapshotter.into_runner_processes();
+    for (i, process) in snapshotter_processes.into_iter().enumerate() {
+        runner = runner.with_named_process(format!("document_snapshotter_{}", i), process);
+    }
 
     // Add Analytics Ingester processes
     let analytics_processes = analytics_ingester.into_runner_processes();
@@ -365,7 +432,6 @@ async fn initialize_shared_dependencies(
     PostgresClient,
     ClickHouseClient,
     Arc<NatsClient>,
-    NatsObjectStoreClient,
 )> {
     // PostgreSQL initialization
     info!("Initializing PostgreSQL...");
@@ -403,18 +469,11 @@ async fn initialize_shared_dependencies(
     );
     ensure_nats_streams(&nats_client, config).await?;
 
-    // Initialize NATS Object Store for document storage
-    info!("Initializing NATS Object Store...");
-    let object_store_client = nats_client
-        .create_object_store_client(&config.nats_object_store_bucket)
-        .await?;
-
     Ok((
         postgres_repos,
         postgres_client,
         clickhouse_client,
         nats_client,
-        object_store_client,
     ))
 }
 
@@ -476,22 +535,101 @@ async fn create_clickhouse_client(config: &ServiceConfig) -> anyhow::Result<Clic
 }
 
 async fn ensure_nats_streams(client: &NatsClient, config: &ServiceConfig) -> anyhow::Result<()> {
+    use common::nats::StreamConfig;
+
     client
-        .ensure_stream(&config.processed_envelopes_stream)
+        .ensure_stream(StreamConfig {
+            name: config.processed_envelopes_stream.clone(),
+            subjects: vec![format!("{}.*", config.processed_envelopes_stream)],
+            description: Some("Processed envelope events for ClickHouse ingestion".to_string()),
+            ..Default::default()
+        })
         .await?;
-    client.ensure_stream(&config.nats_raw_stream).await?;
-    client.ensure_stream(&config.nats_gateway_stream).await?;
-    client.ensure_stream(&config.nats_workspace_stream).await?;
+
     client
-        .ensure_stream(&config.nats_data_streams_stream)
+        .ensure_stream(StreamConfig {
+            name: config.nats_raw_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_raw_stream)],
+            description: Some("Raw envelope events for CEL transformation".to_string()),
+            ..Default::default()
+        })
         .await?;
+
     client
-        .ensure_stream(&config.nats_organization_stream)
+        .ensure_stream(StreamConfig {
+            name: config.nats_gateway_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_gateway_stream)],
+            description: Some("Gateway CDC events".to_string()),
+            ..Default::default()
+        })
         .await?;
-    client.ensure_stream(&config.nats_user_stream).await?;
+
     client
-        .ensure_stream(&config.nats_data_stream_definitions_stream)
+        .ensure_stream(StreamConfig {
+            name: config.nats_workspace_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_workspace_stream)],
+            description: Some("Workspace CDC events".to_string()),
+            ..Default::default()
+        })
         .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_data_streams_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_data_streams_stream)],
+            description: Some("Data stream CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_organization_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_organization_stream)],
+            description: Some("Organization CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_user_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_user_stream)],
+            description: Some("User CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_data_stream_definitions_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_data_stream_definitions_stream)],
+            description: Some("Data stream definition CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.nats_document_updates_stream.clone(),
+            subjects: vec![format!("{}.*", config.nats_document_updates_stream)],
+            description: Some(
+                "Yrs document sync updates for collaboration and snapshotting".to_string(),
+            ),
+            max_age: std::time::Duration::from_secs(config.nats_document_updates_max_age_secs),
+            ..Default::default()
+        })
+        .await?;
+
+    client
+        .ensure_stream(StreamConfig {
+            name: config.cdc_document_entity_name.clone(),
+            subjects: vec![format!("{}.*", config.cdc_document_entity_name)],
+            description: Some("Document CDC events".to_string()),
+            ..Default::default()
+        })
+        .await?;
+
     Ok(())
 }
 

@@ -3,7 +3,8 @@
 use common::domain::{
     CreateDocumentRepoInputWithId, CreateOrganizationRepoInputWithId, DeleteDocumentRepoInput,
     DocumentRepository, DomainError, GetDocumentRepoInput, ListDocumentsRepoInput,
-    OrganizationRepository, RegisterUserRepoInputWithId, UpdateDocumentRepoInput, UserRepository,
+    OrganizationRepository, RegisterUserRepoInputWithId, UpdateDocumentRepoInput,
+    UpdateYrsStateInput, UserRepository,
 };
 use common::postgres::{
     PostgresClient, PostgresDocumentRepository, PostgresOrganizationRepository,
@@ -83,14 +84,15 @@ async fn setup_test_db() -> (
 }
 
 fn make_create_input(id: &str, org_id: &str) -> CreateDocumentRepoInputWithId {
+    let (yrs_state, yrs_state_vector) = common::yrs::create_empty_document();
     CreateDocumentRepoInputWithId {
         document_id: id.to_string(),
         organization_id: org_id.to_string(),
-        name: "Manual.pdf".to_string(),
-        mime_type: "application/pdf".to_string(),
-        size_bytes: 1024,
-        object_store_key: format!("{}/{}/Manual.pdf", org_id, id),
-        checksum: "sha256-abc123".to_string(),
+        name: "Manual".to_string(),
+        yrs_state,
+        yrs_state_vector,
+        content_text: String::new(),
+        content_html: String::new(),
         metadata: serde_json::json!({"author": "test"}),
     }
 }
@@ -116,9 +118,9 @@ async fn test_document_crud_operations() {
     let created = doc_repo.create_document(create_input).await.unwrap();
     assert_eq!(created.document_id, "doc-crud-001");
     assert_eq!(created.organization_id, "org-crud-001");
-    assert_eq!(created.name, "Manual.pdf");
-    assert_eq!(created.mime_type, "application/pdf");
-    assert_eq!(created.size_bytes, 1024);
+    assert_eq!(created.name, "Manual");
+    assert!(!created.yrs_state.is_empty());
+    assert!(!created.yrs_state_vector.is_empty());
     assert_eq!(created.metadata, serde_json::json!({"author": "test"}));
     assert!(created.created_at.is_some());
     assert!(created.updated_at.is_some());
@@ -133,23 +135,17 @@ async fn test_document_crud_operations() {
     assert!(retrieved.is_some());
     let doc = retrieved.unwrap();
     assert_eq!(doc.document_id, "doc-crud-001");
-    assert_eq!(doc.checksum, "sha256-abc123");
+    assert!(doc.content_text.is_empty());
 
-    // Update name, file metadata, and custom metadata
+    // Update name and metadata
     let update_input = UpdateDocumentRepoInput {
         document_id: "doc-crud-001".to_string(),
         organization_id: "org-crud-001".to_string(),
-        name: Some("Updated Manual.pdf".to_string()),
-        mime_type: Some("application/octet-stream".to_string()),
-        size_bytes: Some(2048),
-        checksum: Some("sha256-updated".to_string()),
+        name: Some("Updated Manual".to_string()),
         metadata: Some(serde_json::json!({"author": "test", "version": 2})),
     };
     let updated = doc_repo.update_document(update_input).await.unwrap();
-    assert_eq!(updated.name, "Updated Manual.pdf");
-    assert_eq!(updated.mime_type, "application/octet-stream");
-    assert_eq!(updated.size_bytes, 2048);
-    assert_eq!(updated.checksum, "sha256-updated");
+    assert_eq!(updated.name, "Updated Manual");
     assert_eq!(
         updated.metadata,
         serde_json::json!({"author": "test", "version": 2})
@@ -202,28 +198,6 @@ async fn test_document_unique_constraint() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_document_unique_object_store_key() {
-    let (_container, doc_repo, org_repo) = setup_test_db().await;
-
-    create_org(&org_repo, "org-key-001").await;
-
-    let create_input = make_create_input("doc-key-001", "org-key-001");
-    doc_repo.create_document(create_input).await.unwrap();
-
-    // Different document_id but same object_store_key should fail
-    let mut duplicate_key_input = make_create_input("doc-key-002", "org-key-001");
-    duplicate_key_input.object_store_key = "org-key-001/doc-key-001/Manual.pdf".to_string();
-
-    let result = doc_repo.create_document(duplicate_key_input).await;
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        DomainError::DocumentAlreadyExists(_)
-    ));
-}
-
-#[tokio::test]
-#[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_document_foreign_key_organization() {
     let (_container, doc_repo, _org_repo) = setup_test_db().await;
 
@@ -247,8 +221,7 @@ async fn test_list_excludes_soft_deleted() {
     // Create 3 documents
     for i in 1..=3 {
         let mut input = make_create_input(&format!("doc-list-{}", i), "org-list-001");
-        input.name = format!("Document {}.pdf", i);
-        input.object_store_key = format!("org-list-001/doc-list-{}/file.pdf", i);
+        input.name = format!("Document {}", i);
         doc_repo.create_document(input).await.unwrap();
     }
 
@@ -315,9 +288,6 @@ async fn test_update_document_with_wrong_organization_returns_not_found() {
         document_id: "doc-update-001".to_string(),
         organization_id: "org-update-2".to_string(),
         name: Some("Hacked Name".to_string()),
-        mime_type: None,
-        size_bytes: None,
-        checksum: None,
         metadata: None,
     };
     let result = doc_repo.update_document(wrong_update).await;
@@ -361,4 +331,114 @@ async fn test_delete_document_with_wrong_organization_returns_not_found() {
         result.is_some(),
         "Document should still exist after failed cross-org delete"
     );
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_document_yrs_state_roundtrip() {
+    let (_container, doc_repo, org_repo) = setup_test_db().await;
+    create_org(&org_repo, "org-yrs-001").await;
+
+    let (original_state, original_sv) = common::yrs::create_empty_document();
+    let create_input = CreateDocumentRepoInputWithId {
+        document_id: "doc-yrs-001".to_string(),
+        organization_id: "org-yrs-001".to_string(),
+        name: "Yrs Test".to_string(),
+        yrs_state: original_state.clone(),
+        yrs_state_vector: original_sv.clone(),
+        content_text: String::new(),
+        content_html: String::new(),
+        metadata: serde_json::json!({}),
+    };
+
+    doc_repo.create_document(create_input).await.unwrap();
+
+    let get_input = GetDocumentRepoInput {
+        document_id: "doc-yrs-001".to_string(),
+        organization_id: "org-yrs-001".to_string(),
+    };
+    let doc = doc_repo.get_document(get_input).await.unwrap().unwrap();
+
+    assert_eq!(
+        doc.yrs_state, original_state,
+        "yrs_state should round-trip through PostgreSQL"
+    );
+    assert_eq!(
+        doc.yrs_state_vector, original_sv,
+        "yrs_state_vector should round-trip through PostgreSQL"
+    );
+    assert!(doc.content_text.is_empty());
+    assert!(doc.content_html.is_empty());
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_update_yrs_state_success() {
+    let (_container, doc_repo, org_repo) = setup_test_db().await;
+    create_org(&org_repo, "org-yrs-update-001").await;
+
+    // Create a document
+    let create_input = make_create_input("doc-yrs-update-001", "org-yrs-update-001");
+    doc_repo.create_document(create_input).await.unwrap();
+
+    // Build updated state with some content
+    let new_state = vec![1, 2, 3, 4]; // Simplified for test
+    let new_sv = vec![5, 6, 7];
+
+    let input = UpdateYrsStateInput {
+        document_id: "doc-yrs-update-001".to_string(),
+        organization_id: "org-yrs-update-001".to_string(),
+        yrs_state: new_state.clone(),
+        yrs_state_vector: new_sv.clone(),
+        content_text: "Hello world".to_string(),
+        content_html: "<p>Hello world</p>".to_string(),
+    };
+
+    let result = doc_repo.update_yrs_state(input).await.unwrap();
+    assert!(
+        result,
+        "update_yrs_state should return true when lock acquired"
+    );
+
+    // Verify the document was updated
+    let get_input = GetDocumentRepoInput {
+        document_id: "doc-yrs-update-001".to_string(),
+        organization_id: "org-yrs-update-001".to_string(),
+    };
+    let doc = doc_repo.get_document(get_input).await.unwrap().unwrap();
+    assert_eq!(doc.yrs_state, new_state);
+    assert_eq!(doc.yrs_state_vector, new_sv);
+    assert_eq!(doc.content_text, "Hello world");
+    assert_eq!(doc.content_html, "<p>Hello world</p>");
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "integration-tests"), ignore)]
+async fn test_update_yrs_state_soft_deleted_not_updated() {
+    let (_container, doc_repo, org_repo) = setup_test_db().await;
+    create_org(&org_repo, "org-yrs-del-001").await;
+
+    let create_input = make_create_input("doc-yrs-del-001", "org-yrs-del-001");
+    doc_repo.create_document(create_input).await.unwrap();
+
+    // Soft delete the document
+    let delete_input = DeleteDocumentRepoInput {
+        document_id: "doc-yrs-del-001".to_string(),
+        organization_id: "org-yrs-del-001".to_string(),
+    };
+    doc_repo.delete_document(delete_input).await.unwrap();
+
+    // Try to update yrs state - should still return true (lock acquired)
+    // but the UPDATE WHERE deleted_at IS NULL won't match any rows
+    let input = UpdateYrsStateInput {
+        document_id: "doc-yrs-del-001".to_string(),
+        organization_id: "org-yrs-del-001".to_string(),
+        yrs_state: vec![1, 2, 3],
+        yrs_state_vector: vec![4, 5],
+        content_text: "Should not persist".to_string(),
+        content_html: "<p>Should not persist</p>".to_string(),
+    };
+
+    let result = doc_repo.update_yrs_state(input).await.unwrap();
+    assert!(result, "lock should still be acquired even for deleted doc");
 }

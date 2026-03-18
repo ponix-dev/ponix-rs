@@ -56,9 +56,25 @@ pub struct ServiceConfig {
     #[serde(default = "default_nats_data_stream_definitions_stream")]
     pub nats_data_stream_definitions_stream: String,
 
-    /// NATS Object Store bucket name for document storage
-    #[serde(default = "default_nats_object_store_bucket")]
-    pub nats_object_store_bucket: String,
+    /// NATS JetStream stream name for document sync updates (Yrs collaboration)
+    #[serde(default = "default_nats_document_updates_stream")]
+    pub nats_document_updates_stream: String,
+
+    /// NATS consumer name for document updates (used by snapshotter)
+    #[serde(default = "default_nats_document_updates_consumer_name")]
+    pub nats_document_updates_consumer_name: String,
+
+    /// Max age for document updates stream messages (in seconds, default 7 days)
+    #[serde(default = "default_nats_document_updates_max_age_secs")]
+    pub nats_document_updates_max_age_secs: u64,
+
+    /// Snapshotter compaction interval in seconds (default: 30)
+    #[serde(default = "default_snapshotter_compaction_interval_secs")]
+    pub snapshotter_compaction_interval_secs: u64,
+
+    /// Snapshotter idle document eviction timeout in seconds (default: 300)
+    #[serde(default = "default_snapshotter_idle_eviction_secs")]
+    pub snapshotter_idle_eviction_secs: u64,
 
     /// Batch size for consumer
     #[serde(default = "default_nats_batch_size")]
@@ -147,6 +163,19 @@ pub struct ServiceConfig {
     #[serde(default = "default_grpc_cors_allowed_origins")]
     pub grpc_cors_allowed_origins: String,
 
+    // Collaboration server configuration
+    /// Collaboration server host
+    #[serde(default = "default_collab_host")]
+    pub collab_host: String,
+
+    /// Collaboration server port
+    #[serde(default = "default_collab_port")]
+    pub collab_port: u16,
+
+    /// Collaboration server CORS allowed origins
+    #[serde(default = "default_collab_cors_allowed_origins")]
+    pub collab_cors_allowed_origins: String,
+
     // JWT configuration
     /// JWT signing secret (required for production)
     #[serde(default = "default_jwt_secret")]
@@ -212,6 +241,14 @@ pub struct ServiceConfig {
     /// CDC table name for data stream definition events
     #[serde(default = "default_cdc_data_stream_definition_table_name")]
     pub cdc_data_stream_definition_table_name: String,
+
+    /// CDC entity name for document events
+    #[serde(default = "default_cdc_document_entity_name")]
+    pub cdc_document_entity_name: String,
+
+    /// CDC table name for document events
+    #[serde(default = "default_cdc_document_table_name")]
+    pub cdc_document_table_name: String,
 
     /// CDC publication name
     #[serde(default = "default_cdc_publication_name")]
@@ -322,8 +359,24 @@ fn default_nats_data_stream_definitions_stream() -> String {
     "data_stream_definitions".to_string()
 }
 
-fn default_nats_object_store_bucket() -> String {
-    "ponix-documents".to_string()
+fn default_nats_document_updates_stream() -> String {
+    "document_sync".to_string()
+}
+
+fn default_nats_document_updates_consumer_name() -> String {
+    "document-snapshotter".to_string()
+}
+
+fn default_nats_document_updates_max_age_secs() -> u64 {
+    604800 // 7 days
+}
+
+fn default_snapshotter_compaction_interval_secs() -> u64 {
+    30
+}
+
+fn default_snapshotter_idle_eviction_secs() -> u64 {
+    300 // 5 minutes
 }
 
 fn default_nats_batch_size() -> usize {
@@ -394,6 +447,19 @@ fn default_postgres_migrations_dir() -> String {
 
 fn default_postgres_goose_binary_path() -> String {
     "goose".to_string()
+}
+
+// Collaboration server defaults
+fn default_collab_host() -> String {
+    "0.0.0.0".to_string()
+}
+
+fn default_collab_port() -> u16 {
+    50052
+}
+
+fn default_collab_cors_allowed_origins() -> String {
+    "*".to_string()
 }
 
 // gRPC defaults
@@ -477,6 +543,14 @@ fn default_cdc_data_stream_definition_entity_name() -> String {
 
 fn default_cdc_data_stream_definition_table_name() -> String {
     "data_stream_definitions".to_string()
+}
+
+fn default_cdc_document_entity_name() -> String {
+    "documents".to_string()
+}
+
+fn default_cdc_document_table_name() -> String {
+    "documents".to_string()
 }
 
 fn default_cdc_publication_name() -> String {
@@ -563,6 +637,18 @@ mod tests {
 
         let config = ServiceConfig::from_env().unwrap();
         assert_eq!(config.log_level, "info");
+    }
+
+    #[test]
+    fn test_document_updates_config_defaults() {
+        let _lock = TEST_LOCK.lock().unwrap();
+        let config = ServiceConfig::from_env().unwrap();
+        assert_eq!(config.nats_document_updates_stream, "document_sync");
+        assert_eq!(
+            config.nats_document_updates_consumer_name,
+            "document-snapshotter"
+        );
+        assert_eq!(config.nats_document_updates_max_age_secs, 604800);
     }
 
     #[test]

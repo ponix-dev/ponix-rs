@@ -20,6 +20,7 @@ Ponix ingests event data from any source — IoT devices, webhooks, APIs, servic
 - **Real-time processing** — events are transformed and stored as they arrive
 - **Multi-tenant** — organize data streams by organization and workspace
 - **gRPC API** — manage data streams, organizations, and gateways programmatically
+- **Collaborative documents** — real-time document editing via Yrs CRDTs over WebSocket, with automatic persistence and content extraction
 
 ## Getting Started
 

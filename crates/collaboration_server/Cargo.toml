@@ -1,0 +1,56 @@
+[package]
+name = "collaboration_server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+common = { path = "../common" }
+ponix-runner = { path = "../runner" }
+axum = { workspace = true, features = ["ws"] }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+async-nats = { workspace = true }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+yrs = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+bytes = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+chrono = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["cors"] }
+futures = { workspace = true }
+thiserror = { workspace = true }
+time = "0.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[[bin]]
+name = "collab-test-client"
+path = "src/bin/collab_test_client.rs"
+required-features = ["test-client"]
+
+[dependencies.clap]
+version = "4"
+features = ["derive"]
+optional = true
+
+[dependencies.tokio-tungstenite]
+version = "0.28"
+optional = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+common = { path = "../common", features = ["testing"] }
+tokio-tungstenite = "0.28"
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+yrs = { workspace = true }
+
+[features]
+integration-tests = []
+test-client = ["dep:clap", "dep:tokio-tungstenite"]

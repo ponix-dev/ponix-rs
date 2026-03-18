@@ -64,6 +64,9 @@ run_test "test-documents.sh" "Document Tests"
 run_test "test-mqtt-pipeline.sh" "MQTT Pipeline Test"
 run_test "test-multi-contract-pipeline.sh" "Multi-Contract Pipeline Test"
 
+# Collaboration server tests (includes NATS infra, WebSocket, snapshotter persistence)
+run_test "test-collaboration.sh" "Collaboration Server Test"
+
 # Summary
 echo -e "${BLUE}==========================================${NC}"
 echo -e "${BLUE}              Test Summary               ${NC}"
