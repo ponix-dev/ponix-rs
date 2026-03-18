@@ -585,6 +585,26 @@ let config = GrpcServerConfig {
 run_grpc_server(config, routes, &[FILE_DESCRIPTOR_SET], token).await?;
 ```
 
+## Documentation
+
+Project documentation lives in `docs/` — see [`docs/INDEX.md`](docs/INDEX.md) for the full listing.
+
+```
+docs/
+  INDEX.md              # Master index — every doc listed with one-line description
+  architecture/         # Cross-cutting concepts spanning multiple crates
+  modules/              # One file per crate (predictable, greppable)
+  data-flows/           # End-to-end paths through the system
+  operations/           # Procedural "how to" guides
+```
+
+**CLAUDE.md vs docs/**: CLAUDE.md contains build commands, env vars, conventions, and agent instructions. Docs are for deeper knowledge — architecture rationale, module internals, data flow walkthroughs.
+
+**Skills for working with docs:**
+- `/doc-format` — Create or update a doc using the canonical template
+- `/doc-search` — Find docs by crate, topic, or source file
+- `/doc-gardening` — Sync docs with code changes on the current branch
+
 ## Tilt Development
 
 The project uses Tilt for local development:
