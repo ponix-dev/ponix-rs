@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use collaboration_server::domain::RoomManager;
 use collaboration_server::domain::{
-    decode_sync_message, encode_update, SyncMessage, MSG_AWARENESS,
+    decode_sync_message, encode_update, SyncMessage,
 };
 use collaboration_server::nats::NatsDocumentRelay;
 use collaboration_server::websocket::{build_router, AppState};
