@@ -1,4 +1,4 @@
-use crate::domain::awareness::{derive_user_color, UserPresence};
+use crate::domain::awareness::{random_user_color, UserPresence};
 use common::domain::{GetUserRepoInput, UserRepository};
 
 #[derive(Debug)]
@@ -25,7 +25,7 @@ impl ConnectedUser {
             .map_err(|e| anyhow::anyhow!("failed to fetch user: {}", e))?
             .ok_or_else(|| anyhow::anyhow!("user not found: {}", user_id))?;
 
-        let color = derive_user_color(user_id);
+        let color = random_user_color();
 
         Ok(Self {
             user_id: user_id.to_string(),

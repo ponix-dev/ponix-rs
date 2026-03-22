@@ -223,37 +223,31 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Decode awareness wire format and return the JSON presence entries.
-/// Wire format: [MSG_AWARENESS][num_clients: u32_le][...entries...]
-/// Each entry: [client_id: u64_le][clock: u32_le][state_len: u32_le][state_json]
+/// Decode awareness wire format (Yjs lib0 varint encoding) and return the JSON presence entries.
+/// Wire format: [MSG_AWARENESS][count: varint]([clientID: varint][clock: varint][state: var_string])*
 fn decode_awareness_json(data: &[u8]) -> Option<String> {
     // Skip MSG_AWARENESS byte
     let data = &data[1..];
-    if data.len() < 4 {
-        return None;
-    }
 
-    let num_clients = u32::from_le_bytes(data[0..4].try_into().ok()?) as usize;
-    let mut offset = 4;
+    let (count, mut pos) = read_var_uint(data, 0)?;
     let mut entries = Vec::new();
 
-    for _ in 0..num_clients {
-        if offset + 16 > data.len() {
+    for _ in 0..count {
+        let (_client_id, new_pos) = read_var_uint(data, pos)?;
+        let (_clock, new_pos) = read_var_uint(data, new_pos)?;
+        let (str_len, new_pos) = read_var_uint(data, new_pos)?;
+        let str_end = new_pos + str_len as usize;
+        if str_end > data.len() {
             break;
         }
-        let _client_id = u64::from_le_bytes(data[offset..offset + 8].try_into().ok()?);
-        offset += 8;
-        let _clock = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
-        offset += 4;
-        let state_len = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?) as usize;
-        offset += 4;
-
-        if state_len > 0 && offset + state_len <= data.len() {
-            if let Ok(json_str) = std::str::from_utf8(&data[offset..offset + state_len]) {
-                entries.push(json_str.to_string());
+        if str_len > 0 {
+            if let Ok(json_str) = std::str::from_utf8(&data[new_pos..str_end]) {
+                if json_str != "null" {
+                    entries.push(json_str.to_string());
+                }
             }
         }
-        offset += state_len;
+        pos = str_end;
     }
 
     if entries.is_empty() {
@@ -261,4 +255,25 @@ fn decode_awareness_json(data: &[u8]) -> Option<String> {
     } else {
         Some(format!("[{}]", entries.join(",")))
     }
+}
+
+fn read_var_uint(data: &[u8], mut pos: usize) -> Option<(u64, usize)> {
+    let mut result: u64 = 0;
+    let mut shift: u32 = 0;
+    loop {
+        if pos >= data.len() {
+            return None;
+        }
+        let byte = data[pos];
+        pos += 1;
+        result |= ((byte & 0x7F) as u64) << shift;
+        if byte & 0x80 == 0 {
+            break;
+        }
+        shift += 7;
+        if shift >= 64 {
+            return None;
+        }
+    }
+    Some((result, pos))
 }

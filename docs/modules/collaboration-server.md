@@ -47,7 +47,7 @@ This crate is the backbone of Ponix's multi-user editing experience. Its respons
 
 - **`DocumentRelay` (trait)** -- Abstraction over cross-instance pub/sub. The `NatsDocumentRelay` implementation publishes document updates to JetStream (`document_sync.{document_id}`) and awareness state to core NATS (`awareness.{document_id}`). Each instance tags messages with a UUID `X-Instance-Id` header and skips its own messages on the receiving side.
 
-- **`DocumentAwarenessManager`** -- Server-authoritative presence and cursor tracking per document. Clients can only update their cursor position; identity fields (name, email, color) are set by the server based on the authenticated user. Uses a Yjs-compatible binary wire format so browser clients decode it natively.
+- **`DocumentAwarenessManager`** -- Hybrid awareness manager per document. Uses the client's Yjs clientID (so there's exactly one presence entry per connection and cursors work) but enforces server-authoritative identity (user_id, name, email, color). When a client sends an awareness update, the server extracts cursor data and merges it with the authenticated user's identity before relaying. Uses Yjs lib0 varint wire format.
 
 - **`SnapshotterService`** -- In-memory cache of `ActiveDocument` instances that tracks dirty state. On first update for a document, loads the base state from PostgreSQL, then applies incremental updates in memory. The `compact_dirty_documents` method encodes the full Yrs state, extracts content text/HTML, and writes to PostgreSQL using an advisory lock to prevent conflicts.
 
@@ -63,17 +63,17 @@ This crate is the backbone of Ponix's multi-user editing experience. Its respons
 
 2. **Authentication:** The first WebSocket message must be a text message containing a raw JWT string. The server validates it via `AuthTokenProvider` with a 5-second timeout. On failure, the connection is closed with code 4001 and a human-readable reason.
 
-3. **User identity resolution:** After authentication, the server looks up the user in the database to get their name and email, then derives a deterministic color. This ensures awareness data is server-authoritative -- clients cannot spoof their identity.
+3. **User identity resolution:** After authentication, the server validates the user exists in the database.
 
 4. **Initial sync:** The server sends two messages to the client: a SyncStep1 (the room's current state vector) and a SyncStep2 (the full Yrs document state). This follows the standard Yjs sync protocol, allowing the client to merge with any local state it may have.
 
-5. **Awareness setup:** The server registers the user in the `DocumentAwarenessManager`, sends the full awareness state (all connected users' presence) to the new client, and broadcasts the new user's presence to existing clients. The presence update is also published to NATS for cross-instance awareness.
+5. **Awareness setup:** The server registers the user's server-authoritative identity (user_id, name, email, color) in the `DocumentAwarenessManager` and sends the full awareness state (all connected users' merged presence) to the new client.
 
 6. **Message loop:** The connection splits into two concurrent tasks:
-   - **Inbound:** Reads WebSocket messages. Sync updates are applied to the room's Yrs doc, broadcast to other local clients, and published to NATS JetStream. Awareness messages have their cursor data extracted and merged with the server-authoritative identity before broadcasting.
+   - **Inbound:** Reads WebSocket messages. Sync updates are applied to the room's Yrs doc, broadcast to other local clients, and published to NATS JetStream. Awareness messages are processed by the `DocumentAwarenessManager`, which extracts client cursor data, merges it with the server-authoritative identity, and relays the merged result. This uses the client's Yjs clientID (one entry per connection) while preventing identity spoofing.
    - **Outbound:** A spawned task drains an mpsc channel and forwards messages to the WebSocket. The room writes to this channel when broadcasting.
 
-7. **Disconnect cleanup:** When the WebSocket closes, the server removes the client from the room and awareness manager, broadcasts a removal update, and publishes it to NATS. If no clients remain, the room is destroyed: NATS subscriptions are cancelled and the room is removed from the manager.
+7. **Disconnect cleanup:** When the WebSocket closes, the server generates a Yjs-compatible removal for the client's awareness (using their Yjs clientID), broadcasts it to local clients and publishes to NATS. The client is removed from the room. If no clients remain, the room is destroyed: NATS subscriptions are cancelled and the room is removed from the manager.
 
 ### Cross-Instance Relay via NATS
 

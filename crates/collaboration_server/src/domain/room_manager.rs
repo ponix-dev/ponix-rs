@@ -123,7 +123,7 @@ impl RoomManager {
             .await
             .insert(document_id.to_string(), awareness_manager.clone());
 
-        // Build awareness callback: applies remote awareness and broadcasts to local clients
+        // Build awareness callback: store remote awareness and relay to local clients
         let awareness_room = room.clone();
         let awareness_mgr = awareness_manager.clone();
         let awareness_handler: crate::domain::RemoteUpdateHandler =
@@ -131,15 +131,11 @@ impl RoomManager {
                 let room = awareness_room.clone();
                 let mgr = awareness_mgr.clone();
                 Box::pin(async move {
-                    match mgr.apply_remote_update(&data).await {
-                        Ok(update) => {
-                            let encoded = encode_awareness_message(&update);
-                            room.broadcast_to_all(encoded).await;
-                        }
-                        Err(e) => {
-                            tracing::warn!(error = %e, "failed to apply remote awareness update");
-                        }
-                    }
+                    // Store remote awareness so new clients get full state on connect
+                    mgr.store_remote_update(&data).await;
+                    // Relay raw awareness bytes — prepend 0x01 tag for WebSocket clients
+                    let msg = encode_awareness_message(&data);
+                    room.broadcast_to_all(msg).await;
                 })
             });
 
