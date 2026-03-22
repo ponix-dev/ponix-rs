@@ -168,7 +168,7 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
   - **`domain/`**: Core collaboration logic
     - `RoomManager`: Per-document room lifecycle with creation locking
     - `DocumentRoom`: In-memory Yrs `Doc` with connected clients, broadcasts updates
-    - `DocumentAwarenessManager`: Per-document presence/cursor state (Yjs-compatible wire format)
+    - `DocumentAwarenessManager`: Hybrid awareness — client Yjs clientID + server-authoritative identity (Yjs lib0 varint wire format)
     - `ConnectedUser`: Server-authoritative user identity with deterministic color
     - `SnapshotterService`: Single-writer to PostgreSQL, in-memory cache with dirty tracking
     - `CompactionWorker`: Periodic flush (30s) of dirty docs to PostgreSQL + idle eviction (5min)
@@ -287,9 +287,11 @@ DocumentRoom (in-memory Yrs Doc)
                     ↓ encodes Yrs state + extracts content_text/content_html
                 DocumentRepository.update_yrs_state() (PostgreSQL with advisory lock)
 
-Awareness (presence + cursors):
-    CollaborationServer → core NATS awareness.{document_id} (ephemeral, not JetStream)
-        → Other instances apply remote awareness updates
+Awareness (presence + cursors) — hybrid: client Yjs clientID + server-authoritative identity:
+    Client sends awareness → server extracts cursor, merges with server identity
+        → broadcast merged awareness to local clients
+        → core NATS awareness.{document_id} (ephemeral, not JetStream)
+            → Other instances store + relay merged awareness to their local clients
 ```
 
 #### CEL Payload Conversion

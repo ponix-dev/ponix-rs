@@ -9,8 +9,8 @@ use tokio::sync::mpsc;
 use crate::domain::connected_user::ConnectedUser;
 use crate::domain::protocol::MSG_AWARENESS;
 use crate::domain::{
-    decode_client_awareness_cursor, decode_sync_message, encode_awareness_message,
-    encode_sync_step1, encode_sync_step2, DocumentRelay, SyncMessage,
+    decode_sync_message, encode_awareness_message, encode_sync_step1, encode_sync_step2,
+    DocumentRelay, SyncMessage,
 };
 use crate::domain::{DocumentRoom, RoomManager};
 use crate::websocket::auth::authenticate_first_message;
@@ -52,7 +52,7 @@ pub async fn handle_connection(
             }
         };
 
-    // 2. Resolve full user identity for awareness (server-authoritative)
+    // 2. Resolve full user identity (validates user exists in DB)
     let connected_user =
         match ConnectedUser::from_user_id(&authenticated_user_id, user_repository.as_ref()).await {
             Ok(user) => user,
@@ -104,18 +104,11 @@ pub async fn handle_connection(
         return;
     }
 
-    // 6. Set up awareness
+    // 6. Register server-authoritative identity and send full awareness to new client
     let awareness_manager = room_manager.get_awareness(&document_id).await;
-    let (awareness_client_id, awareness_add_update) = match &awareness_manager {
-        Some(mgr) => {
-            let (id, update) = mgr.add_client(&connected_user).await;
-            (Some(id), Some(update))
-        }
-        None => (None, None),
-    };
-
-    // Send full awareness state to new client
     if let Some(mgr) = &awareness_manager {
+        mgr.register_client(client_id, &connected_user).await;
+
         let full_awareness = mgr.encode_full_state().await;
         let awareness_msg = encode_awareness_message(&full_awareness);
         if ws_sender
@@ -123,22 +116,8 @@ pub async fn handle_connection(
             .await
             .is_err()
         {
-            if let Some(aid) = awareness_client_id {
-                mgr.remove_client(aid).await;
-            }
             room.remove_client(client_id).await;
             return;
-        }
-    }
-
-    // Broadcast new user's presence to other local clients
-    if let Some(update) = &awareness_add_update {
-        let msg = encode_awareness_message(update);
-        room.broadcast_to_others(client_id, msg).await;
-
-        // Publish to NATS for cross-instance relay
-        if let Err(e) = relay.publish_awareness(&document_id, update).await {
-            tracing::warn!(error = %e, "failed to publish awareness to NATS");
         }
     }
 
@@ -160,21 +139,18 @@ pub async fn handle_connection(
                 }
 
                 if data[0] == MSG_AWARENESS {
-                    // Awareness message from client
-                    if let (Some(mgr), Some(aid)) = (&awareness_manager, awareness_client_id) {
-                        let awareness_data = &data[1..];
-                        if let Some(cursor) = decode_client_awareness_cursor(awareness_data) {
-                            if let Some(update) = mgr.apply_client_cursor_update(aid, cursor).await
-                            {
-                                // Broadcast to other local clients
-                                let msg = encode_awareness_message(&update);
-                                room.broadcast_to_others(client_id, msg).await;
+                    if let Some(mgr) = &awareness_manager {
+                        // Merge client's cursor with server-authoritative identity
+                        if let Some(merged) = mgr.store_client_update(client_id, &data[1..]).await {
+                            // Broadcast merged awareness to other local clients
+                            let msg = encode_awareness_message(&merged);
+                            room.broadcast_to_others(client_id, msg).await;
 
-                                // Relay to other instances
-                                if let Err(e) = relay.publish_awareness(&document_id, &update).await
-                                {
-                                    tracing::warn!(error = %e, "failed to publish awareness to NATS");
-                                }
+                            // Relay merged awareness to other instances
+                            if let Err(e) = relay.publish_awareness(&document_id, &merged).await {
+                                tracing::warn!(
+                                    error = %e, "failed to publish awareness to NATS"
+                                );
                             }
                         }
                     }
@@ -223,8 +199,8 @@ pub async fn handle_connection(
     send_task.abort();
 
     // Remove from awareness and broadcast removal
-    if let (Some(mgr), Some(aid)) = (&awareness_manager, awareness_client_id) {
-        if let Some(removal_update) = mgr.remove_client(aid).await {
+    if let Some(mgr) = &awareness_manager {
+        if let Some(removal_update) = mgr.remove_client(client_id).await {
             let msg = encode_awareness_message(&removal_update);
             room.broadcast_to_others(client_id, msg).await;
             if let Err(e) = relay.publish_awareness(&document_id, &removal_update).await {

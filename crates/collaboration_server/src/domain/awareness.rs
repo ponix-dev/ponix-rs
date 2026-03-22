@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPresence {
@@ -11,12 +10,13 @@ pub struct UserPresence {
     pub cursor: Option<serde_json::Value>,
 }
 
-pub fn derive_user_color(user_id: &str) -> String {
-    let hash = Sha256::digest(user_id.as_bytes());
-    let hue = u16::from_be_bytes([hash[0], hash[1]]) % 360;
-    let sat = 55.0 + (hash[2] as f64 / 255.0) * 20.0; // 55-75%
-    let lit = 45.0 + (hash[3] as f64 / 255.0) * 20.0; // 45-65%
-    hsl_to_hex(hue as f64, sat, lit)
+pub fn random_user_color() -> String {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let hue = rng.gen_range(0.0..360.0);
+    let sat = rng.gen_range(50.0..80.0);
+    let lit = rng.gen_range(40.0..65.0);
+    hsl_to_hex(hue, sat, lit)
 }
 
 fn hsl_to_hex(h: f64, s: f64, l: f64) -> String {
@@ -48,29 +48,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_derive_user_color_deterministic() {
-        let color1 = derive_user_color("user-123");
-        let color2 = derive_user_color("user-123");
-        assert_eq!(color1, color2);
-    }
-
-    #[test]
-    fn test_derive_user_color_different_users() {
-        let color1 = derive_user_color("user-abc");
-        let color2 = derive_user_color("user-xyz");
-        assert_ne!(color1, color2);
-    }
-
-    #[test]
-    fn test_derive_user_color_valid_hex() {
-        let color = derive_user_color("test-user");
-        assert!(
-            color.len() == 7 && color.starts_with('#'),
-            "Expected #rrggbb format, got: {}",
-            color
-        );
-        // All chars after '#' should be hex digits
-        assert!(color[1..].chars().all(|c| c.is_ascii_hexdigit()));
+    fn test_random_user_color_valid_hex() {
+        for _ in 0..10 {
+            let color = random_user_color();
+            assert!(
+                color.len() == 7 && color.starts_with('#'),
+                "Expected #rrggbb format, got: {}",
+                color
+            );
+            assert!(color[1..].chars().all(|c| c.is_ascii_hexdigit()));
+        }
     }
 
     #[test]
