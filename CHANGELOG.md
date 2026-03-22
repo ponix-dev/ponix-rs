@@ -1,3 +1,9 @@
+## [1.28.1](https://github.com/ponix-dev/ponix-rs/compare/v1.28.0...v1.28.1) (2026-03-22)
+
+### Bug Fixes
+
+* relay raw awareness bytes for cross-instance cursor compatibility ([#194](https://github.com/ponix-dev/ponix-rs/issues/194)) ([56c9478](https://github.com/ponix-dev/ponix-rs/commit/56c9478bd5c55b3a5acd215f10439431729c2081))
+
 ## [1.28.0](https://github.com/ponix-dev/ponix-rs/compare/v1.27.0...v1.28.0) (2026-03-18)
 
 ### Features
