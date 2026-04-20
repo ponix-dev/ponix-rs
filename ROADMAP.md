@@ -1,236 +1,80 @@
-# Roadmap: IoT Data → Agentic Reasoning → Device Downlinks
+# Roadmap: Raw MQTT Ingest → LoRaWAN Integration → Bidirectional Device Communication
 
 ## Where You Are
 
-One-way pipeline: devices push sensor data through gateways into NATS, CEL expressions transform it, ClickHouse stores it. No way to send commands back. No AI/ML. No document or knowledge management.
+One-way IoT pipeline: EMQX MQTT gateways receive raw binary payloads, CEL expressions transform them, ClickHouse stores the results. Gateways are generic MQTT connections with a type enum. End device definitions carry ordered lists of payload contracts with match expressions. No LoRaWAN-specific support. No downlink capability.
 
 ## Where You're Going
 
-An agentic system that can observe device data, query historical context, consult documents and entity relationships, call external APIs, make decisions, and send commands back to devices — triggered by real-time events or scheduled jobs.
+A LoRaWAN-native IoT platform that connects to network servers like The Things Network, ingests all device messages (not just uplinks) into a raw event store, transforms uplink payloads through a simplified single-contract pipeline, and sends downlink commands back to devices.
 
 ---
 
-## Phase 1: Harden the Uplink
+## Phase 1: Simplify the Existing Model
 
-Make the existing ingest path multi-protocol and production-grade before building on it.
+Strip out abstractions that don't serve the LoRaWAN direction. Gateways become LoRaWAN MQTT connections (no type enum). End device definitions get a single transform expression and schema (no match expressions, no contract list).
 
-- [x] #36 — Device ownership validation before raw envelope publish
-- [x] #122 — Multi-protocol payload contracts — devices aren't locked to one CEL expression
-- [x] #119 — Own the CEL runtime — ability to add IoT-specific functions
-- [x] #120 — Pre-compiled CEL — removes per-message compilation cost at scale
-- [x] #94 — Gateway deployer abstraction — decouple gateway lifecycle from in-process `tokio::spawn`
-- [x] #157 — Rename End Device to Data Stream — align naming with the platform's evolving multi-source model
+- [ ] #196 — Remove gateway type abstraction — drop `gateway_type` enum, `EmqxGatewayConfig`, and the `GatewayRunner` factory pattern. A gateway is a LoRaWAN network server MQTT connection with a broker URL and credentials
+- [ ] #197 — Simplify end device definitions to single contract — replace the ordered `contracts: Vec<PayloadContract>` with a single `transform_expression` and `json_schema` on the definition itself. Remove match expressions
+- [ ] #198 — Update gateway orchestrator for LoRaWAN MQTT — remove the pluggable runner abstraction, assume all gateways connect to a LoRaWAN network server MQTT broker
 
-> **Why first:** Everything downstream depends on reliable, validated data flowing in. Protocol-agnostic contracts (#122) are especially important — agents will eventually need to reason about devices speaking different protocols, and the downlink path will need protocol-aware encoding.
+> **Why first:** The current abstractions (gateway types, multi-contract matching) add complexity without serving the LoRaWAN use case. Simplifying now means Phase 2 builds on a clean foundation instead of working around dead code.
 
 ---
 
-## Phase 2: Knowledge Layer
+## Phase 2: TTN MQTT Integration + Raw Event Storage
 
-Give the platform memory beyond raw time-series. Documents with collaborative editing via Yrs (Rust CRDT, binary-compatible with Yjs), entity relationships, a graph that represents how the physical world is connected, and vector embeddings that make documents searchable by meaning.
+Connect to The Things Network's MQTT broker, subscribe to all device topics, and store every message in a new `end_device_events` ClickHouse table. Uplink messages additionally feed into the existing CEL → `processed_envelopes` pipeline.
 
-- [x] #102 — AGE + pgvector extensions — graph traversal and vector similarity in PostgreSQL
-- [x] #107 — NATS Object Storage — binary document content storage
-- [x] #106 — Document entity + repository — metadata for manuals, datasheets, config files
-- [x] #108 — Document service + upload + associations — gRPC metadata + HTTP file upload + document association RPCs (link documents to data streams, definitions, workspaces) with dedicated junction tables and transactional AGE graph writes (subsumes #110/#111 for document relationships)
-- [x] #168 — Migrate Document entity to Yrs-based collaborative schema — replace file columns (`object_store_key`, `checksum`, `size_bytes`, `mime_type`) with Yrs columns (`yrs_state`, `yrs_state_vector`, `content_text`, `content_html`). Migration + domain entity + repository. Associations unchanged
-- [x] #169 — Update DocumentService for Yrs document lifecycle — replace upload/download with create (empty Yrs doc) + metadata-only get. Content editing via WebSocket, not gRPC
-- [x] #170 — Update Document proto and gRPC for Yrs-based documents — replace Upload RPCs with Create RPCs, remove DownloadDocument streaming, update Document message fields
-- [x] #171 — Remove NATS Object Store document dependency — remove `DocumentContentStore` from document path, clean up object store init in `ponix_all_in_one`
-- [x] #172 — Collaboration server with Yrs WebSocket endpoint — new `collaboration_server` crate. WebSocket at `/ws/documents/{document_id}`. Loads/persists Yrs state from PostgreSQL, extracts `content_text`/`content_html` on compaction. Runner process
-- [ ] #173 — Document comments with Yrs StickyIndex anchoring — `document_comments` table, threaded replies, resolve/unresolve. Domain entity + repository + gRPC RPCs
-- [ ] #174 — Document version snapshots — `document_versions` table with full Yrs state snapshots. Create/list/get/restore via gRPC
-- [x] #175 — Plate + Yrs frontend integration guide — `docs/frontend-integration-guide.md` in `ponix-ui` — Plate setup, `slate-yjs` binding, comment UI mapping, version history patterns. Handoff doc for frontend agent
-- [x] #176 — JetStream `document_sync` stream setup with improved `ensure_stream` API
-- [x] #177 — Document snapshotter for Yrs state persistence and content extraction
-- [x] #178 — Awareness protocol for presence and cursors
-- [x] #189 — Fix cursor format mismatch between awareness protocol and slate-yjs — server expects `{ index, length }` but `@slate-yjs/core` sends Yjs RelativePositions. Either custom frontend cursor layer or server-side format change
-- [x] #109 — Document CDC — triggers on `content_text` changes (written by Yrs compaction), CDC payload contains text directly — no NATS Object Store fetch needed. Feeds embedding pipeline #124
-- [ ] #124 — Document embedding pipeline — when `content_text` changes (via CDC #109), chunk with [Kreuzberg](https://github.com/kreuzberg-dev/kreuzberg) (markdown-aware chunking), embed with Kreuzberg's in-process ONNX engine (768-dim vectors via `balanced` preset), store in pgvector. No external service dependency — runs in-process. Kreuzberg's extraction layer can be extended to support PDF/Office uploads in the future by enabling additional feature flags
+### TTN MQTT Connection
 
-> **Why second:** An agent making device decisions needs context. "Device X is in Building 3, which has HVAC system Y, and the manufacturer's datasheet says the operating range is 10–40°C." That context lives in documents and relationships, not in the time-series. Collaborative editing via Yrs means documents are living artifacts — teams can edit them in real-time while the embedding pipeline keeps semantic search up to date on every meaningful change. Kreuzberg provides in-process embedding via ONNX — no Ollama or external service needed for Phase 2. Documents are searchable by meaning as soon as they enter the system.
+- [ ] #199 — TTN MQTT topic parser — parse TTN's topic structure (`v3/{app_id}@{tenant_id}/devices/{device_id}/{message_type}`) and extract device identity + message type
+- [ ] #200 — TTN gateway runner — connect to TTN MQTT broker using application API key, subscribe to `v3/+/devices/+/#` for all device messages. Design the LoRaWAN gateway trait so future providers (ChirpStack) can implement the same interface
+
+### Raw Event Storage
+
+- [ ] #201 — `end_device_events` ClickHouse table — new table with columns: `received_at DateTime`, `end_device_id String`, `message_type String`, `payload JSON`. Partitioned by month, ordered by `(end_device_id, received_at)`
+- [ ] #202 — Event ingestion worker — consumes all LoRaWAN messages from NATS, writes to `end_device_events`. Every message type (join, up, down/ack, down/nack, down/sent, location, service/data) gets stored
+
+### Uplink Pipeline Bridge
+
+- [ ] #203 — TTN uplink to CEL pipeline — when message_type is `up`, extract the `frm_payload` (raw bytes) from the TTN JSON, wrap it as a `RawEnvelope`, and publish to the existing `raw_envelopes` NATS stream. The existing analytics worker handles CEL transformation → `processed_envelopes`
+
+> **Why second:** This is the core integration — connecting to TTN and getting data flowing. The raw event table captures everything the network server tells us about each device, while the uplink bridge ensures the existing transformation pipeline keeps working.
 
 ---
 
-## Phase 3: LLM Integration & Tool Layer
+## Phase 3: Downlink Infrastructure
 
-Build the agent runtime and tool layer. Ollama provides local LLM inference for the agent reasoning loop. Embeddings are already handled in-process by Kreuzberg (Phase 2). Built-in platform tools are always available, and workspace-scoped [MCP](https://modelcontextprotocol.io) servers extend agent capabilities per workspace.
+Build the reverse path — platform to device. Research TTN's downlink mechanics first, then implement domain model, API, and delivery.
 
-### LLM Infrastructure
+- [ ] #204 — Research TTN downlink API — investigate confirmed vs unconfirmed downlinks, FPort selection, Class A receive windows, priority levels, payload encoding, and the MQTT publish topic format (`v3/{app_id}@{tenant_id}/devices/{device_id}/down/push`)
+- [ ] #205 — Downlink domain model — `DownlinkCommand` entity with lifecycle states, persistence in PostgreSQL. Contract shape informed by research
+- [ ] #206 — Downlink gRPC API — submit commands, query status, view history
+- [ ] #207 — Downlink delivery via MQTT — publish downlink commands to the TTN MQTT broker. Track acknowledgment via `down/ack` and `down/nack` events from the event stream
 
-- [ ] #112 — Ollama Docker + LLM inference service — local LLM inference for agent runtime. Embedding is handled by Kreuzberg in Phase 2; Ollama is solely for LLM reasoning
-
-### Embeddings — Indexing the Knowledge Layer
-
-- [ ] #125 — Device definition embedding — embed device definitions and their payload contract descriptions. Semantic search finds the right definitions when the agent needs to understand what a device is and what it reports. Uses the same Kreuzberg-based `EmbeddingService` established in #124
-
-### Built-in Platform Tools
-
-These are compiled into the agent runtime and always available on every agent run. They interact with the platform's own data stores and action primitives directly — no network hop, no discovery step. Data access is scoped to the workspace the agent belongs to.
-
-- [ ] #126 — Agent runtime — orchestration loop: receive prompt + context → LLM selects tool(s) → execute → feed results back → LLM reasons again → repeat until terminal action or step limit. Supports multi-step, multi-tool reasoning chains
-- [ ] #127 — Agent execution context — scoped per-invocation context carrying workspace ID, org/tenant ID, device scope, and step limits. Built-in tools use this to enforce data boundaries — an agent can only query and act on resources within its workspace
-
-| Built-in Tool | What the Agent Can Do With It |
-|---------------|-------------------------------|
-| `clickhouse_query` | Query time-series data — last N readings, aggregates, trends, anomaly windows. The agent formulates ClickHouse SQL; results come back as structured data. Scoped to the workspace's devices |
-| `knowledge_search` | Semantic search over embedded documents and device definitions via pgvector. "Find the datasheet for this sensor model", "What does the installation manual say about calibration?" Scoped to the workspace's documents |
-| `graph_traverse` | Walk the AGE graph — find related devices, assets, org structure, location hierarchy. "What other devices are in the same building?", "Who owns this asset?" Scoped to the workspace's graph |
-| `downlink_command` | Submit a downlink command to a device (Phase 4). The agent's primary way to act on the physical world. Scoped to the workspace's devices |
-| `send_alert` | Publish an alert/notification — email, webhook, NATS subject, or push notification. Used when the right action is to notify a human rather than actuate a device |
-| `create_record` | Write structured data back — create an incident, log a decision, update an entity attribute. Gives the agent persistent side-effects beyond downlinks |
-
-- [ ] #128 — `clickhouse_query` tool implementation
-- [ ] #129 — `knowledge_search` tool implementation
-- [ ] #130 — `graph_traverse` tool implementation
-- [ ] #131 — `downlink_command` tool implementation
-- [ ] #132 — `send_alert` tool implementation
-- [ ] #133 — `create_record` tool implementation
-
-### Workspace MCP Servers
-
-Additional capabilities are exposed through [MCP](https://modelcontextprotocol.io) servers registered to a workspace. Each workspace maintains a flat list of MCP servers — the platform doesn't care where they're hosted or who built them. When an agent runs, it connects to the workspace's registered servers, discovers their tools via `tools/list`, and calls them via `tools/call` over streamable HTTP. Adding a capability means registering a server; removing one means the agent can no longer use it.
-
-- [ ] #134 — MCP client in agent runtime — the agent runtime speaks MCP natively. On each run, it connects to the workspace's registered MCP servers, discovers tools, and uses `tools/call` during the reasoning loop
-- [ ] #135 — Workspace MCP registry — each workspace maintains a list of registered MCP servers (name, endpoint URL, health status). Admins add/remove servers per workspace. The agent executor resolves the registry to live HTTP connections at run start
-- [ ] #136 — MCP server management API — CRUD for MCP server registrations per workspace. Health checks. Connection testing
-
-> **Key insight:** The sensor time-series stays in ClickHouse. The agent accesses it through the built-in `clickhouse_query` tool, not embeddings. Vectors are reserved for documents, definitions, and other sparse semantic content where similarity search adds value. Core platform actions (downlinks, alerts, records) are also built-in. MCP servers extend the agent with additional capabilities — the platform treats them all the same regardless of where they're hosted.
+> **Why third:** Downlinks require the uplink path to be working (you need device identity, event tracking, and a proven MQTT connection). The research item is deliberately first in this phase — the contract shape and scheduling model depend on understanding TTN's constraints.
 
 ---
 
-## Phase 4: Downlink Infrastructure
+## Backlog
 
-Build the reverse path — platform to device. This becomes the built-in `downlink_command` tool that agents use to act on the physical world.
+Items that are valuable but not blocking the LoRaWAN integration. Pick these up opportunistically.
 
-- [ ] #137 — Downlink command domain model — `DownlinkCommand` entity with lifecycle states (`Pending → Sent → Acknowledged → Failed`). Repository trait. Migration
-- [ ] #138 — Downlink NATS stream — `downlink_commands` stream. Commands flow through the same event infrastructure as uplinks
-- [ ] #139 — Downlink gRPC service — manual command submission, status queries, command history
-- [ ] #140 — Gateway downlink publishing — extend gateway runners to publish to device MQTT topics. Consume from `downlink_commands` stream, deliver via the appropriate gateway
-- [ ] #141 — Downlink encoding — reverse payload conversion — JSON to device-native binary. Mirrors the uplink CEL contracts. Store downlink expressions alongside uplink contracts in `DataStreamDefinition`
-
-> **Why here and not earlier:** Downlink is useless without something intelligent deciding what to send. But it doesn't need the full autonomous loop to be valuable — manual downlinks via gRPC are useful on their own and let you test the plumbing before agents drive it.
-
----
-
-## Phase 5: Triggers, Workflows & the Autonomous Loop
-
-Wire the agent runtime to two trigger sources — real-time events from the NATS stream and cron schedules — so agents run autonomously. Workflows are registered to a workspace, inheriting its data scope and MCP servers.
-
-### Trigger Types
-
-| Trigger | How It Fires | Example |
-|---------|-------------|---------|
-| **Event trigger** | CEL expression evaluated against every processed envelope on the NATS stream. When true, spawns an agent run | `temperature > 38.0 && device.type == "cold_chain"` → agent investigates and decides whether to adjust the compressor or notify a human |
-| **Cron trigger** | A cron schedule fires on a timer. No incoming event — the agent starts with a prompt template and assembles its own context via tools | Every day at 06:00 → agent queries overnight readings from ClickHouse, compares against baseline, generates a summary, and sends it via `send-alert`. Every Monday → agent reviews the week's decision outcomes and flags underperforming workflows |
-
-### Workflow Engine
-
-- [ ] #142 — Workflow definition model — a workflow belongs to a **workspace** and binds a **trigger** (event CEL / cron expression) to an **agent configuration** (system prompt template). Because the workflow belongs to the workspace, the agent automatically inherits the workspace's data scope (built-in tools) and registered MCP servers. Stored as a first-class entity with CRUD + CDC
-- [ ] #143 — Cron scheduler — persistent cron registry backed by PostgreSQL. Evaluates cron expressions, publishes trigger events to NATS on schedule. Survives restarts. Distributed-lock-safe for HA
-- [ ] #144 — Agent executor service — consumes trigger events from NATS, hydrates the workflow config, resolves the workflow's workspace (MCP registry + data scope), initializes the agent runtime, and manages the execution lifecycle (timeout, retries, step budgets)
-- [ ] #145 — Workflow audit log — every agent run is recorded: trigger source, workspace, tools called (with inputs/outputs), LLM reasoning trace, final actions taken, and outcome. Stored in ClickHouse for analysis
-- [ ] #146 — Workflow management API — CRUD for workflows within a workspace. Enable/disable triggers. View run history, MCP tool usage breakdown
+- [ ] #65 — Consolidate service initialization into `init_process` crate
+- [ ] #48 — CDC high availability
+- [ ] #82 — Restrict wildcard CORS to localhost origins
+- [ ] #159 — Expose Ponix as an MCP server
+- [ ] #134 — MCP client in agent runtime
+- [ ] #135 — Workspace MCP registry
+- [ ] #136 — MCP server management API
 
 ---
 
-## Phase 6: LoRaWAN / ChirpStack
+## Open Questions
 
-Add first-class LoRaWAN support via ChirpStack integration — both uplink and downlink. This is a new `DataStreamDefinition` type that plugs into the existing ingest, downlink, and agent infrastructure built in earlier phases.
-
-### Uplink
-
-- [ ] #147 — ChirpStack `DataStreamDefinition` type — a new data stream definition type representing ChirpStack-managed LoRaWAN devices. Carries ChirpStack-specific metadata: application ID, device profile, device EUI, and payload codec configuration
-- [ ] #148 — ChirpStack uplink ingest — subscribe to ChirpStack's event stream (MQTT or gRPC integration), receive uplink events, map them to the platform's envelope format. Feeds into the same NATS → CEL → ClickHouse pipeline as all other devices
-- [ ] #149 — ChirpStack payload contracts — CEL expressions (or ChirpStack's built-in codec output) for decoding LoRaWAN payloads. Stored on the `DataStreamDefinition` alongside the standard uplink contracts
-
-### Downlink
-
-- [ ] #150 — ChirpStack downlink routing — when a `DownlinkCommand` targets a ChirpStack device, route it through ChirpStack's downlink API (enqueue) instead of direct MQTT publish. The downlink infrastructure from Phase 4 handles lifecycle tracking — ChirpStack handles the LoRaWAN Class A/B/C scheduling
-- [ ] #151 — ChirpStack downlink encoding — reverse payload conversion for LoRaWAN devices. Store downlink encoding expressions on the ChirpStack `DataStreamDefinition`. The `downlink_command` built-in tool uses these to encode the agent's JSON payload into the binary format ChirpStack expects
-
-> **Why last:** The full platform — ingest, knowledge layer, agent runtime, downlink infrastructure, and workflow engine — needs to be solid before adding a new protocol integration. ChirpStack support is additive: it's a new `EndDeviceDefinition` type that plugs into every layer, not a rearchitecture. Doing it last means the abstractions are proven and the integration is straightforward.
-
----
-
-## The Full Loop
-
-```mermaid
-flowchart TD
-    subgraph Triggers["Trigger Sources"]
-        ET["Event Trigger (CEL on NATS envelope)"]
-        CT["Cron Trigger (scheduled timer)"]
-    end
-
-    ET --> WE
-    CT --> WE
-
-    WE["Workflow Engine — resolves workflow → workspace"]
-
-    WE --> AR
-
-    subgraph WS["Workspace Scope"]
-        subgraph AR["Agent Runtime"]
-            direction TB
-            INIT["Initialize: system prompt + trigger context"]
-            INIT --> LOOP
-            subgraph LOOP["Agent Loop"]
-                direction TB
-                REASON["LLM reasons over context"]
-                REASON --> SELECT["Selects tool"]
-                SELECT --> TOOLSET
-                subgraph TOOLSET[" "]
-                    direction TB
-                    subgraph BUILTIN["Built-in Platform Tools"]
-                        T1["clickhouse_query (time-series)"]
-                        T2["knowledge_search (documents)"]
-                        T3["graph_traverse (relationships)"]
-                        T4["downlink_command (actuate)"]
-                        T5["send_alert (notify humans)"]
-                        T6["create_record (persist data)"]
-                    end
-                    subgraph MCPSERVERS["Workspace MCP Servers"]
-                        T7["Any registered MCP server (streamable HTTP)"]
-                    end
-                end
-                TOOLSET --> FEED["Results fed back to LLM"]
-                FEED -->|"repeat until done or budget exhausted"| REASON
-            end
-        end
-    end
-
-    AR --> ACTIONS["Actions Execute (downlinks, alerts, API calls, records)"]
-    ACTIONS --> AUDIT["Audit Log — full run trace"]
-    AUDIT --> OUTCOME["Observe Outcomes"]
-    OUTCOME -.->|"feedback informs future runs"| WE
-```
-
----
-
-## Phase 7: Microservice Extraction & HA
-
-Break apart the monolith into independently deployable services and add high availability where the architecture currently has single points of failure. This phase is deliberately last — the crate boundaries established throughout earlier phases naturally define the extraction seams.
-
-- [ ] #65 — Consolidate service initialization into `init_process` crate — clean boot sequence that supports both monolith and independent service deployment
-- [ ] #48 — CDC high availability — eliminates single point of failure via leader election and Redis-backed state
-
-> **Why last:** The monolith is the right deployment model while the feature surface is evolving rapidly. Extracting services too early locks in boundaries that haven't been proven yet. By this point, every crate has been battle-tested through six phases of feature development, and the `Runner` process model already isolates each worker — extraction is mechanical, not architectural.
-
----
-
-## Phase 8: Contract Evolution
-
-Extend the payload contract system beyond single pre-compiled CEL expressions. Add versioning, testing infrastructure, new decoder types, and a management API that decouples contracts from device definitions.
-
-- [ ] #26 — RAKwireless decoder — broader hardware support with protocol-specific codec
-
----
-
-## Open Questions to Resolve Along the Way
-
-- **Where does new code live?** Each phase will naturally suggest boundaries, but no need to decide crate structure upfront.
-- **Ollama vs. external LLM?** #112 starts with Ollama for local inference, but the agent runtime's LLM interface should be provider-agnostic.
-- **Cron scheduling at scale** — single scheduler with distributed lock, or sharded? Depends on how many concurrent workflows tenants define.
-- **Agent step limits & cost control** — how many tool calls per run? How do you prevent an agent from looping? Token budgets, step caps, and wall-clock timeouts all need sensible defaults.
-- **Additional protocol support** — after ChirpStack, CoAP and other network servers each have their own uplink/downlink semantics — handle via additional `DataStreamDefinition` types as needed.
-- **Multi-tenant isolation** — do orgs share a model, or does each get their own? Workspace scoping handles tool and data boundaries, but model sharing is a separate question.
+- **Downlink contract shape** — needs research into TTN's downlink API before committing. How do we define the encoding from structured JSON to raw bytes? Is it the inverse of the uplink transform expression, or a separate definition?
+- **LoRaWAN class scheduling** — Class A devices can only receive downlinks in a narrow window after an uplink. Does the platform need to queue and time downlinks, or does TTN handle that?
+- **TTN application registration** — creating applications and registering devices in TTN is explicitly out of scope. An external process handles this. But how do we map TTN app IDs to ponix organizations/gateways?
+- **Multiple TTN applications per gateway** — is a gateway 1:1 with a TTN application, or can one gateway aggregate multiple applications?
+- **Provider abstraction depth** — how much should the LoRaWAN gateway trait abstract? TTN and ChirpStack have different MQTT topic structures, auth models, and downlink APIs. Design for the common denominator or allow provider-specific extensions?
