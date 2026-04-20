@@ -1,21 +1,17 @@
 /// Resource types for authorization
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resource {
-    DataStream,
-    Document,
+    EndDevice,
     Gateway,
     Organization,
-    Workspace,
 }
 
 impl Resource {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Resource::DataStream => "data_stream",
-            Resource::Document => "document",
+            Resource::EndDevice => "end_device",
             Resource::Gateway => "gateway",
             Resource::Organization => "organization",
-            Resource::Workspace => "workspace",
         }
     }
 }
@@ -66,44 +62,25 @@ pub fn base_policies() -> Vec<Vec<String>> {
         vec![
             "admin".into(),
             "*".into(),
-            "data_stream".into(),
+            "end_device".into(),
             "create".into(),
         ],
         vec![
             "admin".into(),
             "*".into(),
-            "data_stream".into(),
+            "end_device".into(),
             "read".into(),
         ],
         vec![
             "admin".into(),
             "*".into(),
-            "data_stream".into(),
+            "end_device".into(),
             "update".into(),
         ],
         vec![
             "admin".into(),
             "*".into(),
-            "data_stream".into(),
-            "delete".into(),
-        ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "document".into(),
-            "create".into(),
-        ],
-        vec!["admin".into(), "*".into(), "document".into(), "read".into()],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "document".into(),
-            "update".into(),
-        ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "document".into(),
+            "end_device".into(),
             "delete".into(),
         ],
         vec![
@@ -143,77 +120,29 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "organization".into(),
             "delete".into(),
         ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "workspace".into(),
-            "create".into(),
-        ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "workspace".into(),
-            "read".into(),
-        ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "workspace".into(),
-            "update".into(),
-        ],
-        vec![
-            "admin".into(),
-            "*".into(),
-            "workspace".into(),
-            "delete".into(),
-        ],
         // Member policies (same as admin for now, designed for future differentiation)
         vec![
             "member".into(),
             "*".into(),
-            "data_stream".into(),
+            "end_device".into(),
             "create".into(),
         ],
         vec![
             "member".into(),
             "*".into(),
-            "data_stream".into(),
+            "end_device".into(),
             "read".into(),
         ],
         vec![
             "member".into(),
             "*".into(),
-            "data_stream".into(),
+            "end_device".into(),
             "update".into(),
         ],
         vec![
             "member".into(),
             "*".into(),
-            "data_stream".into(),
-            "delete".into(),
-        ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "document".into(),
-            "create".into(),
-        ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "document".into(),
-            "read".into(),
-        ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "document".into(),
-            "update".into(),
-        ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "document".into(),
+            "end_device".into(),
             "delete".into(),
         ],
         vec![
@@ -240,30 +169,6 @@ pub fn base_policies() -> Vec<Vec<String>> {
             "*".into(),
             "organization".into(),
             "read".into(),
-        ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "workspace".into(),
-            "create".into(),
-        ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "workspace".into(),
-            "read".into(),
-        ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "workspace".into(),
-            "update".into(),
-        ],
-        vec![
-            "member".into(),
-            "*".into(),
-            "workspace".into(),
-            "delete".into(),
         ],
     ]
 }

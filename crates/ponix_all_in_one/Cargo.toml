@@ -20,7 +20,6 @@ ponix_api = { path = "../ponix_api" }
 analytics_worker = { path = "../analytics_worker" }
 gateway_orchestrator = { path = "../gateway_orchestrator" }
 cdc_worker = { path = "../cdc_worker" }
-collaboration_server = { path = "../collaboration_server" }
 goose = { path = "../goose" }
 
 tokio.workspace = true

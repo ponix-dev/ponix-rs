@@ -4,8 +4,8 @@ description: End-to-end data flow for ingesting raw IoT payloads, transforming t
 category: data-flow
 related-files:
   - crates/common/src/domain/envelope.rs
-  - crates/common/src/domain/data_stream.rs
-  - crates/common/src/domain/data_stream_definition.rs
+  - crates/common/src/domain/end_device.rs
+  - crates/common/src/domain/end_device_definition.rs
   - crates/analytics_worker/src/analytics_worker.rs
   - crates/analytics_worker/src/domain/raw_envelope_service.rs
   - crates/analytics_worker/src/domain/processed_envelope_service.rs
@@ -25,15 +25,15 @@ The envelope processing pipeline transforms raw binary IoT payloads into structu
 
 ## Overview
 
-A raw envelope enters the system as a binary payload associated with a data stream. The pipeline consumes it from a NATS JetStream stream, looks up the data stream's payload contracts (match expression, transform expression, JSON schema), executes CEL-based matching and transformation against the binary data, validates the output against a JSON Schema, and publishes the resulting structured JSON as a processed envelope to a second NATS stream. A separate consumer reads processed envelopes and writes them to ClickHouse via a buffered inserter for time-series analytics. The two-stream design decouples transformation from storage, allowing each stage to scale and fail independently.
+A raw envelope enters the system as a binary payload associated with an end device. The pipeline consumes it from a NATS JetStream stream, looks up the end device's payload contracts (match expression, transform expression, JSON schema), executes CEL-based matching and transformation against the binary data, validates the output against a JSON Schema, and publishes the resulting structured JSON as a processed envelope to a second NATS stream. A separate consumer reads processed envelopes and writes them to ClickHouse via a buffered inserter for time-series analytics. The two-stream design decouples transformation from storage, allowing each stage to scale and fail independently.
 
 ## Key Concepts
 
-- **`RawEnvelope`** -- The ingestion input. Contains `organization_id`, `data_stream_id`, `received_at` timestamp, and a `payload: Vec<u8>` (opaque binary data from the IoT device).
+- **`RawEnvelope`** -- The ingestion input. Contains `organization_id`, `end_device_id`, `received_at` timestamp, and a `payload: Vec<u8>` (opaque binary data from the IoT device).
 
 - **`ProcessedEnvelope`** -- The pipeline output. Replaces the binary payload with `data: serde_json::Map<String, serde_json::Value>` (a flat JSON object) and adds a `processed_at` timestamp.
 
-- **`DataStreamWithDefinition`** -- A data stream joined with its definition. Carries `contracts: Vec<PayloadContract>`, the ordered list of processing rules.
+- **`EndDeviceWithDefinition`** -- An end device joined with its definition. Carries `contracts: Vec<PayloadContract>`, the ordered list of processing rules.
 
 - **`PayloadContract`** -- A single processing rule consisting of a match expression (CEL boolean), a transform expression (CEL binary→JSON), and a JSON Schema for validation. Contracts are pre-compiled at definition time to avoid repeated parsing at runtime.
 
@@ -54,7 +54,7 @@ A raw envelope enters the system as a binary payload associated with a data stre
                     ┌─────────▼───────────┐
                     │  RawEnvelopeService  │
                     │                     │
-                    │  1. Fetch DataStream │──→ PostgreSQL
+                    │  1. Fetch EndDevice  │──→ PostgreSQL
                     │  2. Validate org    │──→ PostgreSQL
                     │  3. For each contract:
                     │     match(input)    │    CEL bool expression
@@ -66,7 +66,7 @@ A raw envelope enters the system as a binary payload associated with a data stre
                               │
                     ┌─────────▼───────────┐
                     │  ProcessedEnvelope   │  Publish to
-                    │  Producer           │  processed_envelopes.{data_stream_id}
+                    │  Producer           │  processed_envelopes.{end_device_id}
                     └─────────┬───────────┘
                               │
                          NATS JetStream
@@ -102,7 +102,7 @@ If no contract matches at all, the message is silently acknowledged. This is nor
 | Scenario | NATS Response | Rationale |
 |----------|--------------|-----------|
 | Protobuf decode failure | NAK | May succeed on retry |
-| Data stream not found | NAK | May appear after migration |
+| End device not found | NAK | May appear after migration |
 | Organization deleted/missing | NAK | Transient state |
 | No contract matches | ACK | Normal condition |
 | Schema validation fails | ACK | Permanent, would fail forever |

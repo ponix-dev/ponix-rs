@@ -10,11 +10,9 @@ related-files:
   - crates/cdc_worker/src/domain/cdc_converter.rs
   - crates/cdc_worker/src/domain/entity_config.rs
   - crates/cdc_worker/src/domain/gateway_converter.rs
-  - crates/cdc_worker/src/domain/document_converter.rs
   - crates/cdc_worker/src/domain/organization_converter.rs
-  - crates/cdc_worker/src/domain/data_stream_converter.rs
-  - crates/cdc_worker/src/domain/data_stream_definition_converter.rs
-  - crates/cdc_worker/src/domain/workspace_converter.rs
+  - crates/cdc_worker/src/domain/end_device_converter.rs
+  - crates/cdc_worker/src/domain/end_device_definition_converter.rs
   - crates/cdc_worker/src/domain/user_converter.rs
   - crates/cdc_worker/src/nats/nats_sink.rs
 last-updated: 2026-03-18
@@ -22,11 +20,11 @@ last-updated: 2026-03-18
 
 # CDC Worker
 
-The CDC Worker captures row-level changes from PostgreSQL using logical replication and publishes them as protobuf-encoded messages to NATS JetStream. This enables the rest of the system to react to database mutations in near real-time without coupling consumers directly to PostgreSQL, forming the backbone of the event-driven architecture that powers gateway orchestration, document sync notifications, and future downstream pipelines.
+The CDC Worker captures row-level changes from PostgreSQL using logical replication and publishes them as protobuf-encoded messages to NATS JetStream. This enables the rest of the system to react to database mutations in near real-time without coupling consumers directly to PostgreSQL, forming the backbone of the event-driven architecture that powers gateway orchestration and future downstream pipelines.
 
 ## Overview
 
-The CDC Worker sits between PostgreSQL's Write-Ahead Log (WAL) and NATS JetStream. It uses the `etl` and `etl-postgres` libraries (from Supabase) to consume a PostgreSQL logical replication stream, then routes each change through entity-specific converters that transform raw table rows into typed protobuf messages. These messages are published to NATS subjects following the pattern `{entity_name}.{operation}` (e.g., `gateways.create`, `documents.update`, `organizations.delete`).
+The CDC Worker sits between PostgreSQL's Write-Ahead Log (WAL) and NATS JetStream. It uses the `etl` and `etl-postgres` libraries (from Supabase) to consume a PostgreSQL logical replication stream, then routes each change through entity-specific converters that transform raw table rows into typed protobuf messages. These messages are published to NATS subjects following the pattern `{entity_name}.{operation}` (e.g., `gateways.create`, `end_devices.update`, `organizations.delete`).
 
 Key responsibilities:
 - Consume PostgreSQL logical replication events via a named publication and replication slot
@@ -69,13 +67,11 @@ The ETL library delivers events in batches to `NatsSink::write_events()`:
 
 Each converter follows the same pattern: extract fields from JSON, map database values to protobuf enum variants, parse timestamps, build and encode the protobuf message. Notable behaviors:
 
-- **DocumentConverter** excludes `content_text`, `content_html`, `yrs_state`, and `yrs_state_vector` from CDC events. These fields are large and change frequently via the collaboration server. Downstream consumers fetch content from PostgreSQL on demand.
-
 - **UserConverter** excludes `password_hash` from CDC events for security.
 
 - **GatewayConverter** extracts `broker_url` from the `gateway_config` JSONB column and maps it into the protobuf `Config` oneof as `EmqxGatewayConfig`.
 
-- **OrganizationConverter** and **WorkspaceConverter** derive status enums from the presence of `deleted_at` (active vs. inactive/deleted).
+- **OrganizationConverter** derives status enums from the presence of `deleted_at` (active vs. inactive).
 
 ### Error Handling
 
@@ -95,5 +91,4 @@ Individual event processing failures are logged and skipped -- the batch continu
 ## Related Documentation
 
 - [Common](common.md) — Proto converters and NATS publisher infrastructure used by NatsSink
-- [Collaboration Server](collaboration-server.md) — Document content changes flow through collaboration sync, not CDC; CDC only captures metadata changes
 - [Envelope Processing Pipeline](../data-flows/envelope-pipeline.md) — Separate data pipeline for IoT telemetry (not CDC-based)

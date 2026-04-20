@@ -9,7 +9,6 @@ members = [
     "crates/analytics_worker",
     "crates/init_process",
     "crates/gateway_orchestrator",
-    "crates/collaboration_server",
 ]
 resolver = "2"
 
@@ -49,8 +48,8 @@ http = "1.0"
 protoc-wkt = "1.0"
 
 # Protobuf (BSR registry)
-ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.5.0-20260309002748-6f9acd2ee519.2", registry = "buf" }
-ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.5.0-20260309002748-6f9acd2ee519.4", registry = "buf" }
+ponix-proto-prost = { package = "ponix_ponix_community_neoeinstein-prost", version = "0.5.0-20260419223457-69ccbf7ef960.2", registry = "buf" }
+ponix-proto-tonic = { package = "ponix_ponix_community_neoeinstein-tonic", version = "0.5.0-20260419223457-69ccbf7ef960.4", registry = "buf" }
 
 # Database clients
 clickhouse = { version = "0.14", features = ["lz4", "inserter", "chrono"] }
@@ -105,5 +104,3 @@ casbin = "2"
 # Validation
 garde = { version = "0.22", features = ["derive"] }
 
-# Yrs (CRDT)
-yrs = "0.25"

@@ -8,16 +8,14 @@ related-files:
   - crates/ponix_api/src/ponix_api.rs
   - crates/ponix_api/src/domain.rs
   - crates/ponix_api/src/grpc.rs
-  - crates/ponix_api/src/domain/data_stream_service.rs
-  - crates/ponix_api/src/domain/data_stream_definition_service.rs
+  - crates/ponix_api/src/domain/end_device_service.rs
+  - crates/ponix_api/src/domain/end_device_definition_service.rs
   - crates/ponix_api/src/domain/organization_service.rs
   - crates/ponix_api/src/domain/gateway_service.rs
-  - crates/ponix_api/src/domain/document_service.rs
   - crates/ponix_api/src/domain/user_service.rs
-  - crates/ponix_api/src/domain/workspace_service.rs
   - crates/ponix_api/src/domain/raw_envelope_ingestion_service.rs
   - crates/ponix_api/src/grpc/server.rs
-  - crates/ponix_api/src/grpc/data_stream_handler.rs
+  - crates/ponix_api/src/grpc/end_device_handler.rs
 last-updated: 2026-03-18
 ---
 
@@ -29,7 +27,7 @@ The `ponix_api` crate is the gRPC API layer for the Ponix platform. It implement
 
 This crate has two primary responsibilities:
 
-1. **Domain services** (`domain/`) -- Business logic orchestration. Each service owns the rules for one aggregate (e.g., "creating a data stream requires the organization, definition, and gateway to all exist and belong to the same org"). Services depend only on trait-based repositories and authorization providers from `common`, making them fully unit-testable with mocks.
+1. **Domain services** (`domain/`) -- Business logic orchestration. Each service owns the rules for one aggregate (e.g., "creating an end device requires the organization, definition, and gateway to all exist and belong to the same org"). Services depend only on trait-based repositories and authorization providers from `common`, making them fully unit-testable with mocks.
 
 2. **gRPC handlers** (`grpc/`) -- Thin translation layer. Each handler implements a tonic-generated service trait, extracts the authenticated user from the JWT in request metadata, maps protobuf request types to domain service request types, calls the domain service, maps the result back to protobuf, and converts any `DomainError` to an appropriate gRPC `Status` code.
 
@@ -41,7 +39,7 @@ The crate exposes a `PonixApi` struct that packages everything into a single run
 
 - **`PonixApiServices`** -- Aggregation struct carrying all `Arc<dyn ...>` domain services and auth providers. Its `into_routes()` method wires every gRPC handler into a single `tonic::service::Routes`.
 
-- **Domain service request types** (e.g., `CreateDataStreamRequest`) -- Validated structs using the `garde` crate. Each embeds a `user_id` field so the service layer can perform authorization checks. This is the "two-type pattern": the gRPC handler constructs these from the proto request plus the JWT-extracted user context.
+- **Domain service request types** (e.g., `CreateEndDeviceRequest`) -- Validated structs using the `garde` crate. Each embeds a `user_id` field so the service layer can perform authorization checks. This is the "two-type pattern": the gRPC handler constructs these from the proto request plus the JWT-extracted user context.
 
 - **`AuthorizationProvider`** -- Trait from `common::auth` that every service calls via `require_permission(user_id, org_id, resource, action)` before performing any operation. This centralizes RBAC enforcement.
 
@@ -49,7 +47,7 @@ The crate exposes a `PonixApi` struct that packages everything into a single run
 
 - **ID generation** -- All entities get their IDs generated at the domain service layer using `xid::new()`, not at the gRPC or repository layer.
 
-- **`RawEnvelopeIngestionService`** -- Unlike other services, this one does not require JWT auth. It validates data stream ownership and publishes binary payloads to NATS for downstream processing.
+- **`RawEnvelopeIngestionService`** -- Unlike other services, this one does not require JWT auth. It validates end device ownership and publishes binary payloads to NATS for downstream processing.
 
 ## How It Works
 
@@ -65,7 +63,7 @@ Every gRPC request follows the same pipeline:
 
 4. **Authorization**: The service calls `authorization_provider.require_permission(user_id, org_id, Resource::X, Action::Y)`. Failures return `DomainError::PermissionDenied`.
 
-5. **Business rules**: The service enforces domain invariants (e.g., cross-validates organization, definition, and gateway ownership for data streams).
+5. **Business rules**: The service enforces domain invariants (e.g., cross-validates organization, definition, and gateway ownership for end devices).
 
 6. **Repository call**: The service calls the appropriate repository trait method.
 
@@ -78,13 +76,11 @@ Every gRPC request follows the same pipeline:
 | Service | Entities | Notable behavior |
 |---|---|---|
 | `OrganizationService` | Organization | Creator automatically gets Admin role via `assign_role` |
-| `WorkspaceService` | Workspace | Validates parent organization exists and is active |
-| `DataStreamService` | DataStream | Cross-validates organization, definition, and gateway ownership |
-| `DataStreamDefinitionService` | DataStreamDefinition | Compiles CEL expressions at creation time, validates JSON Schema syntax |
+| `EndDeviceService` | EndDevice | Cross-validates organization, definition, and gateway ownership |
+| `EndDeviceDefinitionService` | EndDeviceDefinition | Compiles CEL expressions at creation time, validates JSON Schema syntax |
 | `GatewayService` | Gateway | Full CRUD with organization ownership validation |
-| `DocumentService` | Document | Creates with empty Yrs CRDT state, manages graph-edge associations via Apache AGE |
 | `UserService` | User | Registration with Argon2 hashing, JWT+refresh token login, token rotation |
-| `RawEnvelopeIngestionService` | RawEnvelope | No JWT auth, validates data stream ownership, publishes to NATS |
+| `RawEnvelopeIngestionService` | RawEnvelope | No JWT auth, validates end device ownership, publishes to NATS |
 
 ### Server Setup
 
@@ -106,6 +102,5 @@ The `run_ponix_grpc_server` function delegates to `common::grpc::run_grpc_server
 ## Related Documentation
 
 - [Common](common.md) — Repository traits, domain entities, authorization interfaces, proto converters, gRPC middleware
-- [Collaboration Server](collaboration-server.md) — Real-time document editing (complements the metadata-only document CRUD here)
 - [Analytics Worker](analytics-worker.md) — Consumes raw envelopes published by `RawEnvelopeIngestionService`
 - [All-in-One Service Binary](ponix-all-in-one.md) — Wires `PonixApi` into the monolith

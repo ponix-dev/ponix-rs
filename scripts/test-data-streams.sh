@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
-init_test_script "Data Stream Tests (DataStreamService + DataStreamDefinitionService)"
+init_test_script "End Device Tests (EndDeviceService + EndDeviceDefinitionService)"
 
 # ============================================
 # SETUP
@@ -21,7 +21,7 @@ print_success "Authenticated as $TEST_EMAIL"
 print_step "Setup: Creating organization..."
 ORG_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "organization.v1.OrganizationService/CreateOrganization" \
-    '{"name": "Data Stream Test Org"}')
+    '{"name": "End Device Test Org"}')
 
 ORG_ID=$(echo "$ORG_RESPONSE" | jq -r '.organizationId // .organization.organizationId // empty')
 if [ -z "$ORG_ID" ] || [ "$ORG_ID" = "null" ]; then
@@ -30,24 +30,12 @@ if [ -z "$ORG_ID" ] || [ "$ORG_ID" = "null" ]; then
 fi
 print_success "Organization created: $ORG_ID"
 
-print_step "Setup: Creating workspace..."
-WORKSPACE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "workspace.v1.WorkspaceService/CreateWorkspace" \
-    "{\"organization_id\": \"$ORG_ID\", \"name\": \"Data Stream Test Workspace\"}")
-
-WORKSPACE_ID=$(echo "$WORKSPACE_RESPONSE" | jq -r '.workspace.id // .id // empty')
-if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
-    print_error "Failed to create workspace"
-    exit 1
-fi
-print_success "Workspace created: $WORKSPACE_ID"
-
 print_step "Setup: Creating gateway..."
 GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "gateway.v1.GatewayService/CreateGateway" \
     "{
         \"organization_id\": \"$ORG_ID\",
-        \"name\": \"Data Stream Test Gateway\",
+        \"name\": \"End Device Test Gateway\",
         \"type\": \"GATEWAY_TYPE_EMQX\",
         \"emqx_config\": {
             \"broker_url\": \"mqtt://localhost:1883\"
@@ -62,14 +50,14 @@ fi
 print_success "Gateway created: $GATEWAY_ID"
 
 # ============================================
-# DATA STREAM DEFINITION HAPPY PATH TESTS
+# END DEVICE DEFINITION HAPPY PATH TESTS
 # ============================================
 
-# CreateDataStreamDefinition
-print_step "Testing CreateDataStreamDefinition (happy path)..."
+# CreateEndDeviceDefinition
+print_step "Testing CreateEndDeviceDefinition (happy path)..."
 
 DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/CreateDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/CreateEndDeviceDefinition" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Cayenne LPP Temperature Sensor\",
@@ -80,7 +68,7 @@ DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         }]
     }")
 
-DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.dataStreamDefinition.id // .id // empty')
+DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.id // .id // empty')
 if [ -n "$DEFINITION_ID" ] && [ "$DEFINITION_ID" != "null" ]; then
     print_success "Definition created with ID: $DEFINITION_ID"
 else
@@ -89,27 +77,27 @@ else
     exit 1
 fi
 
-# GetDataStreamDefinition
-print_step "Testing GetDataStreamDefinition (happy path)..."
+# GetEndDeviceDefinition
+print_step "Testing GetEndDeviceDefinition (happy path)..."
 
 GET_DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/GetDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/GetEndDeviceDefinition" \
     "{\"id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\"}")
 
-RETURNED_DEF_NAME=$(echo "$GET_DEFINITION_RESPONSE" | jq -r '.dataStreamDefinition.name // .name // empty')
+RETURNED_DEF_NAME=$(echo "$GET_DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.name // .name // empty')
 if [ "$RETURNED_DEF_NAME" = "Cayenne LPP Temperature Sensor" ]; then
-    print_success "GetDataStreamDefinition returned correct data"
+    print_success "GetEndDeviceDefinition returned correct data"
 else
-    print_error "GetDataStreamDefinition returned unexpected data"
+    print_error "GetEndDeviceDefinition returned unexpected data"
     echo "$GET_DEFINITION_RESPONSE"
     exit 1
 fi
 
-# UpdateDataStreamDefinition
-print_step "Testing UpdateDataStreamDefinition (happy path)..."
+# UpdateEndDeviceDefinition
+print_step "Testing UpdateEndDeviceDefinition (happy path)..."
 
 UPDATE_DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/UpdateDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/UpdateEndDeviceDefinition" \
     "{
         \"id\": \"$DEFINITION_ID\",
         \"organization_id\": \"$ORG_ID\",
@@ -121,7 +109,7 @@ UPDATE_DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         }]
     }")
 
-UPDATED_DEF_NAME=$(echo "$UPDATE_DEFINITION_RESPONSE" | jq -r '.dataStreamDefinition.name // .name // empty')
+UPDATED_DEF_NAME=$(echo "$UPDATE_DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.name // .name // empty')
 if [ "$UPDATED_DEF_NAME" = "Cayenne LPP Sensor - Updated" ]; then
     print_success "Definition updated successfully"
 else
@@ -130,117 +118,116 @@ else
     exit 1
 fi
 
-# ListDataStreamDefinitions
-print_step "Testing ListDataStreamDefinitions (happy path)..."
+# ListEndDeviceDefinitions
+print_step "Testing ListEndDeviceDefinitions (happy path)..."
 
 LIST_DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/ListDataStreamDefinitions" \
+    "end_device.v1.EndDeviceDefinitionService/ListEndDeviceDefinitions" \
     "{\"organization_id\": \"$ORG_ID\"}")
 
-DEFINITION_COUNT=$(echo "$LIST_DEFINITION_RESPONSE" | jq '.dataStreamDefinitions | length')
+DEFINITION_COUNT=$(echo "$LIST_DEFINITION_RESPONSE" | jq '.endDeviceDefinitions | length')
 if [ "$DEFINITION_COUNT" -ge 1 ]; then
-    print_success "ListDataStreamDefinitions returned $DEFINITION_COUNT definition(s)"
+    print_success "ListEndDeviceDefinitions returned $DEFINITION_COUNT definition(s)"
 else
-    print_error "ListDataStreamDefinitions returned no definitions"
+    print_error "ListEndDeviceDefinitions returned no definitions"
     echo "$LIST_DEFINITION_RESPONSE"
     exit 1
 fi
 
 # ============================================
-# DATA STREAM HAPPY PATH TESTS
+# END DEVICE HAPPY PATH TESTS
 # ============================================
 
-# CreateDataStream
-print_step "Testing CreateDataStream (happy path)..."
+# CreateEndDevice
+print_step "Testing CreateEndDevice (happy path)..."
 
-start_cdc_listener "data_streams"
-DATA_STREAM_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamService/CreateDataStream" \
+start_cdc_listener "end_devices"
+END_DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "end_device.v1.EndDeviceService/CreateEndDevice" \
     "{
         \"organization_id\": \"$ORG_ID\",
-        \"workspace_id\": \"$WORKSPACE_ID\",
         \"definition_id\": \"$DEFINITION_ID\",
         \"gateway_id\": \"$GATEWAY_ID\",
         \"name\": \"Temperature Sensor Alpha\"
     }")
 
-DATA_STREAM_ID=$(echo "$DATA_STREAM_RESPONSE" | jq -r '.dataStream.dataStreamId // .dataStreamId // empty')
-if [ -n "$DATA_STREAM_ID" ] && [ "$DATA_STREAM_ID" != "null" ]; then
-    print_success "Data stream created with ID: $DATA_STREAM_ID"
+END_DEVICE_ID=$(echo "$END_DEVICE_RESPONSE" | jq -r '.endDevice.endDeviceId // .endDeviceId // empty')
+if [ -n "$END_DEVICE_ID" ] && [ "$END_DEVICE_ID" != "null" ]; then
+    print_success "End device created with ID: $END_DEVICE_ID"
 else
-    print_error "Failed to create data stream"
-    echo "$DATA_STREAM_RESPONSE"
+    print_error "Failed to create end device"
+    echo "$END_DEVICE_RESPONSE"
     cleanup_cdc_listener
     exit 1
 fi
-wait_for_cdc_event "data_streams" "create"
+wait_for_cdc_event "end_devices" "create"
 
-# GetDataStream
-print_step "Testing GetDataStream (happy path)..."
+# GetEndDevice
+print_step "Testing GetEndDevice (happy path)..."
 
-GET_DATA_STREAM_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamService/GetDataStream" \
-    "{\"data_stream_id\": \"$DATA_STREAM_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}")
+GET_END_DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "end_device.v1.EndDeviceService/GetEndDevice" \
+    "{\"end_device_id\": \"$END_DEVICE_ID\", \"organization_id\": \"$ORG_ID\"}")
 
-RETURNED_DATA_STREAM_NAME=$(echo "$GET_DATA_STREAM_RESPONSE" | jq -r '.dataStream.name // .name // empty')
-if [ "$RETURNED_DATA_STREAM_NAME" = "Temperature Sensor Alpha" ]; then
-    print_success "GetDataStream returned correct data"
+RETURNED_END_DEVICE_NAME=$(echo "$GET_END_DEVICE_RESPONSE" | jq -r '.endDevice.name // .name // empty')
+if [ "$RETURNED_END_DEVICE_NAME" = "Temperature Sensor Alpha" ]; then
+    print_success "GetEndDevice returned correct data"
 else
-    print_error "GetDataStream returned unexpected data"
-    echo "$GET_DATA_STREAM_RESPONSE"
+    print_error "GetEndDevice returned unexpected data"
+    echo "$GET_END_DEVICE_RESPONSE"
     exit 1
 fi
 
-# GetWorkspaceDataStreams
-print_step "Testing GetWorkspaceDataStreams (happy path)..."
+# ListEndDevices
+print_step "Testing ListEndDevices (happy path)..."
 
-LIST_DATA_STREAM_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamService/GetWorkspaceDataStreams" \
-    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}")
+LIST_END_DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "end_device.v1.EndDeviceService/ListEndDevices" \
+    "{\"organization_id\": \"$ORG_ID\"}")
 
-DATA_STREAM_COUNT=$(echo "$LIST_DATA_STREAM_RESPONSE" | jq '.dataStreams | length')
-if [ "$DATA_STREAM_COUNT" -ge 1 ]; then
-    print_success "GetWorkspaceDataStreams returned $DATA_STREAM_COUNT data stream(s)"
+END_DEVICE_COUNT=$(echo "$LIST_END_DEVICE_RESPONSE" | jq '.endDevices | length')
+if [ "$END_DEVICE_COUNT" -ge 1 ]; then
+    print_success "ListEndDevices returned $END_DEVICE_COUNT end device(s)"
 else
-    print_error "GetWorkspaceDataStreams returned no data streams"
-    echo "$LIST_DATA_STREAM_RESPONSE"
+    print_error "ListEndDevices returned no end devices"
+    echo "$LIST_END_DEVICE_RESPONSE"
     exit 1
 fi
 
-# GetGatewayDataStreams
-print_step "Testing GetGatewayDataStreams (happy path)..."
+# GetGatewayEndDevices
+print_step "Testing GetGatewayEndDevices (happy path)..."
 
-LIST_GATEWAY_DATA_STREAMS_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamService/GetGatewayDataStreams" \
+LIST_GATEWAY_END_DEVICES_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "end_device.v1.EndDeviceService/GetGatewayEndDevices" \
     "{\"organization_id\": \"$ORG_ID\", \"gateway_id\": \"$GATEWAY_ID\"}")
 
-GATEWAY_DATA_STREAM_COUNT=$(echo "$LIST_GATEWAY_DATA_STREAMS_RESPONSE" | jq '.dataStreams | length')
-if [ "$GATEWAY_DATA_STREAM_COUNT" -ge 1 ]; then
-    print_success "GetGatewayDataStreams returned $GATEWAY_DATA_STREAM_COUNT data stream(s)"
+GATEWAY_END_DEVICE_COUNT=$(echo "$LIST_GATEWAY_END_DEVICES_RESPONSE" | jq '.endDevices | length')
+if [ "$GATEWAY_END_DEVICE_COUNT" -ge 1 ]; then
+    print_success "GetGatewayEndDevices returned $GATEWAY_END_DEVICE_COUNT end device(s)"
 else
-    print_error "GetGatewayDataStreams returned no data streams"
-    echo "$LIST_GATEWAY_DATA_STREAMS_RESPONSE"
+    print_error "GetGatewayEndDevices returned no end devices"
+    echo "$LIST_GATEWAY_END_DEVICES_RESPONSE"
     exit 1
 fi
 
-# Verify gateway_id in returned data stream
-RETURNED_GATEWAY_ID=$(echo "$LIST_GATEWAY_DATA_STREAMS_RESPONSE" | jq -r '.dataStreams[0].gatewayId // empty')
+# Verify gateway_id in returned end device
+RETURNED_GATEWAY_ID=$(echo "$LIST_GATEWAY_END_DEVICES_RESPONSE" | jq -r '.endDevices[0].gatewayId // empty')
 if [ "$RETURNED_GATEWAY_ID" = "$GATEWAY_ID" ]; then
-    print_success "Data stream has correct gateway_id"
+    print_success "End device has correct gateway_id"
 else
-    print_error "Data stream gateway_id mismatch: expected $GATEWAY_ID, got $RETURNED_GATEWAY_ID"
+    print_error "End device gateway_id mismatch: expected $GATEWAY_ID, got $RETURNED_GATEWAY_ID"
     exit 1
 fi
 
 # ============================================
-# DEFINITION DELETE TEST (after data stream cleanup consideration)
+# DEFINITION DELETE TEST
 # ============================================
 
 # Create a definition specifically for deletion test
 print_step "Creating definition for delete test..."
 
 DEF2_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/CreateDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/CreateEndDeviceDefinition" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Definition to Delete\",
@@ -251,7 +238,7 @@ DEF2_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         }]
     }")
 
-DEFINITION2_ID=$(echo "$DEF2_RESPONSE" | jq -r '.dataStreamDefinition.id // .id // empty')
+DEFINITION2_ID=$(echo "$DEF2_RESPONSE" | jq -r '.endDeviceDefinition.id // .id // empty')
 if [ -n "$DEFINITION2_ID" ] && [ "$DEFINITION2_ID" != "null" ]; then
     print_success "Second definition created: $DEFINITION2_ID"
 else
@@ -259,19 +246,19 @@ else
     exit 1
 fi
 
-# DeleteDataStreamDefinition
-print_step "Testing DeleteDataStreamDefinition (happy path)..."
+# DeleteEndDeviceDefinition
+print_step "Testing DeleteEndDeviceDefinition (happy path)..."
 
 set +e
 DELETE_DEF_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/DeleteDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/DeleteEndDeviceDefinition" \
     "{\"id\": \"$DEFINITION2_ID\", \"organization_id\": \"$ORG_ID\"}" 2>&1)
 set -e
 
 # Verify deletion
 set +e
 VERIFY_DEF_DELETE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/GetDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/GetEndDeviceDefinition" \
     "{\"id\": \"$DEFINITION2_ID\", \"organization_id\": \"$ORG_ID\"}" 2>&1)
 set -e
 
@@ -285,74 +272,73 @@ fi
 # UNAUTHENTICATED TESTS - DEFINITIONS
 # ============================================
 
-print_step "Testing CreateDataStreamDefinition without auth..."
+print_step "Testing CreateEndDeviceDefinition without auth..."
 test_unauthenticated \
-    "data_stream.v1.DataStreamDefinitionService/CreateDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/CreateEndDeviceDefinition" \
     "{\"organization_id\": \"$ORG_ID\", \"name\": \"Unauthorized\"}"
 
-print_step "Testing GetDataStreamDefinition without auth..."
+print_step "Testing GetEndDeviceDefinition without auth..."
 test_unauthenticated \
-    "data_stream.v1.DataStreamDefinitionService/GetDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/GetEndDeviceDefinition" \
     "{\"id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\"}"
 
-print_step "Testing UpdateDataStreamDefinition without auth..."
+print_step "Testing UpdateEndDeviceDefinition without auth..."
 test_unauthenticated \
-    "data_stream.v1.DataStreamDefinitionService/UpdateDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/UpdateEndDeviceDefinition" \
     "{\"id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\", \"name\": \"Hacked\"}"
 
-print_step "Testing ListDataStreamDefinitions without auth..."
+print_step "Testing ListEndDeviceDefinitions without auth..."
 test_unauthenticated \
-    "data_stream.v1.DataStreamDefinitionService/ListDataStreamDefinitions" \
+    "end_device.v1.EndDeviceDefinitionService/ListEndDeviceDefinitions" \
     "{\"organization_id\": \"$ORG_ID\"}"
 
-print_step "Testing DeleteDataStreamDefinition without auth..."
+print_step "Testing DeleteEndDeviceDefinition without auth..."
 test_unauthenticated \
-    "data_stream.v1.DataStreamDefinitionService/DeleteDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/DeleteEndDeviceDefinition" \
     "{\"id\": \"$DEFINITION_ID\", \"organization_id\": \"$ORG_ID\"}"
 
 # ============================================
-# UNAUTHENTICATED TESTS - DATA STREAMS
+# UNAUTHENTICATED TESTS - END DEVICES
 # ============================================
 
-print_step "Testing CreateDataStream without auth..."
+print_step "Testing CreateEndDevice without auth..."
 test_unauthenticated \
-    "data_stream.v1.DataStreamService/CreateDataStream" \
-    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"definition_id\": \"$DEFINITION_ID\", \"gateway_id\": \"$GATEWAY_ID\", \"name\": \"Unauthorized\"}"
+    "end_device.v1.EndDeviceService/CreateEndDevice" \
+    "{\"organization_id\": \"$ORG_ID\", \"definition_id\": \"$DEFINITION_ID\", \"gateway_id\": \"$GATEWAY_ID\", \"name\": \"Unauthorized\"}"
 
-print_step "Testing GetDataStream without auth..."
+print_step "Testing GetEndDevice without auth..."
 test_unauthenticated \
-    "data_stream.v1.DataStreamService/GetDataStream" \
-    "{\"data_stream_id\": \"$DATA_STREAM_ID\", \"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}"
+    "end_device.v1.EndDeviceService/GetEndDevice" \
+    "{\"end_device_id\": \"$END_DEVICE_ID\", \"organization_id\": \"$ORG_ID\"}"
 
-print_step "Testing GetWorkspaceDataStreams without auth..."
+print_step "Testing ListEndDevices without auth..."
 test_unauthenticated \
-    "data_stream.v1.DataStreamService/GetWorkspaceDataStreams" \
-    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\"}"
+    "end_device.v1.EndDeviceService/ListEndDevices" \
+    "{\"organization_id\": \"$ORG_ID\"}"
 
 # ============================================
 # INVALID TOKEN TESTS
 # ============================================
 
-print_step "Testing CreateDataStreamDefinition with invalid token..."
+print_step "Testing CreateEndDeviceDefinition with invalid token..."
 test_invalid_token \
-    "data_stream.v1.DataStreamDefinitionService/CreateDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/CreateEndDeviceDefinition" \
     "{\"organization_id\": \"$ORG_ID\", \"name\": \"Invalid Token\"}"
 
-print_step "Testing CreateDataStream with invalid token..."
+print_step "Testing CreateEndDevice with invalid token..."
 test_invalid_token \
-    "data_stream.v1.DataStreamService/CreateDataStream" \
-    "{\"organization_id\": \"$ORG_ID\", \"workspace_id\": \"$WORKSPACE_ID\", \"definition_id\": \"$DEFINITION_ID\", \"gateway_id\": \"$GATEWAY_ID\", \"name\": \"Invalid Token\"}"
+    "end_device.v1.EndDeviceService/CreateEndDevice" \
+    "{\"organization_id\": \"$ORG_ID\", \"definition_id\": \"$DEFINITION_ID\", \"gateway_id\": \"$GATEWAY_ID\", \"name\": \"Invalid Token\"}"
 
 # ============================================
 # SUMMARY
 # ============================================
-print_summary "Data Stream Tests"
+print_summary "End Device Tests"
 echo ""
 echo -e "${YELLOW}Test Organization ID:${NC} $ORG_ID"
-echo -e "${YELLOW}Test Workspace ID:${NC} $WORKSPACE_ID"
 echo -e "${YELLOW}Test Gateway ID:${NC} $GATEWAY_ID"
 echo -e "${YELLOW}Test Definition ID:${NC} $DEFINITION_ID"
-echo -e "${YELLOW}Test Data Stream ID:${NC} $DATA_STREAM_ID"
+echo -e "${YELLOW}Test End Device ID:${NC} $END_DEVICE_ID"
 
 # Export for dependent tests
-export ORG_ID WORKSPACE_ID GATEWAY_ID DEFINITION_ID DATA_STREAM_ID AUTH_TOKEN
+export ORG_ID GATEWAY_ID DEFINITION_ID END_DEVICE_ID AUTH_TOKEN

@@ -9,10 +9,9 @@ services:
     container_name: ponix-all-in-one
     ports:
       - "50051:50051" # gRPC server
-      - "50052:50052" # Collaboration WebSocket server
     environment:
       # Service configuration
-      PONIX_LOG_LEVEL: debug
+      PONIX_LOG_LEVEL: info
       PONIX_MESSAGE: "Hello from ponix-rs!"
       PONIX_INTERVAL_SECS: "3"
       PONIX_STARTUP_TIMEOUT_SECS: "30"
@@ -52,18 +51,6 @@ services:
       PONIX_GRPC_WEB_ENABLED: "true"
       PONIX_GRPC_CORS_ALLOWED_ORIGINS: "*"
 
-      # Document sync / Snapshotter configuration
-      PONIX_NATS_DOCUMENT_UPDATES_STREAM: "document_sync"
-      PONIX_NATS_DOCUMENT_UPDATES_CONSUMER_NAME: "document-snapshotter"
-      PONIX_NATS_DOCUMENT_UPDATES_MAX_AGE_SECS: "604800"
-      PONIX_SNAPSHOTTER_COMPACTION_INTERVAL_SECS: "5"
-      PONIX_SNAPSHOTTER_IDLE_EVICTION_SECS: "300"
-
-      # Collaboration server configuration
-      PONIX_COLLAB_HOST: "0.0.0.0"
-      PONIX_COLLAB_PORT: "50052"
-      PONIX_COLLAB_CORS_ALLOWED_ORIGINS: "*"
-
       # JWT configuration
       PONIX_JWT_SECRET: "change-me-in-production-use-a-secure-random-string"
       PONIX_JWT_EXPIRATION_HOURS: "24"
@@ -83,16 +70,14 @@ services:
       # CDC configuration
       PONIX_CDC_GATEWAY_ENTITY_NAME: "gateways"
       PONIX_CDC_GATEWAY_TABLE_NAME: "gateways"
-      PONIX_CDC_WORKSPACE_ENTITY_NAME: "workspaces"
-      PONIX_CDC_WORKSPACE_TABLE_NAME: "workspaces"
-      PONIX_CDC_DATA_STREAM_ENTITY_NAME: "data_streams"
-      PONIX_CDC_DATA_STREAM_TABLE_NAME: "data_streams"
+      PONIX_CDC_END_DEVICE_ENTITY_NAME: "end_devices"
+      PONIX_CDC_END_DEVICE_TABLE_NAME: "end_devices"
       PONIX_CDC_ORGANIZATION_ENTITY_NAME: "organizations"
       PONIX_CDC_ORGANIZATION_TABLE_NAME: "organizations"
       PONIX_CDC_USER_ENTITY_NAME: "users"
       PONIX_CDC_USER_TABLE_NAME: "users"
-      PONIX_CDC_DATA_STREAM_DEFINITION_ENTITY_NAME: "data_stream_definitions"
-      PONIX_CDC_DATA_STREAM_DEFINITION_TABLE_NAME: "data_stream_definitions"
+      PONIX_CDC_END_DEVICE_DEFINITION_ENTITY_NAME: "end_device_definitions"
+      PONIX_CDC_END_DEVICE_DEFINITION_TABLE_NAME: "end_device_definitions"
       PONIX_CDC_PUBLICATION_NAME: "ponix_cdc_publication"
       PONIX_CDC_SLOT_NAME: "ponix_cdc_slot"
       PONIX_CDC_BATCH_SIZE: "100"
@@ -101,11 +86,10 @@ services:
       PONIX_CDC_MAX_RETRY_ATTEMPTS: "5"
 
       # NATS CDC streams
-      PONIX_NATS_WORKSPACE_STREAM: "workspaces"
-      PONIX_NATS_DATA_STREAMS_STREAM: "data_streams"
+      PONIX_NATS_END_DEVICES_STREAM: "end_devices"
       PONIX_NATS_ORGANIZATION_STREAM: "organizations"
       PONIX_NATS_USER_STREAM: "users"
-      PONIX_NATS_DATA_STREAM_DEFINITIONS_STREAM: "data_stream_definitions"
+      PONIX_NATS_END_DEVICE_DEFINITIONS_STREAM: "end_device_definitions"
     depends_on:
       - nats
       - clickhouse

@@ -55,17 +55,12 @@ run_test() {
 # Run core API tests
 run_test "test-auth.sh" "Authentication Tests"
 run_test "test-organizations.sh" "Organization Tests"
-run_test "test-workspaces.sh" "Workspace Tests"
-run_test "test-data-streams.sh" "Data Stream Tests"
+run_test "test-data-streams.sh" "End Device Tests"
 run_test "test-gateways.sh" "Gateway Tests"
-run_test "test-documents.sh" "Document Tests"
 
 # MQTT pipeline tests
 run_test "test-mqtt-pipeline.sh" "MQTT Pipeline Test"
 run_test "test-multi-contract-pipeline.sh" "Multi-Contract Pipeline Test"
-
-# Collaboration server tests (includes NATS infra, WebSocket, snapshotter persistence)
-run_test "test-collaboration.sh" "Collaboration Server Test"
 
 # Summary
 echo -e "${BLUE}==========================================${NC}"

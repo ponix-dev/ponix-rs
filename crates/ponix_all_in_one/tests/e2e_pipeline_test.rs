@@ -15,7 +15,7 @@ use tower::ServiceBuilder;
 use common::auth::MockAuthorizationProvider;
 use common::clickhouse::ClickHouseClient;
 use common::domain::{
-    CreateDataStreamDefinitionRepoInput, DataStream, DataStreamDefinitionRepository, RawEnvelope,
+    CreateEndDeviceDefinitionRepoInput, EndDevice, EndDeviceDefinitionRepository, RawEnvelope,
     RawEnvelopeProducer as _,
 };
 use common::jsonschema::JsonSchemaValidator;
@@ -24,13 +24,13 @@ use common::nats::{
     TowerConsumer,
 };
 use common::postgres::{
-    PostgresClient, PostgresDataStreamDefinitionRepository, PostgresDataStreamRepository,
+    PostgresClient, PostgresEndDeviceDefinitionRepository, PostgresEndDeviceRepository,
     PostgresGatewayRepository, PostgresOrganizationRepository,
 };
 
 use gateway_orchestrator::nats::RawEnvelopeProducer;
 
-use ponix_api::domain::{CreateDataStreamRequest, DataStreamService};
+use ponix_api::domain::{CreateEndDeviceRequest, EndDeviceService};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -139,7 +139,7 @@ async fn start_containers() -> Result<(
 )> {
     // Start containers in parallel
     let (postgres, clickhouse, nats) = tokio::join!(
-        GenericImage::new("ghcr.io/ponix-dev/ponix-postgres", "latest")
+        GenericImage::new("postgres", "17")
             .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
                 "database system is ready to accept connections"
             ))
@@ -229,11 +229,11 @@ async fn initialize_services(
     postgres_url: &str,
     nats_url: &str,
 ) -> Result<(
-    Arc<DataStreamService>,
+    Arc<EndDeviceService>,
     Arc<RawEnvelopeService>,
     Arc<NatsClient>,
     PostgresClient,
-    Arc<PostgresDataStreamDefinitionRepository>,
+    Arc<PostgresEndDeviceDefinitionRepository>,
 )> {
     // PostgreSQL client and repository
     // Parse postgres URL to extract connection details
@@ -245,9 +245,9 @@ async fn initialize_services(
     let port: u16 = host_port[1].parse()?;
 
     let pg_client = PostgresClient::new(host, port, "postgres", "postgres", "postgres", 5)?;
-    let data_stream_repo = Arc::new(PostgresDataStreamRepository::new(pg_client.clone()));
+    let end_device_repo = Arc::new(PostgresEndDeviceRepository::new(pg_client.clone()));
     let org_repo = Arc::new(PostgresOrganizationRepository::new(pg_client.clone()));
-    let definition_repo = Arc::new(PostgresDataStreamDefinitionRepository::new(
+    let definition_repo = Arc::new(PostgresEndDeviceDefinitionRepository::new(
         pg_client.clone(),
     ));
     let gateway_repo = Arc::new(PostgresGatewayRepository::new(pg_client.clone()));
@@ -259,8 +259,8 @@ async fn initialize_services(
         .returning(|_, _, _, _| Box::pin(async { Ok(()) }));
 
     // Data stream service
-    let data_stream_service = Arc::new(DataStreamService::new(
-        data_stream_repo.clone(),
+    let end_device_service = Arc::new(EndDeviceService::new(
+        end_device_repo.clone(),
         org_repo.clone(),
         definition_repo.clone(),
         gateway_repo,
@@ -303,7 +303,7 @@ async fn initialize_services(
 
     // Raw envelope service
     let raw_envelope_service = Arc::new(RawEnvelopeService::new(
-        data_stream_repo,
+        end_device_repo,
         org_repo,
         payload_converter,
         processed_producer,
@@ -311,7 +311,7 @@ async fn initialize_services(
     ));
 
     Ok((
-        data_stream_service,
+        end_device_service,
         raw_envelope_service,
         nats_client,
         pg_client,
@@ -320,28 +320,17 @@ async fn initialize_services(
 }
 
 /// Create a test organization and data stream with CEL expression for Cayenne LPP transformation
-async fn create_test_data_stream(
-    data_stream_service: &DataStreamService,
-    definition_repo: &PostgresDataStreamDefinitionRepository,
+async fn create_test_end_device(
+    end_device_service: &EndDeviceService,
+    definition_repo: &PostgresEndDeviceDefinitionRepository,
     pg_client: &PostgresClient,
-) -> Result<DataStream> {
+) -> Result<EndDevice> {
     // First, create the test organization directly in the database
     // (OrganizationService not yet implemented in Phase 1)
     let conn = pg_client.get_connection().await?;
     conn.execute(
         "INSERT INTO organizations (id, name) VALUES ($1, $2)",
         &[&"test-org-123", &"Test Organization"],
-    )
-    .await?;
-
-    // Create a workspace for the organization
-    let workspace_id = format!(
-        "ws-test-{}",
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-    );
-    conn.execute(
-        "INSERT INTO workspaces (id, name, organization_id) VALUES ($1, $2, $3)",
-        &[&workspace_id, &"Test Workspace", &"test-org-123"],
     )
     .await?;
 
@@ -366,7 +355,7 @@ async fn create_test_data_stream(
         chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
     );
     definition_repo
-        .create_definition(CreateDataStreamDefinitionRepoInput {
+        .create_definition(CreateEndDeviceDefinitionRepoInput {
             id: definition_id.clone(),
             organization_id: "test-org-123".to_string(),
             name: "Environmental Sensor Data Stream Definition".to_string(),
@@ -391,24 +380,23 @@ async fn create_test_data_stream(
     )
     .await?;
 
-    let data_stream = data_stream_service
-        .create_data_stream(CreateDataStreamRequest {
+    let end_device = end_device_service
+        .create_end_device(CreateEndDeviceRequest {
             user_id: "test-user-id".to_string(),
             organization_id: "test-org-123".to_string(),
-            workspace_id,
             definition_id,
             gateway_id,
             name: "Test Environmental Sensor".to_string(),
         })
         .await?;
 
-    Ok(data_stream)
+    Ok(end_device)
 }
 
 /// Produce raw messages with Cayenne LPP payload to the NATS stream
 async fn produce_raw_messages(
     nats_client: &NatsClient,
-    data_stream: &DataStream,
+    end_device: &EndDevice,
     count: usize,
 ) -> Result<()> {
     // Create RawEnvelopeProducer
@@ -431,8 +419,8 @@ async fn produce_raw_messages(
 
     for i in 0..count {
         let raw_envelope = RawEnvelope {
-            organization_id: data_stream.organization_id.clone(),
-            data_stream_id: data_stream.data_stream_id.clone(),
+            organization_id: end_device.organization_id.clone(),
+            end_device_id: end_device.end_device_id.clone(),
             received_at: base_time + chrono::Duration::seconds(i as i64),
             payload: cayenne_payload.clone(),
         };
@@ -544,7 +532,7 @@ async fn run_consumers(
 /// Verify that all processed messages were correctly stored in ClickHouse
 async fn verify_clickhouse_data(
     clickhouse_http_url: &str,
-    data_stream: &DataStream,
+    end_device: &EndDevice,
     expected_count: usize,
 ) -> Result<()> {
     use clickhouse::Client;
@@ -561,8 +549,8 @@ async fn verify_clickhouse_data(
 
     // Query for count
     let count_query = format!(
-        "SELECT COUNT(*) as count FROM processed_envelopes WHERE data_stream_id = '{}'",
-        data_stream.data_stream_id
+        "SELECT COUNT(*) as count FROM processed_envelopes WHERE end_device_id = '{}'",
+        end_device.end_device_id
     );
 
     let count: u64 = client.query(&count_query).fetch_one().await?;
@@ -577,9 +565,9 @@ async fn verify_clickhouse_data(
     // IMPORTANT: Cast JSON type to String for reading
     let sample_query = format!(
         "SELECT CAST(data AS String) as data FROM processed_envelopes
-         WHERE data_stream_id = '{}'
+         WHERE end_device_id = '{}'
          LIMIT 1",
-        data_stream.data_stream_id
+        end_device.end_device_id
     );
 
     let row: EnvelopeData = client.query(&sample_query).fetch_one().await?;
@@ -667,19 +655,19 @@ async fn test_end_to_end_raw_to_processed_pipeline() -> Result<()> {
     println!("   - NATS: {}", nats_url);
 
     // Phase 3: Initialize services and create data stream
-    let (data_stream_service, raw_envelope_service, nats_client, pg_client, definition_repo) =
+    let (end_device_service, raw_envelope_service, nats_client, pg_client, definition_repo) =
         initialize_services(&postgres_url, &nats_url).await?;
 
-    let data_stream =
-        create_test_data_stream(&data_stream_service, &definition_repo, &pg_client).await?;
+    let end_device =
+        create_test_end_device(&end_device_service, &definition_repo, &pg_client).await?;
 
     println!("✅ Phase 3 completed: Services initialized and data stream created");
-    println!("   - Data Stream ID: {}", data_stream.data_stream_id);
-    println!("   - Organization: {}", data_stream.organization_id);
-    println!("   - Data Stream Name: {}", data_stream.name);
+    println!("   - Data Stream ID: {}", end_device.end_device_id);
+    println!("   - Organization: {}", end_device.organization_id);
+    println!("   - Data Stream Name: {}", end_device.name);
 
     // Phase 4: Produce 100 raw messages
-    produce_raw_messages(&nats_client, &data_stream, 100).await?;
+    produce_raw_messages(&nats_client, &end_device, 100).await?;
 
     println!("✅ Phase 4 completed: 100 raw messages produced");
     println!("   - Messages sent to NATS raw_envelopes stream");
@@ -697,7 +685,7 @@ async fn test_end_to_end_raw_to_processed_pipeline() -> Result<()> {
     println!("   - Processed envelopes written to ClickHouse");
 
     // Phase 6: Verify results in ClickHouse
-    verify_clickhouse_data(&clickhouse_http_url, &data_stream, 100).await?;
+    verify_clickhouse_data(&clickhouse_http_url, &end_device, 100).await?;
 
     println!("✅ Phase 6 completed: Verification successful");
     println!("   - All 100 records found in ClickHouse");

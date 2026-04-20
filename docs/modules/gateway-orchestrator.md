@@ -72,7 +72,7 @@ Each gateway process runs an MQTT subscriber loop:
 
 1. Connects to the MQTT 5 broker using the URL from `EmqxGatewayConfig`.
 2. Subscribes to a shared subscription topic `$share/{gateway_id}/{org_id}/+`, enabling load balancing across multiple instances.
-3. Incoming MQTT messages are parsed to extract `org_id` and `data_stream_id` from the topic, then published as `RawEnvelope`s to NATS via the `RawEnvelopeProducer`.
+3. Incoming MQTT messages are parsed to extract `org_id` and `end_device_id` from the topic, then published as `RawEnvelope`s to NATS via the `RawEnvelopeProducer`.
 4. On connection failure, retries with configurable delay (default 10s) up to max attempts (default 3).
 
 ### Config Change Detection

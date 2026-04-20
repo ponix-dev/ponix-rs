@@ -72,14 +72,14 @@ impl Service<ConsumeRequest> for ProcessedEnvelopeService {
             if let Err(e) = inserter.write(&domain_envelope).await {
                 error!(
                     error = %e,
-                    data_stream_id = %domain_envelope.data_stream_id,
+                    end_device_id = %domain_envelope.end_device_id,
                     "failed to buffer envelope for ClickHouse"
                 );
                 return Ok(ConsumeResponse::nak(format!("Buffer error: {}", e)));
             }
 
             debug!(
-                data_stream_id = %domain_envelope.data_stream_id,
+                end_device_id = %domain_envelope.end_device_id,
                 "buffered ProcessedEnvelope"
             );
 

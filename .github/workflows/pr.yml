@@ -23,6 +23,3 @@ jobs:
     secrets:
       BSR_TOKEN: ${{ secrets.BSR_TOKEN }}
 
-  ponix-postgres:
-    name: Build ponix-postgres
-    uses: ./.github/workflows/ponix-postgres.yml

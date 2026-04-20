@@ -46,20 +46,23 @@ Give the platform memory beyond raw time-series. Documents with collaborative ed
 - [x] #178 — Awareness protocol for presence and cursors
 - [x] #189 — Fix cursor format mismatch between awareness protocol and slate-yjs — server expects `{ index, length }` but `@slate-yjs/core` sends Yjs RelativePositions. Either custom frontend cursor layer or server-side format change
 - [x] #109 — Document CDC — triggers on `content_text` changes (written by Yrs compaction), CDC payload contains text directly — no NATS Object Store fetch needed. Feeds embedding pipeline #124
-- [ ] #112 — Ollama + embedding service — local LLM inference and embedding generation
-- [ ] #124 — Document embedding pipeline — when `content_text` changes (via CDC #109), chunk the text directly from the CDC payload, embed chunks with `nomic-embed-text`, store vectors in pgvector. Re-embed on meaningful edits. Low-volume — documents are edited occasionally, not thousands per second
+- [ ] #124 — Document embedding pipeline — when `content_text` changes (via CDC #109), chunk with [Kreuzberg](https://github.com/kreuzberg-dev/kreuzberg) (markdown-aware chunking), embed with Kreuzberg's in-process ONNX engine (768-dim vectors via `balanced` preset), store in pgvector. No external service dependency — runs in-process. Kreuzberg's extraction layer can be extended to support PDF/Office uploads in the future by enabling additional feature flags
 
-> **Why second:** An agent making device decisions needs context. "Device X is in Building 3, which has HVAC system Y, and the manufacturer's datasheet says the operating range is 10–40°C." That context lives in documents and relationships, not in the time-series. Collaborative editing via Yrs means documents are living artifacts — teams can edit them in real-time while the embedding pipeline keeps semantic search up to date on every meaningful change. By setting up Ollama and the embedding pipeline here, documents are searchable by meaning as soon as they enter the system — no need to wait for the full agent runtime.
+> **Why second:** An agent making device decisions needs context. "Device X is in Building 3, which has HVAC system Y, and the manufacturer's datasheet says the operating range is 10–40°C." That context lives in documents and relationships, not in the time-series. Collaborative editing via Yrs means documents are living artifacts — teams can edit them in real-time while the embedding pipeline keeps semantic search up to date on every meaningful change. Kreuzberg provides in-process embedding via ONNX — no Ollama or external service needed for Phase 2. Documents are searchable by meaning as soon as they enter the system.
 
 ---
 
 ## Phase 3: LLM Integration & Tool Layer
 
-Build the agent runtime and tool layer on top of the Ollama infrastructure established in Phase 2 — built-in platform tools that are always available, and workspace-scoped [MCP](https://modelcontextprotocol.io) servers that extend agent capabilities per workspace.
+Build the agent runtime and tool layer. Ollama provides local LLM inference for the agent reasoning loop. Embeddings are already handled in-process by Kreuzberg (Phase 2). Built-in platform tools are always available, and workspace-scoped [MCP](https://modelcontextprotocol.io) servers extend agent capabilities per workspace.
+
+### LLM Infrastructure
+
+- [ ] #112 — Ollama Docker + LLM inference service — local LLM inference for agent runtime. Embedding is handled by Kreuzberg in Phase 2; Ollama is solely for LLM reasoning
 
 ### Embeddings — Indexing the Knowledge Layer
 
-- [ ] #125 — Device definition embedding — embed device definitions and their payload contract descriptions. Semantic search finds the right definitions when the agent needs to understand what a device is and what it reports. Depends on Ollama (#112) and the embedding patterns established in #124, both set up in Phase 2
+- [ ] #125 — Device definition embedding — embed device definitions and their payload contract descriptions. Semantic search finds the right definitions when the agent needs to understand what a device is and what it reports. Uses the same Kreuzberg-based `EmbeddingService` established in #124
 
 ### Built-in Platform Tools
 

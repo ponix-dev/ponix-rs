@@ -57,9 +57,4 @@ run = "cargo watch -x 'test --workspace --features integration-tests -- --test-t
 
 [tasks."test:e2e"]
 description = "Run end-to-end tests (requires running service)"
-depends = ["build:test-tools"]
 run = "./scripts/test-all.sh"
-
-[tasks."build:test-tools"]
-description = "Build test helper binaries (collab-test-client)"
-run = "cargo build -p collaboration_server --features test-client --bin collab-test-client"

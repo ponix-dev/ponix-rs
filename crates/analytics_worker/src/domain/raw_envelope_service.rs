@@ -1,6 +1,6 @@
 use crate::domain::PayloadConverter;
 use common::domain::{
-    DataStreamRepository, DomainError, DomainResult, GetDataStreamWithDefinitionRepoInput,
+    DomainError, DomainResult, EndDeviceRepository, GetEndDeviceWithDefinitionRepoInput,
     GetOrganizationRepoInput, OrganizationRepository, PayloadContract, ProcessedEnvelope,
     ProcessedEnvelopeProducer, RawEnvelope,
 };
@@ -12,13 +12,13 @@ use tracing::{debug, error, instrument, warn};
 /// Domain service that orchestrates raw → processed envelope conversion
 ///
 /// Flow:
-/// 1. Fetch data stream to get payload contracts
+/// 1. Fetch end device to get payload contracts
 /// 2. Validate organization is not deleted
 /// 3. Iterate contracts: match → transform → validate schema
 /// 4. Build ProcessedEnvelope from JSON + metadata
 /// 5. Publish via producer trait
 pub struct RawEnvelopeService {
-    data_stream_repository: Arc<dyn DataStreamRepository>,
+    end_device_repository: Arc<dyn EndDeviceRepository>,
     organization_repository: Arc<dyn OrganizationRepository>,
     payload_converter: Arc<dyn PayloadConverter>,
     producer: Arc<dyn ProcessedEnvelopeProducer>,
@@ -28,14 +28,14 @@ pub struct RawEnvelopeService {
 impl RawEnvelopeService {
     /// Create a new RawEnvelopeService with dependencies
     pub fn new(
-        data_stream_repository: Arc<dyn DataStreamRepository>,
+        end_device_repository: Arc<dyn EndDeviceRepository>,
         organization_repository: Arc<dyn OrganizationRepository>,
         payload_converter: Arc<dyn PayloadConverter>,
         producer: Arc<dyn ProcessedEnvelopeProducer>,
         schema_validator: Arc<dyn SchemaValidator>,
     ) -> Self {
         Self {
-            data_stream_repository,
+            end_device_repository,
             organization_repository,
             payload_converter,
             producer,
@@ -43,54 +43,54 @@ impl RawEnvelopeService {
         }
     }
 
-    /// Process a raw envelope: fetch data stream, validate org, run contracts, publish result
-    #[instrument(skip(self), fields(data_stream_id = %raw.data_stream_id, organization_id = %raw.organization_id))]
+    /// Process a raw envelope: fetch end device, validate org, run contracts, publish result
+    #[instrument(skip(self), fields(end_device_id = %raw.end_device_id, organization_id = %raw.organization_id))]
     pub async fn process_raw_envelope(&self, raw: RawEnvelope) -> DomainResult<()> {
         debug!(
-            data_stream_id = %raw.data_stream_id,
+            end_device_id = %raw.end_device_id,
             org_id = %raw.organization_id,
             payload_size = raw.payload.len(),
             "processing raw envelope"
         );
 
-        let data_stream = self
-            .data_stream_repository
-            .get_data_stream_with_definition(GetDataStreamWithDefinitionRepoInput {
-                data_stream_id: raw.data_stream_id.clone(),
+        let end_device = self
+            .end_device_repository
+            .get_end_device_with_definition(GetEndDeviceWithDefinitionRepoInput {
+                end_device_id: raw.end_device_id.clone(),
                 organization_id: raw.organization_id.clone(),
             })
             .await?
-            .ok_or_else(|| DomainError::DataStreamNotFound(raw.data_stream_id.clone()))?;
+            .ok_or_else(|| DomainError::EndDeviceNotFound(raw.end_device_id.clone()))?;
 
         // 2. Validate organization is not deleted
-        debug!(organization_id = %data_stream.organization_id, "validating organization status");
+        debug!(organization_id = %end_device.organization_id, "validating organization status");
         match self
             .organization_repository
             .get_organization(GetOrganizationRepoInput {
-                organization_id: data_stream.organization_id.clone(),
+                organization_id: end_device.organization_id.clone(),
             })
             .await?
         {
             Some(org) if org.deleted_at.is_some() => {
                 warn!(
-                    data_stream_id = %raw.data_stream_id,
-                    org_id = %data_stream.organization_id,
+                    end_device_id = %raw.end_device_id,
+                    org_id = %end_device.organization_id,
                     "rejecting envelope from deleted organization"
                 );
                 return Err(DomainError::OrganizationDeleted(format!(
                     "Cannot process envelope from deleted organization: {}",
-                    data_stream.organization_id
+                    end_device.organization_id
                 )));
             }
             None => {
                 warn!(
-                    data_stream_id = %raw.data_stream_id,
-                    org_id = %data_stream.organization_id,
+                    end_device_id = %raw.end_device_id,
+                    org_id = %end_device.organization_id,
                     "rejecting envelope from non-existent organization"
                 );
                 return Err(DomainError::OrganizationNotFound(format!(
                     "Organization not found: {}",
-                    data_stream.organization_id
+                    end_device.organization_id
                 )));
             }
             Some(_) => {
@@ -98,14 +98,14 @@ impl RawEnvelopeService {
             }
         }
 
-        // 3. Validate data stream with definition using garde
-        validate_struct(&data_stream)?;
+        // 3. Validate end device with definition using garde
+        validate_struct(&end_device)?;
 
         // 4. Process contracts: match → transform → validate
         let json_value = match self.process_contracts(
-            &data_stream.contracts,
+            &end_device.contracts,
             &raw.payload,
-            &raw.data_stream_id,
+            &raw.end_device_id,
         )? {
             Some(value) => value,
             None => {
@@ -119,7 +119,7 @@ impl RawEnvelopeService {
             serde_json::Value::Object(map) => map,
             _ => {
                 error!(
-                    data_stream_id = %raw.data_stream_id,
+                    end_device_id = %raw.end_device_id,
                     "CEL expression did not return a JSON object"
                 );
                 return Err(DomainError::PayloadConversionError(
@@ -131,14 +131,14 @@ impl RawEnvelopeService {
         // 6. Build ProcessedEnvelope with current timestamp
         let processed_envelope = ProcessedEnvelope {
             organization_id: raw.organization_id.clone(),
-            data_stream_id: raw.data_stream_id.clone(),
+            end_device_id: raw.end_device_id.clone(),
             received_at: raw.received_at,
             processed_at: chrono::Utc::now(),
             data,
         };
 
         debug!(
-            data_stream_id = %raw.data_stream_id,
+            end_device_id = %raw.end_device_id,
             field_count = processed_envelope.data.len(),
             "successfully converted payload"
         );
@@ -149,7 +149,7 @@ impl RawEnvelopeService {
             .await?;
 
         debug!(
-            data_stream_id = %raw.data_stream_id,
+            end_device_id = %raw.end_device_id,
             org_id = %raw.organization_id,
             "successfully processed and published envelope"
         );
@@ -167,11 +167,11 @@ impl RawEnvelopeService {
         &self,
         contracts: &[PayloadContract],
         payload: &[u8],
-        data_stream_id: &str,
+        end_device_id: &str,
     ) -> DomainResult<Option<serde_json::Value>> {
         for (idx, contract) in contracts.iter().enumerate() {
             debug!(
-                data_stream_id = %data_stream_id,
+                end_device_id = %end_device_id,
                 contract_index = idx,
                 match_expression = %contract.match_expression,
                 "evaluating contract match expression"
@@ -185,7 +185,7 @@ impl RawEnvelopeService {
 
             if !matched {
                 debug!(
-                    data_stream_id = %data_stream_id,
+                    end_device_id = %end_device_id,
                     contract_index = idx,
                     "contract match expression returned false, trying next"
                 );
@@ -193,7 +193,7 @@ impl RawEnvelopeService {
             }
 
             debug!(
-                data_stream_id = %data_stream_id,
+                end_device_id = %end_device_id,
                 contract_index = idx,
                 transform_expression = %contract.transform_expression,
                 "contract matched, transforming payload"
@@ -207,7 +207,7 @@ impl RawEnvelopeService {
 
             // Validate against contract's JSON Schema
             debug!(
-                data_stream_id = %data_stream_id,
+                end_device_id = %end_device_id,
                 contract_index = idx,
                 "validating transformed payload against JSON Schema"
             );
@@ -218,7 +218,7 @@ impl RawEnvelopeService {
                 .validate(&contract.json_schema, &json_value)
             {
                 warn!(
-                    data_stream_id = %data_stream_id,
+                    end_device_id = %end_device_id,
                     contract_index = idx,
                     reason = %validation_error.message,
                     "envelope failed JSON Schema validation, skipping"
@@ -230,7 +230,7 @@ impl RawEnvelopeService {
         }
 
         warn!(
-            data_stream_id = %data_stream_id,
+            end_device_id = %end_device_id,
             contract_count = contracts.len(),
             "no contract matched the payload, skipping"
         );
@@ -243,22 +243,19 @@ mod tests {
     use super::*;
     use crate::domain::MockPayloadConverter;
     use common::domain::{
-        DataStreamWithDefinition, GetDataStreamWithDefinitionRepoInput, MockDataStreamRepository,
+        EndDeviceWithDefinition, GetEndDeviceWithDefinitionRepoInput, MockEndDeviceRepository,
         MockOrganizationRepository, MockProcessedEnvelopeProducer, Organization,
     };
     use common::jsonschema::{MockSchemaValidator, SchemaValidationError};
 
-    fn make_data_stream_with_contracts(
-        contracts: Vec<PayloadContract>,
-    ) -> DataStreamWithDefinition {
-        DataStreamWithDefinition {
-            data_stream_id: "ds-123".to_string(),
+    fn make_end_device_with_contracts(contracts: Vec<PayloadContract>) -> EndDeviceWithDefinition {
+        EndDeviceWithDefinition {
+            end_device_id: "ds-123".to_string(),
             organization_id: "org-456".to_string(),
-            workspace_id: "ws-123".to_string(),
             definition_id: "def-789".to_string(),
             gateway_id: "gw-001".to_string(),
             definition_name: "Test Definition".to_string(),
-            name: "Test Data Stream".to_string(),
+            name: "Test End Device".to_string(),
             contracts,
             created_at: None,
             updated_at: None,
@@ -288,7 +285,7 @@ mod tests {
     fn raw_envelope() -> RawEnvelope {
         RawEnvelope {
             organization_id: "org-456".to_string(),
-            data_stream_id: "ds-123".to_string(),
+            end_device_id: "ds-123".to_string(),
             received_at: chrono::Utc::now(),
             payload: vec![0x01, 0x67, 0x01, 0x10],
         }
@@ -296,21 +293,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_success() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mut mock_producer = MockProcessedEnvelopeProducer::new();
         let mut mock_schema_validator = MockSchemaValidator::new();
 
-        let data_stream = make_data_stream_with_contracts(default_contracts());
+        let end_device = make_end_device_with_contracts(default_contracts());
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
-            .withf(|input: &GetDataStreamWithDefinitionRepoInput| {
-                input.data_stream_id == "ds-123" && input.organization_id == "org-456"
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
+            .withf(|input: &GetEndDeviceWithDefinitionRepoInput| {
+                input.end_device_id == "ds-123" && input.organization_id == "org-456"
             })
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -346,7 +343,7 @@ mod tests {
         mock_producer
             .expect_publish_processed_envelope()
             .withf(|env: &ProcessedEnvelope| {
-                env.data_stream_id == "ds-123"
+                env.end_device_id == "ds-123"
                     && env.organization_id == "org-456"
                     && env.data.contains_key("temperature_1")
             })
@@ -354,7 +351,7 @@ mod tests {
             .return_once(|_| Ok(()));
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -366,20 +363,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_raw_envelope_data_stream_not_found() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+    async fn test_process_raw_envelope_end_device_not_found() {
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mock_org_repo = MockOrganizationRepository::new();
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
         let mock_schema_validator = MockSchemaValidator::new();
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
             .return_once(|_| Ok(None));
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -389,30 +386,30 @@ mod tests {
         let result = service
             .process_raw_envelope(RawEnvelope {
                 organization_id: "org-456".to_string(),
-                data_stream_id: "ds-999".to_string(),
+                end_device_id: "ds-999".to_string(),
                 received_at: chrono::Utc::now(),
                 payload: vec![0x01, 0x67, 0x01, 0x10],
             })
             .await;
 
-        assert!(matches!(result, Err(DomainError::DataStreamNotFound(_))));
+        assert!(matches!(result, Err(DomainError::EndDeviceNotFound(_))));
     }
 
     #[tokio::test]
     async fn test_process_raw_envelope_empty_contracts_returns_validation_error() {
         // Empty contracts vec fails garde validation (length min = 1)
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
         let mock_schema_validator = MockSchemaValidator::new();
 
-        let data_stream = make_data_stream_with_contracts(vec![]); // Empty contracts
+        let end_device = make_end_device_with_contracts(vec![]); // Empty contracts
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -420,7 +417,7 @@ mod tests {
             .return_once(move |_| Ok(Some(active_org())));
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -433,13 +430,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_conversion_error() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
         let mock_schema_validator = MockSchemaValidator::new();
 
-        let data_stream = make_data_stream_with_contracts(vec![PayloadContract {
+        let end_device = make_end_device_with_contracts(vec![PayloadContract {
             match_expression: "true".to_string(),
             transform_expression: "invalid_expression".to_string(),
             json_schema: "{}".to_string(),
@@ -447,10 +444,10 @@ mod tests {
             compiled_transform: vec![],
         }]);
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -472,7 +469,7 @@ mod tests {
             });
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -488,13 +485,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_non_object_json() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
         let mut mock_schema_validator = MockSchemaValidator::new();
 
-        let data_stream = make_data_stream_with_contracts(vec![PayloadContract {
+        let end_device = make_end_device_with_contracts(vec![PayloadContract {
             match_expression: "true".to_string(),
             transform_expression: "42".to_string(),
             json_schema: "{}".to_string(),
@@ -502,10 +499,10 @@ mod tests {
             compiled_transform: vec![],
         }]);
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -528,7 +525,7 @@ mod tests {
             .returning(|_, _| Ok(()));
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -544,18 +541,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_publish_error() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mut mock_producer = MockProcessedEnvelopeProducer::new();
         let mut mock_schema_validator = MockSchemaValidator::new();
 
-        let data_stream = make_data_stream_with_contracts(default_contracts());
+        let end_device = make_end_device_with_contracts(default_contracts());
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -593,7 +590,7 @@ mod tests {
             });
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -606,19 +603,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_organization_deleted() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
         let mock_schema_validator = MockSchemaValidator::new();
 
-        let mut data_stream = make_data_stream_with_contracts(default_contracts());
-        data_stream.organization_id = "org-deleted".to_string();
+        let mut end_device = make_end_device_with_contracts(default_contracts());
+        end_device.organization_id = "org-deleted".to_string();
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -635,7 +632,7 @@ mod tests {
             });
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -645,7 +642,7 @@ mod tests {
         let result = service
             .process_raw_envelope(RawEnvelope {
                 organization_id: "org-deleted".to_string(),
-                data_stream_id: "ds-123".to_string(),
+                end_device_id: "ds-123".to_string(),
                 received_at: chrono::Utc::now(),
                 payload: vec![0x01, 0x67, 0x01, 0x10],
             })
@@ -656,19 +653,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_organization_not_found() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
         let mock_schema_validator = MockSchemaValidator::new();
 
-        let mut data_stream = make_data_stream_with_contracts(default_contracts());
-        data_stream.organization_id = "org-nonexistent".to_string();
+        let mut end_device = make_end_device_with_contracts(default_contracts());
+        end_device.organization_id = "org-nonexistent".to_string();
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -677,7 +674,7 @@ mod tests {
             .return_once(|_| Ok(None));
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -687,7 +684,7 @@ mod tests {
         let result = service
             .process_raw_envelope(RawEnvelope {
                 organization_id: "org-nonexistent".to_string(),
-                data_stream_id: "ds-123".to_string(),
+                end_device_id: "ds-123".to_string(),
                 received_at: chrono::Utc::now(),
                 payload: vec![0x01, 0x67, 0x01, 0x10],
             })
@@ -698,13 +695,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_schema_validation_failed_returns_ok() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
         let mut mock_schema_validator = MockSchemaValidator::new();
 
-        let data_stream = make_data_stream_with_contracts(vec![PayloadContract {
+        let end_device = make_end_device_with_contracts(vec![PayloadContract {
             match_expression: "true".to_string(),
             transform_expression: "cayenne_lpp_decode(input)".to_string(),
             json_schema: r#"{"type": "object", "required": ["temperature"]}"#.to_string(),
@@ -712,10 +709,10 @@ mod tests {
             compiled_transform: vec![],
         }]);
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -745,7 +742,7 @@ mod tests {
             });
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -758,13 +755,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_no_contract_matches_returns_ok() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mock_producer = MockProcessedEnvelopeProducer::new();
         let mock_schema_validator = MockSchemaValidator::new();
 
-        let data_stream = make_data_stream_with_contracts(vec![PayloadContract {
+        let end_device = make_end_device_with_contracts(vec![PayloadContract {
             match_expression: "false".to_string(),
             transform_expression: "cayenne_lpp_decode(input)".to_string(),
             json_schema: "{}".to_string(),
@@ -772,10 +769,10 @@ mod tests {
             compiled_transform: vec![],
         }]);
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -789,7 +786,7 @@ mod tests {
             .return_once(|_, _, _| Ok(false));
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),
@@ -802,13 +799,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_raw_envelope_second_contract_matches() {
-        let mut mock_data_stream_repo = MockDataStreamRepository::new();
+        let mut mock_end_device_repo = MockEndDeviceRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
         let mut mock_converter = MockPayloadConverter::new();
         let mut mock_producer = MockProcessedEnvelopeProducer::new();
         let mut mock_schema_validator = MockSchemaValidator::new();
 
-        let data_stream = make_data_stream_with_contracts(vec![
+        let end_device = make_end_device_with_contracts(vec![
             PayloadContract {
                 match_expression: "false".to_string(),
                 transform_expression: "should_not_run".to_string(),
@@ -825,10 +822,10 @@ mod tests {
             },
         ]);
 
-        mock_data_stream_repo
-            .expect_get_data_stream_with_definition()
+        mock_end_device_repo
+            .expect_get_end_device_with_definition()
             .times(1)
-            .return_once(move |_| Ok(Some(data_stream)));
+            .return_once(move |_| Ok(Some(end_device)));
 
         mock_org_repo
             .expect_get_organization()
@@ -874,7 +871,7 @@ mod tests {
             .return_once(|_| Ok(()));
 
         let service = RawEnvelopeService::new(
-            Arc::new(mock_data_stream_repo),
+            Arc::new(mock_end_device_repo),
             Arc::new(mock_org_repo),
             Arc::new(mock_converter),
             Arc::new(mock_producer),

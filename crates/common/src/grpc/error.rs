@@ -4,38 +4,38 @@ use tonic::Status;
 /// Convert domain error to gRPC Status
 pub fn domain_error_to_status(error: DomainError) -> Status {
     match error {
-        DomainError::DataStreamNotFound(msg) => Status::not_found(msg),
+        DomainError::EndDeviceNotFound(msg) => Status::not_found(msg),
 
-        DomainError::DataStreamNotOwnedByOrganization(data_stream_id, org_id) => {
+        DomainError::EndDeviceNotOwnedByOrganization(end_device_id, org_id) => {
             Status::permission_denied(format!(
-                "Data stream {} not owned by organization {}",
-                data_stream_id, org_id
+                "End device {} not owned by organization {}",
+                end_device_id, org_id
             ))
         }
 
-        DomainError::DataStreamAlreadyExists(msg) => Status::already_exists(msg),
+        DomainError::EndDeviceAlreadyExists(msg) => Status::already_exists(msg),
 
-        DomainError::InvalidDataStreamId(msg)
+        DomainError::InvalidEndDeviceId(msg)
         | DomainError::InvalidOrganizationId(msg)
-        | DomainError::InvalidDataStreamName(msg)
+        | DomainError::InvalidEndDeviceName(msg)
         | DomainError::InvalidOrganizationName(msg) => Status::invalid_argument(msg),
 
         DomainError::PayloadConversionError(msg) => Status::invalid_argument(msg),
 
-        DomainError::DataStreamDefinitionNotFound(msg) => Status::not_found(msg),
+        DomainError::EndDeviceDefinitionNotFound(msg) => Status::not_found(msg),
 
-        DomainError::DataStreamDefinitionAlreadyExists(msg) => Status::already_exists(msg),
+        DomainError::EndDeviceDefinitionAlreadyExists(msg) => Status::already_exists(msg),
 
         DomainError::InvalidJsonSchema(msg) => Status::invalid_argument(msg),
 
-        DomainError::SchemaValidationFailed(data_stream_id, reason) => {
+        DomainError::SchemaValidationFailed(end_device_id, reason) => {
             Status::invalid_argument(format!(
-                "Schema validation failed for data stream {}: {}",
-                data_stream_id, reason
+                "Schema validation failed for end device {}: {}",
+                end_device_id, reason
             ))
         }
 
-        DomainError::DataStreamDefinitionInUse(msg) => Status::failed_precondition(msg),
+        DomainError::EndDeviceDefinitionInUse(msg) => Status::failed_precondition(msg),
 
         DomainError::OrganizationNotFound(msg) => Status::not_found(msg),
 
@@ -43,23 +43,9 @@ pub fn domain_error_to_status(error: DomainError) -> Status {
 
         DomainError::OrganizationDeleted(msg) => Status::failed_precondition(msg),
 
-        DomainError::WorkspaceNotFound(msg) => Status::not_found(msg),
-
-        DomainError::WorkspaceAlreadyExists(msg) => Status::already_exists(msg),
-
-        DomainError::WorkspaceDeleted(msg) => Status::failed_precondition(msg),
-
         DomainError::GatewayNotFound(msg) => Status::not_found(msg),
 
         DomainError::GatewayAlreadyExists(msg) => Status::already_exists(msg),
-
-        DomainError::DocumentNotFound(msg) => Status::not_found(msg),
-
-        DomainError::DocumentAlreadyExists(msg) => Status::already_exists(msg),
-
-        DomainError::DocumentAssociationAlreadyExists(msg) => Status::already_exists(msg),
-
-        DomainError::DocumentAssociationNotFound(msg) => Status::not_found(msg),
 
         DomainError::InvalidGatewayId(msg)
         | DomainError::InvalidGatewayType(msg)
