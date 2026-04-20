@@ -22,7 +22,7 @@ impl Default for PostgresConfig {
             username: "ponix".to_string(),
             password: "ponix".to_string(),
             max_pool_size: 10,
-            migrations_dir: "crates/ponix-postgres/migrations".to_string(),
+            migrations_dir: "crates/init_process/migrations/postgres".to_string(),
             goose_binary_path: "goose".to_string(),
         }
     }

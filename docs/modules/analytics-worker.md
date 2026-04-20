@@ -33,10 +33,10 @@ This two-stage pipeline (raw to processed to ClickHouse) means the transformatio
 
 ## Key Concepts
 
-- **`RawEnvelopeService`** -- Domain service orchestrating the full raw-to-processed conversion: data stream lookup, organization validation, contract matching, CEL transformation, schema validation, and publishing. This is the core business logic of the crate.
+- **`RawEnvelopeService`** -- Domain service orchestrating the full raw-to-processed conversion: end device lookup, organization validation, contract matching, CEL transformation, schema validation, and publishing. This is the core business logic of the crate.
 - **`PayloadConverter` trait** -- Abstraction over CEL expression execution with two operations: `evaluate_match` (does this contract apply?) and `transform` (convert the binary payload to JSON). Mockable for unit tests.
 - **`CelPayloadConverter`** -- Production implementation of `PayloadConverter` backed by `CelEnvironment`. Supports pre-compiled CEL expressions and the `cayenne_lpp_decode` built-in function for LoRaWAN sensor data.
-- **`PayloadContract`** -- A data stream's contract defines a match expression, a transform expression, and a JSON Schema. Contracts are evaluated in order; the first match wins and claims ownership of the payload.
+- **`PayloadContract`** -- A end device's contract defines a match expression, a transform expression, and a JSON Schema. Contracts are evaluated in order; the first match wins and claims ownership of the payload.
 - **`ClickHouseInserterRepository`** -- Wraps ClickHouse's native `Inserter<T>` behind an `Arc<Mutex<...>>` for shared, buffered writes. Rows are cheap to buffer; actual flushes happen on a configurable time/count threshold.
 - **`InserterCommitHandle`** -- Runs as a dedicated Runner process that calls `commit()` on the inserter at a regular interval, ensuring time-based flushes even when the row-count threshold has not been reached.
 - **`TowerConsumer`** -- Both NATS consumers are Tower services with logging and tracing middleware layers, providing per-message observability with OpenTelemetry span propagation.
@@ -49,11 +49,11 @@ When a gateway publishes a binary sensor payload, it arrives on the `raw_envelop
 
 **Step 1: Message consumption.** The `RawEnvelopeConsumerService` (a Tower `Service<ConsumeRequest>`) decodes the protobuf and converts it to the domain `RawEnvelope` type. Decode or conversion failures result in a Nak so NATS can redeliver.
 
-**Step 2: Data stream lookup.** `RawEnvelopeService` fetches the `DataStreamWithDefinition` from PostgreSQL, which includes the data stream's payload contracts. If the data stream is not found, the envelope is rejected with `DataStreamNotFound`.
+**Step 2: End device lookup.** `RawEnvelopeService` fetches the `EndDeviceWithDefinition` from PostgreSQL, which includes the end device's payload contracts. If the end device is not found, the envelope is rejected with `EndDeviceNotFound`.
 
-**Step 3: Organization validation.** The service checks that the owning organization exists and has not been soft-deleted. Envelopes from deleted or missing organizations are rejected. This prevents stale data streams from producing analytics data after an organization is deactivated.
+**Step 3: Organization validation.** The service checks that the owning organization exists and has not been soft-deleted. Envelopes from deleted or missing organizations are rejected. This prevents stale end devices from producing analytics data after an organization is deactivated.
 
-**Step 4: Structural validation.** The `DataStreamWithDefinition` is validated with garde to ensure invariants hold (e.g., at least one contract must be defined).
+**Step 4: Structural validation.** The `EndDeviceWithDefinition` is validated with garde to ensure invariants hold (e.g., at least one contract must be defined).
 
 **Step 5: Contract matching and transformation.** Contracts are evaluated in definition order. For each contract:
 
@@ -61,13 +61,13 @@ When a gateway publishes a binary sensor payload, it arrives on the `raw_envelop
 2. If matched, the **transform expression** is executed to convert the binary payload into a JSON value. Built-in functions like `cayenne_lpp_decode(input)` handle protocol-specific decoding.
 3. The result is validated against the contract's **JSON Schema**. If validation fails, the envelope is silently dropped (Ack without publish) rather than trying the next contract. This is intentional: a matching contract claims ownership, so a schema failure indicates malformed data from the expected source, not a routing mistake.
 
-If no contract matches, the envelope is silently acknowledged and dropped. This is a normal condition -- not all payloads from a gateway may be relevant to a particular data stream.
+If no contract matches, the envelope is silently acknowledged and dropped. This is a normal condition -- not all payloads from a gateway may be relevant to a particular end device.
 
 Both match and transform expressions use pre-compiled CEL bytecode stored alongside the source expression. The `CelPayloadConverter` deserializes the compiled `CheckedExpr` and executes it, falling back to the source string only for error reporting. This avoids re-parsing CEL on every message.
 
-**Step 6: Envelope construction.** The JSON output (which must be a JSON object, not a scalar or array) is combined with metadata (organization ID, data stream ID, received/processed timestamps) into a `ProcessedEnvelope`.
+**Step 6: Envelope construction.** The JSON output (which must be a JSON object, not a scalar or array) is combined with metadata (organization ID, end device ID, received/processed timestamps) into a `ProcessedEnvelope`.
 
-**Step 7: Publishing.** The `ProcessedEnvelopeProducer` serializes the domain envelope to protobuf and publishes it to `processed_envelopes.{data_stream_id}` via a Tower-layered NATS publisher with tracing and logging middleware. The subject-per-data-stream pattern enables downstream consumers to filter by data stream if needed.
+**Step 7: Publishing.** The `ProcessedEnvelopeProducer` serializes the domain envelope to protobuf and publishes it to `processed_envelopes.{end_device_id}` via a Tower-layered NATS publisher with tracing and logging middleware. The subject-per-end-device pattern enables downstream consumers to filter by end device if needed.
 
 ### Processed Envelope Storage Pipeline
 
@@ -83,7 +83,7 @@ The pipeline distinguishes between retryable and non-retryable failures:
 
 - **Nak (redeliver)**: Protobuf decode errors, NATS publish failures, ClickHouse buffer errors. These may succeed on retry.
 - **Ack (drop silently)**: No contract matched, schema validation failed. These are expected conditions that will never succeed on retry.
-- **Err (propagate)**: Data stream not found, organization deleted/missing, CEL execution failure. These are domain errors that surface for observability but still result in message acknowledgment to prevent infinite redelivery.
+- **Err (propagate)**: End device not found, organization deleted/missing, CEL execution failure. These are domain errors that surface for observability but still result in message acknowledgment to prevent infinite redelivery.
 
 ## Configuration
 

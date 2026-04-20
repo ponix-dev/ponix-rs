@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # E2E Test: Multi-Contract Pipeline
-# Tests that a single data stream with two payload contracts correctly routes
+# Tests that a single end device with two payload contracts correctly routes
 # messages based on payload size using first-match-wins semantics.
 #
 # Contract 1: size(input) == 4 -> temp-only (4-byte Cayenne LPP)
@@ -64,20 +64,6 @@ if [ -z "$ORG_ID" ] || [ "$ORG_ID" = "null" ]; then
 fi
 print_success "Organization: $ORG_ID"
 
-# Create Workspace
-print_step "Setup: Creating workspace..."
-WORKSPACE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "workspace.v1.WorkspaceService/CreateWorkspace" \
-    "{\"organization_id\": \"$ORG_ID\", \"name\": \"Multi-Contract Test Workspace\"}")
-
-WORKSPACE_ID=$(echo "$WORKSPACE_RESPONSE" | jq -r '.workspace.id // .id // empty')
-if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
-    print_error "Failed to create workspace"
-    echo "$WORKSPACE_RESPONSE"
-    exit 1
-fi
-print_success "Workspace: $WORKSPACE_ID"
-
 # Create Gateway
 print_step "Setup: Creating MQTT gateway..."
 GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
@@ -99,10 +85,10 @@ if [ -z "$GATEWAY_ID" ] || [ "$GATEWAY_ID" = "null" ]; then
 fi
 print_success "Gateway: $GATEWAY_ID"
 
-# Create Data Stream Definition with TWO contracts
-print_step "Setup: Creating data stream definition with two contracts..."
+# Create End Device Definition with TWO contracts
+print_step "Setup: Creating end device definition with two contracts..."
 DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/CreateDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/CreateEndDeviceDefinition" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Multi-Contract Sensor\",
@@ -120,7 +106,7 @@ DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         ]
     }")
 
-DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.dataStreamDefinition.id // .id // empty')
+DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.id // .id // empty')
 if [ -z "$DEFINITION_ID" ] || [ "$DEFINITION_ID" = "null" ]; then
     print_error "Failed to create definition"
     echo "$DEFINITION_RESPONSE"
@@ -128,25 +114,24 @@ if [ -z "$DEFINITION_ID" ] || [ "$DEFINITION_ID" = "null" ]; then
 fi
 print_success "Definition: $DEFINITION_ID (2 contracts)"
 
-# Create Data Stream
-print_step "Setup: Creating data stream..."
-DATA_STREAM_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamService/CreateDataStream" \
+# Create End Device
+print_step "Setup: Creating end device..."
+END_DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "end_device.v1.EndDeviceService/CreateEndDevice" \
     "{
         \"organization_id\": \"$ORG_ID\",
-        \"workspace_id\": \"$WORKSPACE_ID\",
         \"definition_id\": \"$DEFINITION_ID\",
         \"gateway_id\": \"$GATEWAY_ID\",
         \"name\": \"Multi-Contract Sensor\"
     }")
 
-DATA_STREAM_ID=$(echo "$DATA_STREAM_RESPONSE" | jq -r '.dataStream.dataStreamId // .dataStreamId // empty')
-if [ -z "$DATA_STREAM_ID" ] || [ "$DATA_STREAM_ID" = "null" ]; then
-    print_error "Failed to create data stream"
-    echo "$DATA_STREAM_RESPONSE"
+END_DEVICE_ID=$(echo "$END_DEVICE_RESPONSE" | jq -r '.endDevice.endDeviceId // .endDeviceId // empty')
+if [ -z "$END_DEVICE_ID" ] || [ "$END_DEVICE_ID" = "null" ]; then
+    print_error "Failed to create end device"
+    echo "$END_DEVICE_RESPONSE"
     exit 1
 fi
-print_success "Data Stream: $DATA_STREAM_ID"
+print_success "End Device: $END_DEVICE_ID"
 
 # ============================================
 # WAIT FOR GATEWAY CONNECTION
@@ -161,7 +146,7 @@ sleep 5
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
-    -t "${ORG_ID}/${DATA_STREAM_ID}" \
+    -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "00" \
     --format hex
 sleep 2
@@ -176,7 +161,7 @@ print_success "Gateway connection window elapsed"
 PAYLOAD_TEMP_ONLY="016700FF"
 
 print_step "Publishing message type 1: temp-only (4 bytes)..."
-echo -e "  Topic: ${ORG_ID}/${DATA_STREAM_ID}"
+echo -e "  Topic: ${ORG_ID}/${END_DEVICE_ID}"
 echo -e "  Payload (hex): ${PAYLOAD_TEMP_ONLY}"
 echo -e "  Expected match: contract 1 (size(input) == 4)"
 echo -e "  Decoded: Temperature 25.5C"
@@ -184,7 +169,7 @@ echo -e "  Decoded: Temperature 25.5C"
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
-    -t "${ORG_ID}/${DATA_STREAM_ID}" \
+    -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "${PAYLOAD_TEMP_ONLY}" \
     --format hex
 
@@ -197,7 +182,7 @@ sleep 2
 PAYLOAD_TEMP_HUMIDITY="016700FF026864"
 
 print_step "Publishing message type 2: temp+humidity (7 bytes)..."
-echo -e "  Topic: ${ORG_ID}/${DATA_STREAM_ID}"
+echo -e "  Topic: ${ORG_ID}/${END_DEVICE_ID}"
 echo -e "  Payload (hex): ${PAYLOAD_TEMP_HUMIDITY}"
 echo -e "  Expected match: contract 2 (size(input) == 7)"
 echo -e "  Decoded: Temperature 25.5C, Humidity 50%"
@@ -205,7 +190,7 @@ echo -e "  Decoded: Temperature 25.5C, Humidity 50%"
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
-    -t "${ORG_ID}/${DATA_STREAM_ID}" \
+    -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "${PAYLOAD_TEMP_HUMIDITY}" \
     --format hex
 
@@ -220,7 +205,7 @@ sleep 5
 
 print_step "Querying ClickHouse for processed envelopes..."
 
-QUERY="SELECT data FROM ponix.processed_envelopes WHERE data_stream_id = '$DATA_STREAM_ID' ORDER BY received_at FORMAT JSONEachRow"
+QUERY="SELECT data FROM ponix.processed_envelopes WHERE end_device_id = '$END_DEVICE_ID' ORDER BY received_at FORMAT JSONEachRow"
 
 # Poll for results -- the pipeline may take a few seconds to flush to ClickHouse
 MAX_ATTEMPTS=6
@@ -252,7 +237,7 @@ if [ "$ROW_COUNT" -lt 2 ]; then
     echo -e "${YELLOW}Results:${NC}"
     echo "$CH_RESULT"
     echo -e "${YELLOW}Debug: Check service logs with:${NC}"
-    echo "  docker logs ponix-all-in-one 2>&1 | grep $DATA_STREAM_ID"
+    echo "  docker logs ponix-all-in-one 2>&1 | grep $END_DEVICE_ID"
     exit 1
 fi
 
@@ -310,7 +295,6 @@ echo -e "  - First-match-wins routing works correctly"
 echo ""
 echo -e "${YELLOW}Resources Created:${NC}"
 echo -e "  Organization: $ORG_ID"
-echo -e "  Workspace:    $WORKSPACE_ID"
 echo -e "  Gateway:      $GATEWAY_ID"
 echo -e "  Definition:   $DEFINITION_ID (2 contracts)"
-echo -e "  Data Stream:  $DATA_STREAM_ID"
+echo -e "  End Device:   $END_DEVICE_ID"

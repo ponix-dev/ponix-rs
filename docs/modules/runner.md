@@ -12,7 +12,7 @@ last-updated: 2026-03-18
 
 # Runner — Process Orchestration Framework
 
-The `runner` crate provides a lightweight framework for running multiple long-lived async processes concurrently with coordinated graceful shutdown. It exists because the ponix monolith needs to run several independent workers (gRPC server, CDC worker, analytics consumers, collaboration server, etc.) in a single binary while ensuring that if any one fails, everything shuts down cleanly and resources are released.
+The `runner` crate provides a lightweight framework for running multiple long-lived async processes concurrently with coordinated graceful shutdown. It exists because the ponix monolith needs to run several independent workers (gRPC server, CDC worker, analytics consumers, gateway orchestrator, etc.) in a single binary while ensuring that if any one fails, everything shuts down cleanly and resources are released.
 
 ## Overview
 

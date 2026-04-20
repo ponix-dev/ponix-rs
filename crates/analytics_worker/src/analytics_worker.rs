@@ -9,7 +9,7 @@ use common::nats::{
     NatsClient, NatsConsumeLoggingLayer, NatsConsumeTracingConfig, NatsConsumeTracingLayer,
     TowerConsumer,
 };
-use common::postgres::{PostgresDataStreamRepository, PostgresOrganizationRepository};
+use common::postgres::{PostgresEndDeviceRepository, PostgresOrganizationRepository};
 use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceBuilder;
@@ -62,7 +62,7 @@ pub struct AnalyticsWorker {
 
 impl AnalyticsWorker {
     pub async fn new(
-        data_stream_repository: Arc<PostgresDataStreamRepository>,
+        end_device_repository: Arc<PostgresEndDeviceRepository>,
         organization_repository: Arc<PostgresOrganizationRepository>,
         clickhouse_client: ClickHouseClient,
         nats_client: Arc<NatsClient>,
@@ -118,7 +118,7 @@ impl AnalyticsWorker {
         let schema_validator = Arc::new(JsonSchemaValidator::new());
 
         let raw_envelope_domain_service = Arc::new(RawEnvelopeService::new(
-            data_stream_repository,
+            end_device_repository,
             organization_repository,
             payload_converter,
             processed_envelope_producer,

@@ -15,7 +15,6 @@ related-files:
   - crates/common/src/proto.rs
   - crates/common/src/auth.rs
   - crates/common/src/cel.rs
-  - crates/common/src/yrs.rs
   - crates/common/Cargo.toml
 last-updated: 2026-03-18
 ---
@@ -28,9 +27,9 @@ The `common` crate is the shared foundation of the Ponix workspace. It owns all 
 
 `common` serves three roles simultaneously:
 
-1. **Domain kernel** -- defines the canonical entity types (`DataStream`, `Document`, `Gateway`, `Organization`, `User`, `Workspace`, envelopes) and the repository/producer traits that the rest of the system programs against.
+1. **Domain kernel** -- defines the canonical entity types (`EndDevice`, `Gateway`, `Organization`, `User`, envelopes) and the repository/producer traits that the rest of the system programs against.
 2. **Infrastructure adapters** -- provides concrete clients for PostgreSQL (deadpool connection pool), ClickHouse (with LZ4 compression and experimental JSON type support), and NATS JetStream (publish, consume, stream management). These are thin wrappers that expose trait-based interfaces for testability.
-3. **Cross-cutting middleware** -- houses gRPC server scaffolding (logging, OpenTelemetry tracing, gRPC-Web/CORS, error mapping, auth context extraction), the full telemetry initialization pipeline, JWT/password auth services, CEL expression compilation, Yrs CRDT document helpers, and validation via Garde and JSON Schema.
+3. **Cross-cutting middleware** -- houses gRPC server scaffolding (logging, OpenTelemetry tracing, gRPC-Web/CORS, error mapping, auth context extraction), the full telemetry initialization pipeline, JWT/password auth services, CEL expression compilation, and validation via Garde and JSON Schema.
 
 Because the monolith (`ponix_all_in_one`) composes all workers into a single binary, `common` is the natural place for anything that two or more crates would otherwise duplicate.
 
@@ -38,7 +37,7 @@ Because the monolith (`ponix_all_in_one`) composes all workers into a single bin
 
 - **`DomainError` / `DomainResult<T>`** -- A single error enum covering every domain failure case (not-found, already-exists, validation, auth, repository). This enum is the only error type that crosses layer boundaries; gRPC and NATS layers map it to their own status codes.
 
-- **Repository traits** (`DataStreamRepository`, `DocumentRepository`, `GatewayRepository`, `OrganizationRepository`, `UserRepository`, `WorkspaceRepository`, etc.) -- Async traits that define storage contracts. Annotated with `#[cfg_attr(any(test, feature = "testing"), mockall::automock)]` so unit tests get mock implementations for free. Infrastructure modules in `postgres/` provide the real implementations.
+- **Repository traits** (`EndDeviceRepository`, `GatewayRepository`, `OrganizationRepository`, `UserRepository`, etc.) -- Async traits that define storage contracts. Annotated with `#[cfg_attr(any(test, feature = "testing"), mockall::automock)]` so unit tests get mock implementations for free. Infrastructure modules in `postgres/` provide the real implementations.
 
 - **Producer traits** (`ProcessedEnvelopeProducer`, `RawEnvelopeProducer`) -- Async publish interfaces for the envelope pipeline. Decouples the analytics worker's business logic from NATS.
 
@@ -65,7 +64,6 @@ The crate follows the project's module path convention (Rust 2018+ style, no `mo
 - **`proto/`** -- Bidirectional domain ↔ protobuf converters for all entity types
 - **`auth/`** -- JWT, Argon2 password hashing, Casbin-backed RBAC authorization, refresh tokens
 - **`cel/`** -- CEL expression compilation and execution, `cayenne_lpp_decode` built-in function
-- **`yrs/`** -- `create_empty_document()`, `ROOT_TEXT_NAME` constant
 
 ### Design Decisions
 
@@ -82,4 +80,3 @@ The crate follows the project's module path convention (Rust 2018+ style, no `mo
 - [Runner](runner.md) — Process orchestration framework
 - [Analytics Worker](analytics-worker.md) — Primary consumer of envelope domain types and producer traits
 - [CDC Worker](cdc-worker.md) — Uses proto converters and NATS publisher infrastructure
-- [Collaboration Server](collaboration-server.md) — Uses Yrs utilities and document repository traits

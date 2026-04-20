@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ponix RS is a Rust-based IoT data ingestion platform with gRPC data stream management, NATS JetStream event processing, PostgreSQL Change Data Capture (CDC), and multi-database persistence (PostgreSQL + ClickHouse). It's a Cargo workspace with modular crates designed for future microservice extraction, currently deployed as a monolith.
+Ponix RS is a Rust-based IoT data ingestion platform with gRPC end device management, NATS JetStream event processing, PostgreSQL Change Data Capture (CDC), and multi-database persistence (PostgreSQL + ClickHouse). It's a Cargo workspace with modular crates designed for future microservice extraction, currently deployed as a monolith.
 
 ## Development Commands
 
@@ -64,8 +64,8 @@ SELECT * FROM ponix.processed_envelopes LIMIT 10;
 # Connect to PostgreSQL
 docker exec -it ponix-postgres psql -U ponix -d ponix
 
-# Query data streams
-SELECT * FROM data_streams;
+# Query end devices
+SELECT * FROM end_devices;
 ```
 
 ### gRPC API Testing
@@ -73,17 +73,17 @@ SELECT * FROM data_streams;
 # Install grpcurl
 brew install grpcurl
 
-# Create a data stream
+# Create an end device
 grpcurl -plaintext -d '{"organization_id": "org-001", "name": "Sensor Alpha"}' \
-  localhost:50051 ponix.data_stream.v1.DataStreamService/CreateDataStream
+  localhost:50051 ponix.end_device.v1.EndDeviceService/CreateEndDevice
 
-# Get a data stream
-grpcurl -plaintext -d '{"data_stream_id": "cm3rnbgek0000j5d37r63jnmn"}' \
-  localhost:50051 ponix.data_stream.v1.DataStreamService/GetDataStream
+# Get an end device
+grpcurl -plaintext -d '{"end_device_id": "cm3rnbgek0000j5d37r63jnmn"}' \
+  localhost:50051 ponix.end_device.v1.EndDeviceService/GetEndDevice
 
-# List data streams
+# List end devices
 grpcurl -plaintext -d '{"organization_id": "org-001"}' \
-  localhost:50051 ponix.data_stream.v1.DataStreamService/GetWorkspaceDataStreams
+  localhost:50051 ponix.end_device.v1.EndDeviceService/ListEndDevices
 ```
 
 ## Architecture
@@ -100,18 +100,16 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
 
 - **`common`**: Shared infrastructure and domain types
   - **`domain/`**: Core domain entities and repository traits
-    - Entities: `DataStream`, `DataStreamWithDefinition`, `Organization`, `Gateway`, `RawEnvelope`, `ProcessedEnvelope`, `Document`
-    - Repository traits: `DataStreamRepository`, `DataStreamDefinitionRepository`, `OrganizationRepository`, `GatewayRepository`, `DocumentRepository`
+    - Entities: `EndDevice`, `EndDeviceWithDefinition`, `Organization`, `Gateway`, `RawEnvelope`, `ProcessedEnvelope`
+    - Repository traits: `EndDeviceRepository`, `EndDeviceDefinitionRepository`, `OrganizationRepository`, `GatewayRepository`
     - Producer traits: `ProcessedEnvelopeProducer`, `RawEnvelopeProducer`
   - **`postgres/`**: PostgreSQL integration
     - `PostgresClient`: Connection pooling (deadpool-postgres, max 5 connections)
-    - Repository implementations for data streams, data stream definitions, organizations, gateways, documents
+    - Repository implementations for end devices, end device definitions, organizations, gateways
   - **`nats/`**: NATS JetStream integration
     - `NatsClient`, `NatsConsumer` with batch processing
     - `ProcessingResult` for per-message Ack/Nak decisions
     - `ensure_stream()`: Idempotent stream creation with configurable subjects, retention, and max age
-  - **`yrs/`**: Yrs (Rust CRDT) utilities
-    - Helpers for creating new Yrs documents with standard schema (`content` XmlFragment)
   - **`clickhouse/`**: ClickHouse client and configuration
   - **`proto/`**: Bidirectional domain ↔ protobuf conversions
   - **`grpc/`**: gRPC middleware, server utilities, and error mapping
@@ -129,10 +127,9 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
 
 - **`ponix_api`**: gRPC API layer and domain services
   - **`domain/`**: Business logic services
-    - `DataStreamService`: Data stream CRUD with organization validation
+    - `EndDeviceService`: End device CRUD with organization validation
     - `OrganizationService`: Organization management
     - `GatewayService`: Gateway management
-    - `DocumentService`: Document CRUD with Yrs lifecycle (create empty doc, metadata-only get)
   - **`grpc/`**: Tonic gRPC handlers and server
   - `PonixApi`: Aggregates services, converts to `Runner` process
 
@@ -147,14 +144,13 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
   - Uses `etl` and `etl-postgres` (Supabase) for change capture
   - Publishes changes to NATS as protobuf messages
   - Configurable batch size, timeout, and retry logic
-  - Entity converters: `GatewayConverter` (gateways), `DocumentConverter` (documents)
-  - Document CDC publishes to `documents.{create|update|delete}` subjects
+  - Entity converters: `GatewayConverter` (gateways)
 
 - **`analytics_worker`**: Envelope processing and storage
   - `AnalyticsWorker`: Coordinates envelope consumers
   - `ProcessedEnvelopeService`: Stores processed envelopes in ClickHouse
   - `RawEnvelopeService`: Converts raw → processed envelopes
-    - Data stream lookup, organization validation
+    - End device lookup, organization validation
     - CEL expression execution on binary payloads
     - Republishes to processed envelopes stream
   - `CelPayloadConverter`: CEL-based payload transformation
@@ -163,26 +159,6 @@ This is a multi-crate Cargo workspace with modular workers designed for future m
 - **`goose`**: Migration runner wrapper
   - `MigrationRunner`: Spawns goose binary as subprocess
   - Supports PostgreSQL, ClickHouse, MySQL, SQLite
-
-- **`collaboration_server`**: Real-time document collaboration via Yrs CRDTs
-  - **`domain/`**: Core collaboration logic
-    - `RoomManager`: Per-document room lifecycle with creation locking
-    - `DocumentRoom`: In-memory Yrs `Doc` with connected clients, broadcasts updates
-    - `DocumentAwarenessManager`: Hybrid awareness — client Yjs clientID + server-authoritative identity (Yjs lib0 varint wire format)
-    - `ConnectedUser`: Server-authoritative user identity with deterministic color
-    - `SnapshotterService`: Single-writer to PostgreSQL, in-memory cache with dirty tracking
-    - `CompactionWorker`: Periodic flush (30s) of dirty docs to PostgreSQL + idle eviction (5min)
-    - `ContentExtractor`: Extracts `content_text`/`content_html` from Yrs docs on compaction
-    - `DocumentRelay` trait: Abstraction for cross-instance update and awareness pub-sub
-  - **`nats/`**: NATS-backed relay implementation
-    - `NatsDocumentRelay`: JetStream for document updates, core NATS for ephemeral awareness
-    - Instance-aware (skips own messages via `X-Instance-Id` header)
-    - `DocumentUpdateConsumer`/`DocumentUpdateService`: Tower service consuming `document_sync.*`
-  - **`websocket/`**: Axum WebSocket server
-    - `handler`: Routes `/ws/documents/{document_id}` to WebSocket upgrade
-    - `connection`: Full lifecycle — JWT auth (first message) → Yrs sync → awareness setup → message loop
-    - `auth`: First-message JWT token validation with 5s timeout
-  - Exposes two runner processes: `CollaborationServer` (WebSocket on port 50052) and `DocumentSnapshotter` (NATS consumer + compaction worker)
 
 - **`ponix_all_in_one`**: Main service binary (monolith)
   - Orchestrates all modules via `Runner`
@@ -202,7 +178,7 @@ The system follows DDD principles with clear layer separation:
 Key patterns:
 - **Repository Pattern**: Traits in domain, implementations in infrastructure
 - **Dependency Inversion**: Domain defines interfaces, infrastructure implements
-- **Two-Type Pattern**: `CreateDataStreamInput` (external) vs `CreateDataStreamInputWithId` (internal)
+- **Two-Type Pattern**: `CreateEndDeviceInput` (external) vs `CreateEndDeviceInputWithId` (internal)
 - **ID Generation**: Domain service generates unique IDs using `xid`
 - **Error Mapping**: Domain errors mapped to gRPC Status codes
 
@@ -231,8 +207,6 @@ let runner = Runner::new()
     .with_app_process(gateway_orchestrator.into_runner_process())
     .with_app_process(cdc_worker.into_runner_process())
     .with_app_process(analytics_worker.into_runner_processes()) // Returns multiple
-    .with_app_process(collaboration_server.into_runner_process())
-    .with_app_process(document_snapshotter.into_runner_processes()) // Consumer + compaction
     .with_closer(cleanup_fn);
 runner.run().await;
 ```
@@ -243,7 +217,7 @@ RawEnvelope (binary payload)
     ↓
 RawEnvelopeService.process_raw_envelope()
     ↓
-├─> DataStreamRepository: Fetch data stream with CEL expression
+├─> EndDeviceRepository: Fetch end device with CEL expression
 ├─> Validate organization exists
 ├─> CelPayloadConverter: Execute CEL on binary data
 ├─> Validate output is JSON object
@@ -260,38 +234,11 @@ PostgreSQL (wal_level=logical)
     ↓ (publication + replication slot)
 CdcWorker (etl-postgres)
     ↓ extracts changes per entity
-    ├─> NATS JetStream (gateways stream: gateway.{create|update|delete})
-    │       ↓ CDC events as protobuf
-    │   GatewayOrchestrator (CDC consumer)
-    │       ↓ updates in-memory state
-    │   GatewayOrchestrationService
-    │
-    └─> NATS JetStream (documents stream: documents.{create|update|delete})
-            ↓ CDC events as protobuf (metadata only, excludes yrs_state)
-        Downstream consumers (future: embedding pipeline #124)
-```
-
-#### Document Collaboration Architecture
-```
-Browser (Plate + slate-yjs)
-    ↓ WebSocket (ws://host:50052/ws/documents/{document_id})
-CollaborationServer (Axum)
-    ↓ JWT auth (first message) → Yrs SyncStep1/2 → message loop
-DocumentRoom (in-memory Yrs Doc)
-    ├─> Local broadcast: update to other connected clients
-    └─> NatsDocumentRelay: publish to document_sync.{document_id} (JetStream)
-            ├─> Other CollaborationServer instances (cross-instance sync)
-            └─> DocumentSnapshotter (NATS consumer)
-                    ↓ applies update to in-memory ActiveDocument cache
-                CompactionWorker (every 30s)
-                    ↓ encodes Yrs state + extracts content_text/content_html
-                DocumentRepository.update_yrs_state() (PostgreSQL with advisory lock)
-
-Awareness (presence + cursors) — hybrid: client Yjs clientID + server-authoritative identity:
-    Client sends awareness → server extracts cursor, merges with server identity
-        → broadcast merged awareness to local clients
-        → core NATS awareness.{document_id} (ephemeral, not JetStream)
-            → Other instances store + relay merged awareness to their local clients
+    └─> NATS JetStream (gateways stream: gateway.{create|update|delete})
+            ↓ CDC events as protobuf
+        GatewayOrchestrator (CDC consumer)
+            ↓ updates in-memory state
+        GatewayOrchestrationService
 ```
 
 #### CEL Payload Conversion
@@ -437,13 +384,12 @@ The `ponix_all_in_one` service initializes in phases:
 1. **Configuration**: Load `ServiceConfig` from environment variables
 2. **PostgreSQL**: Run migrations → create client → initialize repositories
 3. **ClickHouse**: Run migrations → create client
-4. **NATS**: Connect → ensure streams exist (including `document_sync` stream)
-5. **Domain Services**: Create DataStreamService, OrganizationService, GatewayService, DocumentService
-6. **Collaboration**: Create NatsDocumentRelay → CollaborationServer → DocumentSnapshotter
-7. **Workers**: Initialize PonixApi, GatewayOrchestrator, CdcWorker, AnalyticsWorker
-8. **Runner**: Register all as app processes (including collaboration_server, document_snapshotter), register closers
-9. **Run**: Start all processes concurrently
-10. **Shutdown**: On signal, cancel processes and run closers
+4. **NATS**: Connect → ensure streams exist
+5. **Domain Services**: Create EndDeviceService, OrganizationService, GatewayService
+6. **Workers**: Initialize PonixApi, GatewayOrchestrator, CdcWorker, AnalyticsWorker
+7. **Runner**: Register all as app processes, register closers
+8. **Run**: Start all processes concurrently
+9. **Shutdown**: On signal, cancel processes and run closers
 
 ## Common Development Tasks
 
@@ -497,11 +443,6 @@ PONIX_NATS_GATEWAY_STREAM=gateways
 PONIX_NATS_BATCH_SIZE=30
 PONIX_NATS_BATCH_WAIT_SECS=5
 
-# Document Sync (Yrs collaboration)
-PONIX_NATS_DOCUMENT_UPDATES_STREAM=document_sync
-PONIX_NATS_DOCUMENT_UPDATES_CONSUMER_NAME=document-snapshotter
-PONIX_NATS_DOCUMENT_UPDATES_MAX_AGE_SECS=604800
-
 # ClickHouse
 PONIX_CLICKHOUSE_URL=http://localhost:8123
 PONIX_CLICKHOUSE_NATIVE_URL=localhost:9000
@@ -526,18 +467,9 @@ PONIX_GRPC_PORT=50051
 PONIX_GRPC_WEB_ENABLED=true                    # Enable gRPC-Web for browser clients
 PONIX_GRPC_CORS_ALLOWED_ORIGINS=*              # CORS allowed origins (comma-separated, "*" for all)
 
-# Collaboration Server (WebSocket)
-PONIX_COLLAB_HOST=0.0.0.0
-PONIX_COLLAB_PORT=50052
-PONIX_COLLAB_CORS_ALLOWED_ORIGINS=*
-
-# Snapshotter
-PONIX_SNAPSHOTTER_COMPACTION_INTERVAL_SECS=30
-PONIX_SNAPSHOTTER_IDLE_EVICTION_SECS=300
-
 # CDC
-PONIX_CDC_DOCUMENT_ENTITY_NAME=documents
-PONIX_CDC_DOCUMENT_TABLE_NAME=documents
+PONIX_CDC_END_DEVICE_ENTITY_NAME=end_devices
+PONIX_CDC_END_DEVICE_TABLE_NAME=end_devices
 PONIX_CDC_PUBLICATION_NAME=ponix_cdc_publication
 PONIX_CDC_SLOT_NAME=ponix_cdc_slot
 PONIX_CDC_BATCH_SIZE=100
@@ -552,10 +484,10 @@ See `crates/ponix_all_in_one/src/config.rs` for full config schema.
 - Service definitions use Buf Schema Registry for protobuf types
 - Import paths for tonic-generated code have nested `tonic` module:
   ```rust
-  use ponix_proto_tonic::data_stream::v1::tonic::data_stream_service_server::DataStreamService;
+  use ponix_proto_tonic::end_device::v1::tonic::end_device_service_server::EndDeviceService;
   ```
-- Domain service generates data stream IDs using `xid` crate (not at gRPC layer)
-- Error mapping: `DomainError::DataStreamAlreadyExists` → `Status::already_exists`
+- Domain service generates end device IDs using `xid` crate (not at gRPC layer)
+- Error mapping: `DomainError::EndDeviceAlreadyExists` → `Status::already_exists`
 
 #### gRPC-Web Support
 The gRPC server supports both standard gRPC (HTTP/2) and gRPC-Web (HTTP/1.1) on the same port:
@@ -626,11 +558,10 @@ ponix_all_in_one
     ├── gateway_orchestrator ─→ common
     ├── cdc_worker ──────────→ common
     ├── analytics_worker ────→ common
-    ├── collaboration_server ─→ common
     └── goose
 
 common (no workspace deps)
-    └── External: async-nats, tokio-postgres, clickhouse, ponix-proto-prost, yrs
+    └── External: async-nats, tokio-postgres, clickhouse, ponix-proto-prost
 
 runner (no workspace deps)
     └── External: tokio, tokio-util, tracing

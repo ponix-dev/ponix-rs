@@ -9,4 +9,3 @@ pub mod nats;
 pub mod postgres;
 pub mod proto;
 pub mod telemetry;
-pub mod yrs;

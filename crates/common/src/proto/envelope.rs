@@ -37,7 +37,7 @@ pub fn processed_envelop_proto_to_domain(
 
     Ok(ProcessedEnvelope {
         organization_id: proto.organization_id,
-        data_stream_id: proto.data_stream_id,
+        end_device_id: proto.end_device_id,
         received_at,
         processed_at,
         data,
@@ -94,7 +94,7 @@ pub fn raw_envelope_proto_to_domain(proto: ProtoRawEnvelope) -> Result<RawEnvelo
 
     Ok(RawEnvelope {
         organization_id: proto.organization_id,
-        data_stream_id: proto.data_stream_id,
+        end_device_id: proto.end_device_id,
         received_at,
         payload: proto.payload.to_vec(),
     })
@@ -104,7 +104,7 @@ pub fn raw_envelope_proto_to_domain(proto: ProtoRawEnvelope) -> Result<RawEnvelo
 pub fn raw_envelope_domain_to_proto(envelope: &RawEnvelope) -> ProtoRawEnvelope {
     ProtoRawEnvelope {
         organization_id: envelope.organization_id.clone(),
-        data_stream_id: envelope.data_stream_id.clone(),
+        end_device_id: envelope.end_device_id.clone(),
         received_at: Some(Timestamp {
             seconds: envelope.received_at.timestamp(),
             nanos: envelope.received_at.timestamp_subsec_nanos() as i32,
@@ -123,7 +123,7 @@ mod tests {
     fn test_proto_to_domain_conversion() {
         let proto = ProtoProcessedEnvelope {
             organization_id: "org-123".to_string(),
-            data_stream_id: "ds-456".to_string(),
+            end_device_id: "ds-456".to_string(),
             received_at: Some(Timestamp {
                 seconds: 1700000000,
                 nanos: 0,
@@ -142,14 +142,14 @@ mod tests {
 
         let domain = result.unwrap();
         assert_eq!(domain.organization_id, "org-123");
-        assert_eq!(domain.data_stream_id, "ds-456");
+        assert_eq!(domain.end_device_id, "ds-456");
     }
 
     #[test]
     fn test_missing_timestamp_error() {
         let proto = ProtoProcessedEnvelope {
             organization_id: "org-123".to_string(),
-            data_stream_id: "ds-456".to_string(),
+            end_device_id: "ds-456".to_string(),
             received_at: None, // Missing timestamp
             processed_at: Some(Timestamp {
                 seconds: 1700000010,
@@ -169,7 +169,7 @@ pub fn domain_to_proto_envelope(envelope: &ProcessedEnvelope) -> ProtoProcessedE
 
     ProtoProcessedEnvelope {
         organization_id: envelope.organization_id.clone(),
-        data_stream_id: envelope.data_stream_id.clone(),
+        end_device_id: envelope.end_device_id.clone(),
         received_at: Some(Timestamp {
             seconds: envelope.received_at.timestamp(),
             nanos: envelope.received_at.timestamp_subsec_nanos() as i32,
@@ -246,7 +246,7 @@ mod domain_conversion_tests {
 
         let domain_envelope = ProcessedEnvelope {
             organization_id: "org-123".to_string(),
-            data_stream_id: "ds-456".to_string(),
+            end_device_id: "ds-456".to_string(),
             received_at,
             processed_at,
             data,
@@ -255,7 +255,7 @@ mod domain_conversion_tests {
         let proto_envelope = domain_to_proto_envelope(&domain_envelope);
 
         assert_eq!(proto_envelope.organization_id, "org-123");
-        assert_eq!(proto_envelope.data_stream_id, "ds-456");
+        assert_eq!(proto_envelope.end_device_id, "ds-456");
         assert!(proto_envelope.received_at.is_some());
         assert!(proto_envelope.processed_at.is_some());
         assert!(proto_envelope.data.is_some());
@@ -346,7 +346,7 @@ mod raw_envelope_tests {
         let now = chrono::Utc::now();
         let proto = ProtoRawEnvelope {
             organization_id: "org-123".to_string(),
-            data_stream_id: "ds-456".to_string(),
+            end_device_id: "ds-456".to_string(),
             received_at: Some(Timestamp {
                 seconds: now.timestamp(),
                 nanos: now.timestamp_subsec_nanos() as i32,
@@ -359,7 +359,7 @@ mod raw_envelope_tests {
 
         let domain = result.unwrap();
         assert_eq!(domain.organization_id, "org-123");
-        assert_eq!(domain.data_stream_id, "ds-456");
+        assert_eq!(domain.end_device_id, "ds-456");
         assert_eq!(domain.payload, vec![0x01, 0x02, 0x03]);
     }
 
@@ -367,7 +367,7 @@ mod raw_envelope_tests {
     fn test_proto_to_domain_missing_timestamp() {
         let proto = ProtoRawEnvelope {
             organization_id: "org-123".to_string(),
-            data_stream_id: "ds-456".to_string(),
+            end_device_id: "ds-456".to_string(),
             received_at: None,
             payload: vec![0x01, 0x02, 0x03].into(),
         };
@@ -381,14 +381,14 @@ mod raw_envelope_tests {
         let now = chrono::Utc::now();
         let domain = RawEnvelope {
             organization_id: "org-123".to_string(),
-            data_stream_id: "ds-456".to_string(),
+            end_device_id: "ds-456".to_string(),
             received_at: now,
             payload: vec![0x01, 0x02, 0x03],
         };
 
         let proto = raw_envelope_domain_to_proto(&domain);
         assert_eq!(proto.organization_id, "org-123");
-        assert_eq!(proto.data_stream_id, "ds-456");
+        assert_eq!(proto.end_device_id, "ds-456");
         assert_eq!(proto.payload.to_vec(), vec![0x01, 0x02, 0x03]);
         assert!(proto.received_at.is_some());
     }
@@ -398,7 +398,7 @@ mod raw_envelope_tests {
         let now = chrono::Utc::now();
         let original = RawEnvelope {
             organization_id: "org-123".to_string(),
-            data_stream_id: "ds-456".to_string(),
+            end_device_id: "ds-456".to_string(),
             received_at: now,
             payload: vec![0x01, 0x02, 0x03],
         };
@@ -409,7 +409,7 @@ mod raw_envelope_tests {
 
         let domain = result.unwrap();
         assert_eq!(domain.organization_id, original.organization_id);
-        assert_eq!(domain.data_stream_id, original.data_stream_id);
+        assert_eq!(domain.end_device_id, original.end_device_id);
         assert_eq!(domain.payload, original.payload);
         assert_eq!(
             domain.received_at.timestamp(),

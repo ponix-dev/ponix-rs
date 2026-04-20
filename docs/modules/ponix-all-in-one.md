@@ -26,16 +26,16 @@ Key responsibilities:
 - Create and share infrastructure clients (Postgres, ClickHouse, NATS)
 - Construct all PostgreSQL repository implementations and wrap them in `Arc`
 - Build domain services with their dependencies (repositories, authorization, auth tokens)
-- Ensure all required NATS JetStream streams exist (10 streams total)
-- Register six worker subsystems as named `Runner` processes
+- Ensure all required NATS JetStream streams exist
+- Register four worker subsystems as named `Runner` processes
 - Coordinate shutdown: cancel processes, drain NATS, flush telemetry
 
 ## Key Concepts
 
 - **`ServiceConfig`** -- Single struct deserialized from `PONIX_`-prefixed env vars via the `config` crate. Every tunable in the system flows through here. All fields have sensible defaults for local development.
-- **`PostgresRepositories`** -- Private struct that bundles all nine `Arc<Postgres*Repository>` instances, constructed once and shared across services. This is the single point where repository implementations are chosen.
+- **`PostgresRepositories`** -- Private struct that bundles all `Arc<Postgres*Repository>` instances, constructed once and shared across services. This is the single point where repository implementations are chosen.
 - **`Runner`** -- From the `ponix-runner` crate. Accepts named processes (`AppProcess` closures) and closers. Runs all processes concurrently; if any fails, all are cancelled via `CancellationToken`.
-- **`into_runner_process()` / `into_runner_processes()`** -- Convention each worker crate implements. Some workers (analytics, snapshotter) return multiple processes because they run both a consumer and a background loop.
+- **`into_runner_process()` / `into_runner_processes()`** -- Convention each worker crate implements. Some workers (analytics) return multiple processes because they run both a consumer and a background loop.
 - **`ensure_nats_streams()`** -- Idempotently creates all JetStream streams the system needs. This means the service is self-provisioning -- no external stream setup required.
 
 ## How It Works
@@ -51,23 +51,21 @@ The `main()` function executes a strict sequential bootstrap before entering con
 3. **Shared Infrastructure** -- Runs in order:
    - PostgreSQL migrations (via `goose` binary subprocess)
    - PostgreSQL client creation (deadpool, 5 max connections)
-   - Nine repository instances wrapped in `Arc`
+   - Repository instances wrapped in `Arc`
    - ClickHouse migrations (via `goose` binary subprocess)
    - ClickHouse client creation + ping
    - NATS connection (with configurable startup timeout, default 30s)
-   - 10 JetStream streams ensured
+   - JetStream streams ensured
 
 4. **Authorization** -- Casbin authorization service initialized from PostgreSQL policy adapter.
 
-5. **Domain Services** -- Eight services constructed: `DataStreamService`, `DataStreamDefinitionService`, `OrganizationService`, `GatewayService`, `UserService`, `WorkspaceService`, `DocumentService`, plus auth token/password services (JWT + Argon2).
+5. **Domain Services** -- Services constructed: `EndDeviceService`, `EndDeviceDefinitionService`, `OrganizationService`, `GatewayService`, `UserService`, plus auth token/password services (JWT + Argon2).
 
-6. **Worker Construction** -- Six subsystems built with their specific configs:
+6. **Worker Construction** -- Four subsystems built with their specific configs:
    - `PonixApi` -- gRPC server (port 50051) with gRPC-Web and CORS support
    - `GatewayOrchestrator` -- CDC consumer that maintains in-memory gateway state
    - `CdcWorker` -- PostgreSQL logical replication consumer, publishes to NATS
    - `AnalyticsWorker` -- Raw envelope CEL transformation + ClickHouse ingestion
-   - `CollaborationServer` -- WebSocket server (port 50052) for Yrs document editing
-   - `DocumentSnapshotter` -- NATS consumer + compaction worker for persisting Yrs state
 
 7. **Runner Assembly** -- Each worker registers as a named process. Workers that return multiple processes are registered with indexed names.
 
@@ -102,9 +100,7 @@ Key variable groups:
 | ClickHouse | `PONIX_CLICKHOUSE_*` | `URL`, `NATIVE_URL`, `DATABASE` |
 | NATS | `PONIX_NATS_*` | `URL`, `BATCH_SIZE`, `BATCH_WAIT_SECS` |
 | gRPC | `PONIX_GRPC_*` | `HOST`, `PORT`, `WEB_ENABLED`, `CORS_ALLOWED_ORIGINS` |
-| Collaboration | `PONIX_COLLAB_*` | `HOST`, `PORT`, `CORS_ALLOWED_ORIGINS` |
 | CDC | `PONIX_CDC_*` | `PUBLICATION_NAME`, `SLOT_NAME`, `BATCH_SIZE` |
-| Snapshotter | `PONIX_SNAPSHOTTER_*` | `COMPACTION_INTERVAL_SECS`, `IDLE_EVICTION_SECS` |
 | Telemetry | `PONIX_OTEL_*` | `ENABLED`, `ENDPOINT`, `SERVICE_NAME` |
 
 See the full environment variable reference in `CLAUDE.md` under "Environment Configuration."
@@ -115,4 +111,3 @@ See the full environment variable reference in `CLAUDE.md` under "Environment Co
 - [Common](common.md) — Shared infrastructure, domain types, and repository traits
 - [Analytics Worker](analytics-worker.md) — Envelope processing pipeline
 - [CDC Worker](cdc-worker.md) — PostgreSQL Change Data Capture
-- [Collaboration Server](collaboration-server.md) — Real-time Yrs document collaboration

@@ -1,23 +1,19 @@
 mod cdc_config;
 mod cdc_converter;
-mod data_stream_converter;
-mod data_stream_definition_converter;
-mod document_converter;
+mod end_device_converter;
+mod end_device_definition_converter;
 mod entity_config;
 mod gateway_converter;
 mod organization_converter;
 mod process;
 mod user_converter;
-mod workspace_converter;
 
 pub use cdc_config::*;
 pub use cdc_converter::*;
-pub use data_stream_converter::*;
-pub use data_stream_definition_converter::*;
-pub use document_converter::*;
+pub use end_device_converter::*;
+pub use end_device_definition_converter::*;
 pub use entity_config::*;
 pub use gateway_converter::*;
 pub use organization_converter::*;
 pub use process::*;
 pub use user_converter::*;
-pub use workspace_converter::*;

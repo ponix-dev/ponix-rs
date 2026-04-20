@@ -57,20 +57,6 @@ if [ -z "$ORG_ID" ] || [ "$ORG_ID" = "null" ]; then
 fi
 print_success "Organization: $ORG_ID"
 
-# Create Workspace
-print_step "Setup: Creating workspace..."
-WORKSPACE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "workspace.v1.WorkspaceService/CreateWorkspace" \
-    "{\"organization_id\": \"$ORG_ID\", \"name\": \"MQTT Test Workspace\"}")
-
-WORKSPACE_ID=$(echo "$WORKSPACE_RESPONSE" | jq -r '.workspace.id // .id // empty')
-if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
-    print_error "Failed to create workspace"
-    echo "$WORKSPACE_RESPONSE"
-    exit 1
-fi
-print_success "Workspace: $WORKSPACE_ID"
-
 # Create Gateway (will trigger CDC event and start MQTT subscriber)
 print_step "Setup: Creating MQTT gateway..."
 GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
@@ -92,10 +78,10 @@ if [ -z "$GATEWAY_ID" ] || [ "$GATEWAY_ID" = "null" ]; then
 fi
 print_success "Gateway: $GATEWAY_ID"
 
-# Create Data Stream Definition with Cayenne LPP conversion
-print_step "Setup: Creating data stream definition with Cayenne LPP converter..."
+# Create End Device Definition with Cayenne LPP conversion
+print_step "Setup: Creating end device definition with Cayenne LPP converter..."
 DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamDefinitionService/CreateDataStreamDefinition" \
+    "end_device.v1.EndDeviceDefinitionService/CreateEndDeviceDefinition" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Cayenne LPP Temperature Sensor\",
@@ -106,7 +92,7 @@ DEFINITION_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
         }]
     }")
 
-DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.dataStreamDefinition.id // .id // empty')
+DEFINITION_ID=$(echo "$DEFINITION_RESPONSE" | jq -r '.endDeviceDefinition.id // .id // empty')
 if [ -z "$DEFINITION_ID" ] || [ "$DEFINITION_ID" = "null" ]; then
     print_error "Failed to create definition"
     echo "$DEFINITION_RESPONSE"
@@ -114,25 +100,24 @@ if [ -z "$DEFINITION_ID" ] || [ "$DEFINITION_ID" = "null" ]; then
 fi
 print_success "Definition: $DEFINITION_ID"
 
-# Create Data Stream
-print_step "Setup: Creating data stream..."
-DATA_STREAM_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
-    "data_stream.v1.DataStreamService/CreateDataStream" \
+# Create End Device
+print_step "Setup: Creating end device..."
+END_DEVICE_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
+    "end_device.v1.EndDeviceService/CreateEndDevice" \
     "{
         \"organization_id\": \"$ORG_ID\",
-        \"workspace_id\": \"$WORKSPACE_ID\",
         \"definition_id\": \"$DEFINITION_ID\",
         \"gateway_id\": \"$GATEWAY_ID\",
         \"name\": \"Temperature Sensor\"
     }")
 
-DATA_STREAM_ID=$(echo "$DATA_STREAM_RESPONSE" | jq -r '.dataStream.dataStreamId // .dataStreamId // empty')
-if [ -z "$DATA_STREAM_ID" ] || [ "$DATA_STREAM_ID" = "null" ]; then
-    print_error "Failed to create data stream"
-    echo "$DATA_STREAM_RESPONSE"
+END_DEVICE_ID=$(echo "$END_DEVICE_RESPONSE" | jq -r '.endDevice.endDeviceId // .endDeviceId // empty')
+if [ -z "$END_DEVICE_ID" ] || [ "$END_DEVICE_ID" = "null" ]; then
+    print_error "Failed to create end device"
+    echo "$END_DEVICE_RESPONSE"
     exit 1
 fi
-print_success "Data Stream: $DATA_STREAM_ID"
+print_success "End Device: $END_DEVICE_ID"
 
 # ============================================
 # WAIT FOR GATEWAY CONNECTION
@@ -151,7 +136,7 @@ print_success "Gateway connection window elapsed"
 # Humidity (type 0x68): 1 byte, 0.5% resolution
 
 print_step "Publishing Cayenne LPP message via MQTT..."
-echo -e "  Topic: ${ORG_ID}/${DATA_STREAM_ID}"
+echo -e "  Topic: ${ORG_ID}/${END_DEVICE_ID}"
 
 # Temperature: 25.5C = 255 = 0x00FF, Humidity: 50% = 100 = 0x64
 CAYENNE_PAYLOAD_HEX="016700FF026864"
@@ -161,7 +146,7 @@ echo -e "  Decoded: Temperature 25.5C, Humidity 50%"
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
-    -t "${ORG_ID}/${DATA_STREAM_ID}" \
+    -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "${CAYENNE_PAYLOAD_HEX}" \
     --format hex
 
@@ -174,7 +159,7 @@ print_step "Publishing additional test messages..."
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
-    -t "${ORG_ID}/${DATA_STREAM_ID}" \
+    -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "0167012C02688C" \
     --format hex
 print_info "Published: Temperature 30.0C, Humidity 70%"
@@ -185,7 +170,7 @@ sleep 1
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
-    -t "${ORG_ID}/${DATA_STREAM_ID}" \
+    -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "016700B902685A" \
     --format hex
 print_info "Published: Temperature 18.5C, Humidity 45%"
@@ -203,10 +188,9 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 echo -e "${YELLOW}Resources Created:${NC}"
 echo -e "  Organization: $ORG_ID"
-echo -e "  Workspace:    $WORKSPACE_ID"
 echo -e "  Gateway:      $GATEWAY_ID"
 echo -e "  Definition:   $DEFINITION_ID"
-echo -e "  Data Stream:  $DATA_STREAM_ID"
+echo -e "  End Device:   $END_DEVICE_ID"
 echo ""
 echo -e "${YELLOW}Expected Pipeline Flow:${NC}"
 echo -e "  1. MQTT message received by gateway"
@@ -217,11 +201,11 @@ echo ""
 echo -e "${YELLOW}Verification Commands:${NC}"
 echo ""
 echo -e "${BLUE}Check service logs:${NC}"
-echo "  docker logs ponix-all-in-one 2>&1 | grep $DATA_STREAM_ID"
+echo "  docker logs ponix-all-in-one 2>&1 | grep $END_DEVICE_ID"
 echo ""
 echo -e "${BLUE}Query ClickHouse:${NC}"
 echo "  docker exec -it ponix-clickhouse clickhouse-client -u ponix --password ponix \\"
-echo "    -q \"SELECT * FROM ponix.processed_envelopes WHERE data_stream_id = '$DATA_STREAM_ID'\""
+echo "    -q \"SELECT * FROM ponix.processed_envelopes WHERE end_device_id = '$END_DEVICE_ID'\""
 echo ""
 echo -e "${BLUE}View traces in Grafana:${NC}"
 echo "  http://localhost:3000"

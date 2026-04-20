@@ -4,41 +4,41 @@ pub type DomainResult<T> = Result<T, DomainError>;
 
 #[derive(Error, Debug)]
 pub enum DomainError {
-    #[error("Data stream not found: {0}")]
-    DataStreamNotFound(String),
+    #[error("End device not found: {0}")]
+    EndDeviceNotFound(String),
 
-    #[error("Data stream {0} not owned by organization {1}")]
-    DataStreamNotOwnedByOrganization(String, String),
+    #[error("End device {0} not owned by organization {1}")]
+    EndDeviceNotOwnedByOrganization(String, String),
 
-    #[error("Data stream already exists: {0}")]
-    DataStreamAlreadyExists(String),
+    #[error("End device already exists: {0}")]
+    EndDeviceAlreadyExists(String),
 
-    #[error("Invalid data stream ID: {0}")]
-    InvalidDataStreamId(String),
+    #[error("Invalid end device ID: {0}")]
+    InvalidEndDeviceId(String),
 
     #[error("Invalid organization ID: {0}")]
     InvalidOrganizationId(String),
 
-    #[error("Invalid data stream name: {0}")]
-    InvalidDataStreamName(String),
+    #[error("Invalid end device name: {0}")]
+    InvalidEndDeviceName(String),
 
     #[error("Payload conversion error: {0}")]
     PayloadConversionError(String),
 
-    #[error("Data stream definition not found: {0}")]
-    DataStreamDefinitionNotFound(String),
+    #[error("End device definition not found: {0}")]
+    EndDeviceDefinitionNotFound(String),
 
-    #[error("Data stream definition already exists: {0}")]
-    DataStreamDefinitionAlreadyExists(String),
+    #[error("End device definition already exists: {0}")]
+    EndDeviceDefinitionAlreadyExists(String),
 
     #[error("Invalid JSON Schema: {0}")]
     InvalidJsonSchema(String),
 
-    #[error("Schema validation failed for data stream {0}: {1}")]
+    #[error("Schema validation failed for end device {0}: {1}")]
     SchemaValidationFailed(String, String),
 
-    #[error("Data stream definition in use: {0}")]
-    DataStreamDefinitionInUse(String),
+    #[error("End device definition in use: {0}")]
+    EndDeviceDefinitionInUse(String),
 
     #[error("Organization not found: {0}")]
     OrganizationNotFound(String),
@@ -52,32 +52,11 @@ pub enum DomainError {
     #[error("Organization is deleted: {0}")]
     OrganizationDeleted(String),
 
-    #[error("Workspace not found: {0}")]
-    WorkspaceNotFound(String),
-
-    #[error("Workspace already exists: {0}")]
-    WorkspaceAlreadyExists(String),
-
-    #[error("Workspace is deleted: {0}")]
-    WorkspaceDeleted(String),
-
     #[error("Gateway not found: {0}")]
     GatewayNotFound(String),
 
     #[error("Gateway already exists: {0}")]
     GatewayAlreadyExists(String),
-
-    #[error("Document not found: {0}")]
-    DocumentNotFound(String),
-
-    #[error("Document already exists: {0}")]
-    DocumentAlreadyExists(String),
-
-    #[error("Document association already exists: {0}")]
-    DocumentAssociationAlreadyExists(String),
-
-    #[error("Document association not found: {0}")]
-    DocumentAssociationNotFound(String),
 
     #[error("Invalid gateway ID: {0}")]
     InvalidGatewayId(String),

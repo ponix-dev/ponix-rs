@@ -40,7 +40,7 @@ services:
         hard: 262144
 
   postgres:
-    image: ghcr.io/ponix-dev/ponix-postgres:latest
+    image: postgres:17
     container_name: ponix-postgres
     environment:
       POSTGRES_USER: ponix

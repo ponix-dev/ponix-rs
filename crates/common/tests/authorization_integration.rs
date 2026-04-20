@@ -17,7 +17,7 @@ async fn setup_test_db() -> (
     CasbinAuthorizationService,
     PostgresClient,
 ) {
-    let postgres = GenericImage::new("ghcr.io/ponix-dev/ponix-postgres", "latest")
+    let postgres = GenericImage::new("postgres", "17")
         .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
             "database system is ready to accept connections",
         ))
@@ -86,7 +86,7 @@ async fn setup_test_db() -> (
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_admin_can_create_data_stream() {
+async fn test_admin_can_create_end_device() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     // Assign admin role
@@ -100,7 +100,7 @@ async fn test_admin_can_create_data_stream() {
         .check_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await
@@ -111,7 +111,7 @@ async fn test_admin_can_create_data_stream() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_admin_can_read_data_stream() {
+async fn test_admin_can_read_end_device() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     auth_service
@@ -120,12 +120,7 @@ async fn test_admin_can_read_data_stream() {
         .unwrap();
 
     let allowed = auth_service
-        .check_permission(
-            TEST_USER_ID,
-            TEST_ORG_ID,
-            Resource::DataStream,
-            Action::Read,
-        )
+        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::EndDevice, Action::Read)
         .await
         .unwrap();
 
@@ -134,7 +129,7 @@ async fn test_admin_can_read_data_stream() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_admin_can_update_data_stream() {
+async fn test_admin_can_update_end_device() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     auth_service
@@ -146,7 +141,7 @@ async fn test_admin_can_update_data_stream() {
         .check_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Update,
         )
         .await
@@ -157,7 +152,7 @@ async fn test_admin_can_update_data_stream() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_admin_can_delete_data_stream() {
+async fn test_admin_can_delete_end_device() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     auth_service
@@ -169,7 +164,7 @@ async fn test_admin_can_delete_data_stream() {
         .check_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Delete,
         )
         .await
@@ -180,7 +175,7 @@ async fn test_admin_can_delete_data_stream() {
 
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
-async fn test_member_can_create_data_stream() {
+async fn test_member_can_create_end_device() {
     let (_container, auth_service, _client) = setup_test_db().await;
 
     auth_service
@@ -192,7 +187,7 @@ async fn test_member_can_create_data_stream() {
         .check_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await
@@ -234,7 +229,7 @@ async fn test_user_without_role_denied() {
         .check_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await
@@ -253,7 +248,7 @@ async fn test_require_permission_denied_returns_error() {
         .require_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await;
@@ -281,7 +276,7 @@ async fn test_require_permission_allowed_succeeds() {
         .require_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await;
@@ -301,7 +296,7 @@ async fn test_super_admin_cross_org_access() {
         .check_permission(
             TEST_USER_ID,
             "any-org-id",
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await
@@ -319,7 +314,7 @@ async fn test_super_admin_can_access_any_resource() {
 
     // Check all resources and actions
     for resource in [
-        Resource::DataStream,
+        Resource::EndDevice,
         Resource::Gateway,
         Resource::Organization,
     ] {
@@ -370,7 +365,7 @@ async fn test_user_cannot_access_other_org() {
         .check_permission(
             TEST_USER_ID,
             "other-org-id",
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await
@@ -421,7 +416,7 @@ async fn test_remove_role() {
         .check_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await
@@ -439,7 +434,7 @@ async fn test_remove_role() {
         .check_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await
@@ -474,36 +469,31 @@ async fn test_multiple_users_in_same_org() {
         .await
         .unwrap();
 
-    // Both should have access to read data streams
+    // Both should have access to read end devices
     let allowed1 = auth_service
-        .check_permission(
-            TEST_USER_ID,
-            TEST_ORG_ID,
-            Resource::DataStream,
-            Action::Read,
-        )
+        .check_permission(TEST_USER_ID, TEST_ORG_ID, Resource::EndDevice, Action::Read)
         .await
         .unwrap();
     let allowed2 = auth_service
-        .check_permission("user-2", TEST_ORG_ID, Resource::DataStream, Action::Read)
+        .check_permission("user-2", TEST_ORG_ID, Resource::EndDevice, Action::Read)
         .await
         .unwrap();
 
     assert!(allowed1);
     assert!(allowed2);
 
-    // Both should have data stream create access (member has same perms as admin for now)
+    // Both should have end device create access (member has same perms as admin for now)
     let allowed1 = auth_service
         .check_permission(
             TEST_USER_ID,
             TEST_ORG_ID,
-            Resource::DataStream,
+            Resource::EndDevice,
             Action::Create,
         )
         .await
         .unwrap();
     let allowed2 = auth_service
-        .check_permission("user-2", TEST_ORG_ID, Resource::DataStream, Action::Create)
+        .check_permission("user-2", TEST_ORG_ID, Resource::EndDevice, Action::Create)
         .await
         .unwrap();
 
@@ -528,21 +518,21 @@ async fn test_user_with_roles_in_multiple_orgs() {
 
     // Should have access to org-1
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, "org-1", Resource::DataStream, Action::Create)
+        .check_permission(TEST_USER_ID, "org-1", Resource::EndDevice, Action::Create)
         .await
         .unwrap();
     assert!(allowed);
 
     // Should have access to org-2
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, "org-2", Resource::DataStream, Action::Create)
+        .check_permission(TEST_USER_ID, "org-2", Resource::EndDevice, Action::Create)
         .await
         .unwrap();
     assert!(allowed);
 
     // Should NOT have access to org-3
     let allowed = auth_service
-        .check_permission(TEST_USER_ID, "org-3", Resource::DataStream, Action::Create)
+        .check_permission(TEST_USER_ID, "org-3", Resource::EndDevice, Action::Create)
         .await
         .unwrap();
     assert!(!allowed);
@@ -664,7 +654,7 @@ async fn test_member_cannot_update_organization() {
 #[tokio::test]
 #[cfg_attr(not(feature = "integration-tests"), ignore)]
 async fn test_role_persisted_in_database() {
-    let postgres = GenericImage::new("ghcr.io/ponix-dev/ponix-postgres", "latest")
+    let postgres = GenericImage::new("postgres", "17")
         .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
             "database system is ready to accept connections",
         ))
@@ -748,7 +738,7 @@ async fn test_role_persisted_in_database() {
             .check_permission(
                 TEST_USER_ID,
                 TEST_ORG_ID,
-                Resource::DataStream,
+                Resource::EndDevice,
                 Action::Create,
             )
             .await

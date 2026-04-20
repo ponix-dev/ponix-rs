@@ -32,16 +32,14 @@ async fn setup_nats() -> (ContainerAsync<GenericImage>, Arc<NatsClient>) {
 async fn test_ensure_stream_creates_with_custom_config() {
     let (_container, client) = setup_nats().await;
 
-    let stream_name = "document_sync";
+    let stream_name = "custom_stream";
     let max_age = Duration::from_secs(604800); // 7 days
 
     client
         .ensure_stream(StreamConfig {
             name: stream_name.to_string(),
             subjects: vec![format!("{}.*", stream_name)],
-            description: Some(
-                "Yrs document sync updates for collaboration and snapshotting".to_string(),
-            ),
+            description: Some("Custom stream for testing ensure_stream with config".to_string()),
             max_age,
             ..Default::default()
         })
@@ -57,11 +55,11 @@ async fn test_ensure_stream_creates_with_custom_config() {
     let info = stream.info().await.expect("Failed to get stream info");
 
     assert_eq!(info.config.name, stream_name);
-    assert_eq!(info.config.subjects, vec!["document_sync.*"]);
+    assert_eq!(info.config.subjects, vec!["custom_stream.*"]);
     assert_eq!(info.config.max_age, max_age);
     assert_eq!(
         info.config.description,
-        Some("Yrs document sync updates for collaboration and snapshotting".to_string())
+        Some("Custom stream for testing ensure_stream with config".to_string())
     );
 }
 
