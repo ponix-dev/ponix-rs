@@ -9,7 +9,6 @@ related-files:
   - crates/gateway_orchestrator/src/domain/gateway_deployer.rs
   - crates/gateway_orchestrator/src/domain/deployment_handle.rs
   - crates/gateway_orchestrator/src/domain/gateway_runner.rs
-  - crates/gateway_orchestrator/src/domain/gateway_runner_factory.rs
   - crates/gateway_orchestrator/src/domain/in_process_deployer.rs
   - crates/gateway_orchestrator/src/domain/in_memory_deployment_handle_store.rs
   - crates/gateway_orchestrator/src/nats/gateway_cdc_consumer.rs
@@ -18,7 +17,7 @@ related-files:
   - crates/gateway_orchestrator/src/mqtt/emqx_gateway_runner.rs
   - crates/gateway_orchestrator/src/mqtt/subscriber.rs
   - crates/gateway_orchestrator/src/mqtt/topic.rs
-last-updated: 2026-03-18
+last-updated: 2026-05-04
 ---
 
 # Gateway Orchestrator
@@ -37,9 +36,9 @@ The orchestrator serves as the bridge between the CRUD layer (where users create
 
 ## Key Concepts
 
-- **`GatewayOrchestrationService`** -- The central state machine that maps CDC event types (created, updated, deleted) to process lifecycle operations. Holds references to the deployer, handle store, runner factory, and raw envelope producer.
+- **`GatewayOrchestrationService`** -- The central state machine that maps CDC event types (created, updated, deleted) to process lifecycle operations. Holds references to the gateway repository, deployer, handle store, single runner instance, and raw envelope producer.
 
-- **`GatewayRunner` (trait)** -- Defines how to connect to a specific gateway type's message broker. Each implementation (e.g., `EmqxGatewayRunner`) knows the protocol details: connecting, subscribing, converting messages to `RawEnvelope`s, and handling reconnection.
+- **`GatewayRunner` (trait)** -- Defines how to connect to a gateway's MQTT broker. Today there is a single implementation, `EmqxGatewayRunner`, which handles any LoRaWAN-style MQTT broker. The trait remains so future provider-specific runners (e.g., TTN, ChirpStack) can implement custom topic/auth semantics.
 
 - **`GatewayDeployer` (trait)** -- Abstracts *where* a gateway process runs, separating deployment strategy from protocol logic. Currently only `InProcessDeployer` exists (spawns a tokio task), but the trait is designed for future Docker or Kubernetes deployers.
 
@@ -47,41 +46,41 @@ The orchestrator serves as the bridge between the CRUD layer (where users create
 
 - **`DeploymentHandleStore` (trait)** -- Registry of active deployment handles, keyed by gateway ID. The `InMemoryDeploymentHandleStore` uses a `RwLock<HashMap>` for concurrent access.
 
-- **`GatewayRunnerFactory`** -- Registry pattern that maps `GatewayConfig` variants to runner constructors. Adding a new gateway type requires only registering a new constructor.
-
 ## How It Works
 
 ### Initialization
 
 1. A `RawEnvelopeProducer` is created with a NATS publisher, shared across all gateway processes so incoming MQTT messages flow into the envelope processing pipeline.
-2. A `GatewayRunnerFactory` is created and the `EmqxGatewayRunner` constructor is registered.
+2. The single `EmqxGatewayRunner` is constructed and held as `Arc<dyn GatewayRunner>` on the orchestration service.
 3. The `GatewayOrchestrationService` calls `launch_gateways()`, querying all non-deleted gateways from PostgreSQL and starting a process for each one. Individual failures are logged but don't prevent other gateways from starting.
 4. A `GatewayCdcConsumer` subscribes to the gateway CDC stream on NATS JetStream.
 
 ### CDC Event Processing
 
-When a CDC event arrives from NATS:
+CDC events do **not** carry MQTT credentials — the Postgres publication uses a column list that excludes `username` and `password`, so secrets never travel through NATS. On every CDC create/update event, the orchestrator fetches the full gateway record (including credentials) from Postgres via the gateway repository before acting.
 
-- **Created**: Checks for duplicate handles, resolves the runner via the factory, delegates to the deployer, and stores the returned handle.
-- **Updated**: First checks for soft delete (`deleted_at` set) and stops the process if so. Otherwise, computes a config hash and compares against the stored handle's hash. If changed, the old process is stopped and a new one is started. If unchanged, no action is taken.
+- **Created**: Fetches the full gateway from the repository, checks for duplicate handles, delegates to the deployer with the runner, and stores the returned handle.
+- **Updated**: First checks for soft delete (`deleted_at` set) and stops the process if so. Otherwise fetches the full gateway, computes a connection hash (`hash_gateway_connection`) and compares against the stored handle's hash. If changed, the old process is stopped and a new one is started. If unchanged, no action is taken.
 - **Deleted**: Removes the handle from the store, cancels the process, and waits for it to stop.
 
 ### MQTT Subscriber Lifecycle
 
 Each gateway process runs an MQTT subscriber loop:
 
-1. Connects to the MQTT 5 broker using the URL from `EmqxGatewayConfig`.
+1. Connects to the MQTT 5 broker at `gateway.broker_url`. If `gateway.credentials` is set, calls `MqttOptions::set_credentials(username, password)` before connecting; otherwise connects anonymously.
 2. Subscribes to a shared subscription topic `$share/{gateway_id}/{org_id}/+`, enabling load balancing across multiple instances.
 3. Incoming MQTT messages are parsed to extract `org_id` and `end_device_id` from the topic, then published as `RawEnvelope`s to NATS via the `RawEnvelopeProducer`.
 4. On connection failure, retries with configurable delay (default 10s) up to max attempts (default 3).
 
-### Config Change Detection
+Credentials are never logged. The connect log line includes `broker_url` and an `authenticated: bool` flag derived from `gateway.credentials.is_some()`.
 
-The `hash_gateway_config()` function produces a deterministic hash of configuration fields that affect runtime behavior. When a CDC update arrives, the new config hash is compared against the stored hash. This means metadata-only updates (like renaming a gateway) don't trigger a reconnection to the MQTT broker.
+### Connection Change Detection
+
+The `hash_gateway_connection()` function produces a deterministic hash of `broker_url` and credentials. When a CDC update arrives, the new hash is compared against the stored hash. This means metadata-only updates (like renaming a gateway) don't trigger a reconnection to the MQTT broker, but a credential rotation does.
 
 ## Related Documentation
 
 - [CDC Worker](cdc-worker.md) — Upstream producer of gateway CDC events from PostgreSQL WAL
 - [Analytics Worker](analytics-worker.md) — Downstream consumer of `RawEnvelope`s produced by gateway subscribers
 - [Envelope Processing Pipeline](../data-flows/envelope-pipeline.md) — End-to-end flow from raw envelope to ClickHouse
-- [Common](common.md) — `Gateway`, `GatewayConfig`, `RawEnvelope`, and repository trait definitions
+- [Common](common.md) — `Gateway`, `MqttCredentials`, `RawEnvelope`, and repository trait definitions
