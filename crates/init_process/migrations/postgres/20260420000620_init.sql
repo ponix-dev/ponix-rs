@@ -69,8 +69,9 @@ CREATE TABLE gateways (
     gateway_id TEXT PRIMARY KEY,
     organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
     name TEXT NOT NULL,
-    gateway_type TEXT NOT NULL,
-    gateway_config JSONB NOT NULL DEFAULT '{}',
+    broker_url TEXT NOT NULL,
+    username TEXT,
+    password TEXT,
     deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -93,12 +94,15 @@ CREATE INDEX idx_end_devices_organization_id ON end_devices(organization_id);
 CREATE INDEX idx_end_devices_definition_id ON end_devices(definition_id);
 CREATE INDEX idx_end_devices_gateway_id ON end_devices(gateway_id);
 
--- CDC publication
+-- CDC publication.
+-- The gateways table excludes username/password from the publication so MQTT
+-- credentials never travel through the CDC stream. The orchestrator fetches
+-- credentials directly from PostgreSQL when starting a runner.
 CREATE PUBLICATION ponix_cdc_publication FOR TABLE
     organizations,
     users,
     end_device_definitions,
-    gateways,
+    gateways (gateway_id, organization_id, name, broker_url, deleted_at, created_at, updated_at),
     end_devices;
 
 -- +goose StatementEnd

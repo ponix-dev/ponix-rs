@@ -375,8 +375,8 @@ async fn create_test_end_device(
         chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
     );
     conn.execute(
-        "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config) VALUES ($1, $2, $3, $4, $5)",
-        &[&gateway_id, &"test-org-123", &"Test Gateway", &"emqx", &serde_json::json!({"broker_url": "mqtt://localhost:1883"})],
+        "INSERT INTO gateways (gateway_id, organization_id, name, broker_url) VALUES ($1, $2, $3, $4)",
+        &[&gateway_id, &"test-org-123", &"Test Gateway", &"mqtt://localhost:1883"],
     )
     .await?;
 

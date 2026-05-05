@@ -1,8 +1,6 @@
 use crate::domain::GatewayOrchestrationServiceConfig;
 use crate::mqtt::parse_topic;
-use common::domain::{
-    DomainError, DomainResult, Gateway, GatewayConfig, RawEnvelope, RawEnvelopeProducer,
-};
+use common::domain::{DomainError, DomainResult, Gateway, RawEnvelope, RawEnvelopeProducer};
 use rumqttc::v5::mqttbytes::QoS;
 use rumqttc::v5::{AsyncClient, Event, MqttOptions};
 use std::sync::Arc;
@@ -29,21 +27,17 @@ pub async fn run_mqtt_subscriber(
     shutdown_token: CancellationToken,
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
 ) {
-    let broker_url = match &gateway.gateway_config {
-        GatewayConfig::Emqx(emqx) => &emqx.broker_url,
-    };
-
     info!(
         gateway_id = %gateway.gateway_id,
         organization_id = %gateway.organization_id,
-        broker_url = %broker_url,
+        broker_url = %gateway.broker_url,
+        authenticated = gateway.credentials.is_some(),
         "starting MQTT 5 subscriber with shared subscription"
     );
 
     let mut retry_count = 0;
 
     loop {
-        // Check for cancellation before attempting connection
         if process_token.is_cancelled() || shutdown_token.is_cancelled() {
             debug!(gateway_id = %gateway.gateway_id, "MQTT subscriber cancelled before connection");
             break;
@@ -51,7 +45,6 @@ pub async fn run_mqtt_subscriber(
 
         match run_mqtt_connection(
             &gateway,
-            broker_url,
             &process_token,
             &shutdown_token,
             Arc::clone(&raw_envelope_producer),
@@ -59,7 +52,6 @@ pub async fn run_mqtt_subscriber(
         .await
         {
             Ok(()) => {
-                // Clean exit (cancellation)
                 debug!(gateway_id = %gateway.gateway_id, "MQTT subscriber stopped cleanly");
                 break;
             }
@@ -87,7 +79,6 @@ pub async fn run_mqtt_subscriber(
                     "retrying MQTT connection"
                 );
 
-                // Wait before retry with cancellation check
                 tokio::select! {
                     _ = process_token.cancelled() => break,
                     _ = shutdown_token.cancelled() => break,
@@ -106,29 +97,30 @@ pub async fn run_mqtt_subscriber(
     skip_all,
     fields(
         gateway_id = %gateway.gateway_id,
-        broker_url = %broker_url,
+        broker_url = %gateway.broker_url,
     )
 )]
 async fn run_mqtt_connection(
     gateway: &Gateway,
-    broker_url: &str,
     process_token: &CancellationToken,
     shutdown_token: &CancellationToken,
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
 ) -> DomainResult<()> {
-    // Parse broker URL to extract host and port
-    let (host, port) = parse_broker_url(broker_url)?;
+    let (host, port) = parse_broker_url(&gateway.broker_url)?;
 
-    // Create MQTT 5 client
     let client_id = format!("ponix-{}", gateway.gateway_id);
     let mut mqtt_options = MqttOptions::new(&client_id, host, port);
     mqtt_options.set_keep_alive(Duration::from_secs(30));
     mqtt_options.set_clean_start(true);
 
+    if let Some(creds) = gateway.credentials.as_ref() {
+        mqtt_options.set_credentials(&creds.username, &creds.password);
+    }
+
     let (client, mut eventloop) = AsyncClient::new(mqtt_options, 100);
 
     // Build shared subscription topic: $share/{gateway_id}/{org_id}/+
-    // This enables load balancing across multiple instances of the same gateway
+    // This enables load balancing across multiple instances of the same gateway.
     let base_topic = format!("{}/+", gateway.organization_id);
     let subscribe_topic = format!("$share/{}/{}", gateway.gateway_id, base_topic);
 
@@ -143,7 +135,6 @@ async fn run_mqtt_connection(
         "subscribed to MQTT 5 shared subscription topic"
     );
 
-    // Event loop
     loop {
         tokio::select! {
             _ = process_token.cancelled() => {
@@ -162,7 +153,6 @@ async fn run_mqtt_connection(
                         use rumqttc::v5::mqttbytes::v5::Packet;
                         match packet {
                             Packet::Publish(publish) => {
-                                // Convert topic from Bytes to &str
                                 let topic = match std::str::from_utf8(&publish.topic) {
                                     Ok(t) => t,
                                     Err(e) => {
@@ -185,16 +175,12 @@ async fn run_mqtt_connection(
                                 info!(gateway_id = %gateway.gateway_id, "connected to MQTT 5 broker");
                             }
                             Packet::PingResp(_) => {
-                                // Ping response - connection is healthy
+                                // Connection is healthy
                             }
-                            _ => {
-                                // Other packets
-                            }
+                            _ => {}
                         }
                     }
-                    Ok(Event::Outgoing(_)) => {
-                        // Outgoing events - ignore
-                    }
+                    Ok(Event::Outgoing(_)) => {}
                     Err(e) => {
                         return Err(DomainError::RepositoryError(
                             anyhow::anyhow!("MQTT event loop error: {}", e),
@@ -215,7 +201,6 @@ pub(crate) async fn handle_mqtt_message(
     payload: &[u8],
     raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
 ) {
-    // Create a new root span for this message (independent trace)
     let span = info_span!(
         parent: Span::none(),
         "mqtt_message",
@@ -227,22 +212,16 @@ pub(crate) async fn handle_mqtt_message(
     );
 
     async {
-        // Parse topic to extract org_id and end_device_id
         let parsed = match parse_topic(topic) {
             Ok(p) => p,
             Err(e) => {
-                warn!(
-                    error = %e,
-                    "failed to parse MQTT topic, skipping message"
-                );
+                warn!(error = %e, "failed to parse MQTT topic, skipping message");
                 return;
             }
         };
 
-        // Record end_device_id in the current span
         Span::current().record("end_device_id", &parsed.end_device_id);
 
-        // Verify organization matches gateway config
         if parsed.organization_id != gateway.organization_id {
             warn!(
                 topic_org = %parsed.organization_id,
@@ -252,7 +231,6 @@ pub(crate) async fn handle_mqtt_message(
             return;
         }
 
-        // Create RawEnvelope
         let envelope = RawEnvelope {
             organization_id: parsed.organization_id,
             end_device_id: parsed.end_device_id.clone(),
@@ -260,7 +238,6 @@ pub(crate) async fn handle_mqtt_message(
             payload: payload.to_vec(),
         };
 
-        // Publish to NATS (fire-and-forget with error logging)
         if let Err(e) = raw_envelope_producer.publish_raw_envelope(&envelope).await {
             error!(error = %e, "failed to publish RawEnvelope to NATS");
         } else {
@@ -278,7 +255,7 @@ fn parse_broker_url(url: &str) -> DomainResult<(&str, u16)> {
 
     let parts: Vec<&str> = url.split(':').collect();
     match parts.len() {
-        1 => Ok((parts[0], 1883)), // Default MQTT port
+        1 => Ok((parts[0], 1883)),
         2 => {
             let port = parts[1].parse::<u16>().map_err(|_| {
                 DomainError::InvalidGatewayConfig(format!(
@@ -298,17 +275,15 @@ fn parse_broker_url(url: &str) -> DomainResult<(&str, u16)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::domain::{EmqxGatewayConfig, MockRawEnvelopeProducer};
+    use common::domain::MockRawEnvelopeProducer;
 
     fn create_test_gateway(gateway_id: &str, org_id: &str) -> Gateway {
         Gateway {
             gateway_id: gateway_id.to_string(),
             organization_id: org_id.to_string(),
             name: format!("Test Gateway {}", gateway_id),
-            gateway_type: "emqx".to_string(),
-            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-                broker_url: "mqtt://localhost:1883".to_string(),
-            }),
+            broker_url: "mqtt://localhost:1883".to_string(),
+            credentials: None,
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),
             deleted_at: None,
@@ -374,7 +349,6 @@ mod tests {
         let gateway = create_test_gateway("gw-001", "org-001");
 
         let mut mock_producer = MockRawEnvelopeProducer::new();
-        // Should NOT be called due to org mismatch
         mock_producer.expect_publish_raw_envelope().times(0);
 
         let producer: Arc<dyn RawEnvelopeProducer> = Arc::new(mock_producer);
@@ -393,7 +367,6 @@ mod tests {
         let gateway = create_test_gateway("gw-001", "org-001");
 
         let mut mock_producer = MockRawEnvelopeProducer::new();
-        // Should NOT be called due to invalid topic
         mock_producer.expect_publish_raw_envelope().times(0);
 
         let producer: Arc<dyn RawEnvelopeProducer> = Arc::new(mock_producer);

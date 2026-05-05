@@ -1,9 +1,7 @@
 use crate::domain::CdcConverter;
 use async_trait::async_trait;
 use bytes::Bytes;
-use ponix_proto_prost::gateway::v1::{
-    gateway::Config, EmqxGatewayConfig, Gateway, GatewayStatus, GatewayType,
-};
+use ponix_proto_prost::gateway::v1::{Gateway, GatewayStatus};
 use prost::Message;
 use serde_json::Value;
 
@@ -21,7 +19,6 @@ impl GatewayConverter {
     }
 
     fn value_to_proto(&self, data: &Value) -> anyhow::Result<Gateway> {
-        // Extract required fields
         let gateway_id = data
             .get("gateway_id")
             .and_then(|v| v.as_str())
@@ -34,41 +31,20 @@ impl GatewayConverter {
             .ok_or_else(|| anyhow::anyhow!("Missing organization_id"))?
             .to_string();
 
-        // Extract gateway_type as string and convert to enum
-        let gateway_type_str = data
-            .get("gateway_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("UNSPECIFIED");
-
-        let r#type = string_to_gateway_type(gateway_type_str) as i32;
-
-        // Extract name from top-level column
         let name = data
             .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
 
-        // Extract gateway_config JSON
-        let gateway_config = data
-            .get("gateway_config")
-            .cloned()
-            .unwrap_or_else(|| Value::Object(Default::default()));
-
-        // Extract broker_url from config and create Config oneof
-        let config = gateway_config
+        let broker_url = data
             .get("broker_url")
             .and_then(|v| v.as_str())
-            .map(|broker_url| {
-                Config::EmqxConfig(EmqxGatewayConfig {
-                    broker_url: broker_url.to_string(),
-                })
-            });
+            .unwrap_or("")
+            .to_string();
 
-        // Default status to ACTIVE
         let status = GatewayStatus::Active as i32;
 
-        // Extract timestamps if available
         let created_at = data
             .get("created_at")
             .and_then(|v| v.as_str())
@@ -84,13 +60,16 @@ impl GatewayConverter {
             .and_then(|v| v.as_str())
             .and_then(|s| parse_timestamp(s).ok());
 
+        // Credentials are excluded from the CDC publication and never travel
+        // through this stream. The orchestrator fetches credentials directly
+        // from PostgreSQL via the gateway repository before starting a runner.
         Ok(Gateway {
             gateway_id,
             organization_id,
             name,
-            config,
             status,
-            r#type,
+            broker_url,
+            credentials: None,
             created_at,
             updated_at,
             deleted_at,
@@ -106,27 +85,16 @@ impl CdcConverter for GatewayConverter {
     }
 
     async fn convert_update(&self, _old: Value, new: Value) -> anyhow::Result<Bytes> {
-        // For updates, we only send the new state
         let proto = self.value_to_proto(&new)?;
         Ok(Bytes::from(proto.encode_to_vec()))
     }
 
     async fn convert_delete(&self, data: Value) -> anyhow::Result<Bytes> {
-        // For deletes, we send the final state
         let proto = self.value_to_proto(&data)?;
         Ok(Bytes::from(proto.encode_to_vec()))
     }
 }
 
-/// Converts a string gateway type to the protobuf enum
-fn string_to_gateway_type(s: &str) -> GatewayType {
-    match s.to_uppercase().as_str() {
-        "EMQX" => GatewayType::Emqx,
-        _ => GatewayType::Unspecified,
-    }
-}
-
-/// Parses an ISO 8601 timestamp string into a protobuf Timestamp
 fn parse_timestamp(s: &str) -> anyhow::Result<prost_types::Timestamp> {
     use chrono::DateTime;
 
@@ -149,26 +117,18 @@ mod tests {
             "gateway_id": "test-gateway-1",
             "organization_id": "org-1",
             "name": "Test Gateway",
-            "gateway_type": "EMQX",
-            "gateway_config": {
-                "broker_url": "mqtt://localhost:1883"
-            },
+            "broker_url": "mqtt://localhost:1883",
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z"
         });
 
-        let result = converter.convert_insert(data).await;
-        assert!(result.is_ok());
-
-        let bytes = result.unwrap();
-        assert!(!bytes.is_empty());
-
-        // Verify we can decode the protobuf
+        let bytes = converter.convert_insert(data).await.unwrap();
         let decoded = Gateway::decode(bytes).unwrap();
         assert_eq!(decoded.gateway_id, "test-gateway-1");
         assert_eq!(decoded.organization_id, "org-1");
         assert_eq!(decoded.name, "Test Gateway");
-        assert_eq!(decoded.r#type, GatewayType::Emqx as i32);
+        assert_eq!(decoded.broker_url, "mqtt://localhost:1883");
+        assert!(decoded.credentials.is_none());
     }
 
     #[tokio::test]
@@ -178,25 +138,21 @@ mod tests {
             "gateway_id": "test-gateway-1",
             "organization_id": "org-1",
             "name": "Old Name",
-            "gateway_type": "EMQX",
-            "gateway_config": {}
+            "broker_url": "mqtt://localhost:1883"
         });
         let new = json!({
             "gateway_id": "test-gateway-1",
             "organization_id": "org-1",
             "name": "Updated Gateway",
-            "gateway_type": "EMQX",
-            "gateway_config": {},
+            "broker_url": "mqtt://localhost:1883",
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-02T00:00:00Z"
         });
 
-        let result = converter.convert_update(old, new).await;
-        assert!(result.is_ok());
-
-        let bytes = result.unwrap();
+        let bytes = converter.convert_update(old, new).await.unwrap();
         let decoded = Gateway::decode(bytes).unwrap();
         assert_eq!(decoded.name, "Updated Gateway");
+        assert!(decoded.credentials.is_none());
     }
 
     #[tokio::test]
@@ -206,25 +162,35 @@ mod tests {
             "gateway_id": "test-gateway-1",
             "organization_id": "org-1",
             "name": "Deleted Gateway",
-            "gateway_type": "EMQX",
-            "gateway_config": {},
+            "broker_url": "mqtt://localhost:1883",
             "deleted_at": "2024-01-03T00:00:00Z"
         });
 
-        let result = converter.convert_delete(data).await;
-        assert!(result.is_ok());
-
-        let bytes = result.unwrap();
+        let bytes = converter.convert_delete(data).await.unwrap();
         let decoded = Gateway::decode(bytes).unwrap();
         assert_eq!(decoded.gateway_id, "test-gateway-1");
         assert!(decoded.deleted_at.is_some());
+        assert!(decoded.credentials.is_none());
     }
 
-    #[test]
-    fn test_string_to_gateway_type() {
-        assert_eq!(string_to_gateway_type("EMQX"), GatewayType::Emqx);
-        assert_eq!(string_to_gateway_type("emqx"), GatewayType::Emqx);
-        assert_eq!(string_to_gateway_type("unknown"), GatewayType::Unspecified);
+    /// Even if the upstream row somehow includes username/password (e.g. a
+    /// developer accidentally drops the column-list publication restriction),
+    /// the converter must never propagate them.
+    #[tokio::test]
+    async fn test_credentials_never_propagate() {
+        let converter = GatewayConverter::new();
+        let data = json!({
+            "gateway_id": "test-gateway-1",
+            "organization_id": "org-1",
+            "name": "Test",
+            "broker_url": "mqtt://localhost:1883",
+            "username": "alice",
+            "password": "s3cret"
+        });
+
+        let bytes = converter.convert_insert(data).await.unwrap();
+        let decoded = Gateway::decode(bytes).unwrap();
+        assert!(decoded.credentials.is_none());
     }
 
     #[test]

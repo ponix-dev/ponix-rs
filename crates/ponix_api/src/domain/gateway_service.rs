@@ -1,8 +1,8 @@
 use common::auth::{Action, AuthorizationProvider, Resource};
 use common::domain::{
     CreateGatewayRepoInput, DeleteGatewayRepoInput, DomainError, DomainResult, Gateway,
-    GatewayConfig, GatewayRepository, GetGatewayRepoInput, GetOrganizationRepoInput,
-    ListGatewaysRepoInput, OrganizationRepository, UpdateGatewayRepoInput,
+    GatewayRepository, GetGatewayRepoInput, GetOrganizationRepoInput, ListGatewaysRepoInput,
+    MqttCredentials, OrganizationRepository, UpdateGatewayRepoInput,
 };
 use garde::Validate;
 use std::sync::Arc;
@@ -18,9 +18,9 @@ pub struct CreateGatewayRequest {
     #[garde(length(min = 1))]
     pub name: String,
     #[garde(length(min = 1))]
-    pub gateway_type: String,
+    pub broker_url: String,
     #[garde(dive)]
-    pub gateway_config: GatewayConfig,
+    pub credentials: Option<MqttCredentials>,
 }
 
 /// Service request for getting a gateway
@@ -46,9 +46,9 @@ pub struct UpdateGatewayRequest {
     #[garde(inner(length(min = 1)))]
     pub name: Option<String>,
     #[garde(inner(length(min = 1)))]
-    pub gateway_type: Option<String>,
+    pub broker_url: Option<String>,
     #[garde(dive)]
-    pub gateway_config: Option<GatewayConfig>,
+    pub credentials: Option<MqttCredentials>,
 }
 
 /// Service request for deleting a gateway
@@ -92,14 +92,12 @@ impl GatewayService {
     }
 
     /// Create a new gateway for an organization
-    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id, gateway_type = %request.gateway_type))]
+    #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
     pub async fn create_gateway(&self, request: CreateGatewayRequest) -> DomainResult<Gateway> {
-        // Validate request using garde
         common::garde::validate_struct(&request)?;
 
-        debug!(organization_id = %request.organization_id, gateway_type = %request.gateway_type, "Creating gateway");
+        debug!(organization_id = %request.organization_id, "Creating gateway");
 
-        // Check authorization
         self.authorization_provider
             .require_permission(
                 &request.user_id,
@@ -109,7 +107,6 @@ impl GatewayService {
             )
             .await?;
 
-        // Validate organization exists and is not deleted
         let org_input = GetOrganizationRepoInput {
             organization_id: request.organization_id.clone(),
         };
@@ -135,15 +132,14 @@ impl GatewayService {
             }
         }
 
-        // Generate gateway ID
         let gateway_id = xid::new().to_string();
 
         let repo_input = CreateGatewayRepoInput {
             gateway_id: gateway_id.clone(),
             organization_id: request.organization_id,
             name: request.name,
-            gateway_type: request.gateway_type,
-            gateway_config: request.gateway_config,
+            broker_url: request.broker_url,
+            credentials: request.credentials,
         };
 
         let gateway = self.gateway_repository.create_gateway(repo_input).await?;
@@ -155,12 +151,10 @@ impl GatewayService {
     /// Get a gateway by ID and organization
     #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
     pub async fn get_gateway(&self, request: GetGatewayRequest) -> DomainResult<Gateway> {
-        // Validate request using garde
         common::garde::validate_struct(&request)?;
 
         debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Getting gateway");
 
-        // Check authorization
         self.authorization_provider
             .require_permission(
                 &request.user_id,
@@ -187,12 +181,10 @@ impl GatewayService {
     /// Update a gateway
     #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
     pub async fn update_gateway(&self, request: UpdateGatewayRequest) -> DomainResult<Gateway> {
-        // Validate request using garde
         common::garde::validate_struct(&request)?;
 
         debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Updating gateway");
 
-        // Check authorization
         self.authorization_provider
             .require_permission(
                 &request.user_id,
@@ -206,8 +198,8 @@ impl GatewayService {
             gateway_id: request.gateway_id,
             organization_id: request.organization_id,
             name: request.name,
-            gateway_type: request.gateway_type,
-            gateway_config: request.gateway_config,
+            broker_url: request.broker_url,
+            credentials: request.credentials,
         };
 
         let gateway = self.gateway_repository.update_gateway(repo_input).await?;
@@ -219,12 +211,10 @@ impl GatewayService {
     /// Soft delete a gateway
     #[instrument(skip(self, request), fields(user_id = %request.user_id, gateway_id = %request.gateway_id, organization_id = %request.organization_id))]
     pub async fn delete_gateway(&self, request: DeleteGatewayRequest) -> DomainResult<()> {
-        // Validate request using garde
         common::garde::validate_struct(&request)?;
 
         debug!(gateway_id = %request.gateway_id, organization_id = %request.organization_id, "Deleting gateway");
 
-        // Check authorization
         self.authorization_provider
             .require_permission(
                 &request.user_id,
@@ -248,12 +238,10 @@ impl GatewayService {
     /// List gateways by organization
     #[instrument(skip(self, request), fields(user_id = %request.user_id, organization_id = %request.organization_id))]
     pub async fn list_gateways(&self, request: ListGatewaysRequest) -> DomainResult<Vec<Gateway>> {
-        // Validate request using garde
         common::garde::validate_struct(&request)?;
 
         debug!(organization_id = %request.organization_id, "Listing gateways");
 
-        // Check authorization
         self.authorization_provider
             .require_permission(
                 &request.user_id,
@@ -279,10 +267,7 @@ mod tests {
     use super::*;
     use chrono::Utc;
     use common::auth::MockAuthorizationProvider;
-    use common::domain::{
-        EmqxGatewayConfig, GatewayConfig, MockGatewayRepository, MockOrganizationRepository,
-        Organization,
-    };
+    use common::domain::{MockGatewayRepository, MockOrganizationRepository, Organization};
 
     const TEST_USER_ID: &str = "user-123";
 
@@ -293,36 +278,35 @@ mod tests {
         Arc::new(mock)
     }
 
+    fn make_org(id: &str, deleted: bool) -> Organization {
+        Organization {
+            id: id.to_string(),
+            name: "Test Org".to_string(),
+            deleted_at: deleted.then(Utc::now),
+            created_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
+        }
+    }
+
     #[tokio::test]
     async fn test_create_gateway_success() {
         let mut mock_gateway_repo = MockGatewayRepository::new();
         let mut mock_org_repo = MockOrganizationRepository::new();
 
-        let test_config = GatewayConfig::Emqx(EmqxGatewayConfig {
-            broker_url: "mqtt://mqtt.example.com:1883".to_string(),
-        });
-
         mock_org_repo
             .expect_get_organization()
             .withf(|input| input.organization_id == "org-001")
             .times(1)
-            .return_once(|_| {
-                Ok(Some(Organization {
-                    id: "org-001".to_string(),
-                    name: "Test Org".to_string(),
-                    deleted_at: None,
-                    created_at: Some(Utc::now()),
-                    updated_at: Some(Utc::now()),
-                }))
-            });
+            .return_once(|_| Ok(Some(make_org("org-001", false))));
 
         mock_gateway_repo
             .expect_create_gateway()
             .withf(|input| {
                 input.organization_id == "org-001"
-                    && input.gateway_type == "emqx"
+                    && input.broker_url == "mqtt://mqtt.example.com:1883"
                     && !input.gateway_id.is_empty()
                     && input.name == "Test Gateway"
+                    && input.credentials.is_none()
             })
             .times(1)
             .return_once(|input| {
@@ -330,8 +314,8 @@ mod tests {
                     gateway_id: input.gateway_id,
                     organization_id: input.organization_id,
                     name: input.name,
-                    gateway_type: input.gateway_type,
-                    gateway_config: input.gateway_config,
+                    broker_url: input.broker_url,
+                    credentials: input.credentials,
                     deleted_at: None,
                     created_at: Some(Utc::now()),
                     updated_at: Some(Utc::now()),
@@ -348,16 +332,69 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
             name: "Test Gateway".to_string(),
-            gateway_type: "emqx".to_string(),
-            gateway_config: test_config,
+            broker_url: "mqtt://mqtt.example.com:1883".to_string(),
+            credentials: None,
         };
 
-        let result = service.create_gateway(request).await;
-        assert!(result.is_ok());
-        let gateway = result.unwrap();
+        let gateway = service.create_gateway(request).await.unwrap();
         assert_eq!(gateway.organization_id, "org-001");
-        assert_eq!(gateway.gateway_type, "emqx");
+        assert_eq!(gateway.broker_url, "mqtt://mqtt.example.com:1883");
         assert_eq!(gateway.name, "Test Gateway");
+        assert!(gateway.credentials.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_create_gateway_with_credentials() {
+        let mut mock_gateway_repo = MockGatewayRepository::new();
+        let mut mock_org_repo = MockOrganizationRepository::new();
+
+        mock_org_repo
+            .expect_get_organization()
+            .times(1)
+            .return_once(|_| Ok(Some(make_org("org-001", false))));
+
+        mock_gateway_repo
+            .expect_create_gateway()
+            .withf(|input| {
+                input
+                    .credentials
+                    .as_ref()
+                    .map(|c| c.username == "alice" && c.password == "s3cret")
+                    .unwrap_or(false)
+            })
+            .times(1)
+            .return_once(|input| {
+                Ok(Gateway {
+                    gateway_id: input.gateway_id,
+                    organization_id: input.organization_id,
+                    name: input.name,
+                    broker_url: input.broker_url,
+                    credentials: input.credentials,
+                    deleted_at: None,
+                    created_at: Some(Utc::now()),
+                    updated_at: Some(Utc::now()),
+                })
+            });
+
+        let service = GatewayService::new(
+            Arc::new(mock_gateway_repo),
+            Arc::new(mock_org_repo),
+            create_mock_auth_provider(),
+        );
+
+        let request = CreateGatewayRequest {
+            user_id: TEST_USER_ID.to_string(),
+            organization_id: "org-001".to_string(),
+            name: "Test Gateway".to_string(),
+            broker_url: "mqtt://mqtt.example.com:1883".to_string(),
+            credentials: Some(MqttCredentials {
+                username: "alice".to_string(),
+                password: "s3cret".to_string(),
+            }),
+        };
+
+        let gateway = service.create_gateway(request).await.unwrap();
+        assert!(gateway.credentials.is_some());
     }
 
     #[tokio::test]
@@ -380,10 +417,8 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-999".to_string(),
             name: "Test Gateway".to_string(),
-            gateway_type: "emqx".to_string(),
-            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-                broker_url: "mqtt://localhost:1883".to_string(),
-            }),
+            broker_url: "mqtt://localhost:1883".to_string(),
+            credentials: None,
         };
 
         let result = service.create_gateway(request).await;
@@ -398,15 +433,7 @@ mod tests {
         mock_org_repo
             .expect_get_organization()
             .times(1)
-            .return_once(|_| {
-                Ok(Some(Organization {
-                    id: "org-001".to_string(),
-                    name: "Test Org".to_string(),
-                    deleted_at: Some(Utc::now()),
-                    created_at: Some(Utc::now()),
-                    updated_at: Some(Utc::now()),
-                }))
-            });
+            .return_once(|_| Ok(Some(make_org("org-001", true))));
 
         let service = GatewayService::new(
             Arc::new(mock_gateway_repo),
@@ -418,10 +445,8 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
             name: "Test Gateway".to_string(),
-            gateway_type: "emqx".to_string(),
-            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-                broker_url: "mqtt://localhost:1883".to_string(),
-            }),
+            broker_url: "mqtt://localhost:1883".to_string(),
+            credentials: None,
         };
 
         let result = service.create_gateway(request).await;
@@ -443,16 +468,15 @@ mod tests {
             user_id: TEST_USER_ID.to_string(),
             organization_id: "org-001".to_string(),
             name: "Test Gateway".to_string(),
-            gateway_type: "emqx".to_string(),
-            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-                broker_url: "".to_string(),
-            }),
+            broker_url: "".to_string(),
+            credentials: None,
         };
 
         let result = service.create_gateway(request).await;
-        assert!(matches!(result, Err(DomainError::ValidationError(_))));
-        if let Err(DomainError::ValidationError(msg)) = result {
-            assert!(msg.contains("broker_url"));
+        let err = result.unwrap_err();
+        match err {
+            DomainError::ValidationError(msg) => assert!(msg.contains("broker_url")),
+            other => panic!("expected ValidationError, got {other:?}"),
         }
     }
 
@@ -472,12 +496,8 @@ mod tests {
             organization_id: "".to_string(),
         };
 
-        let result = service.get_gateway(request).await;
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            DomainError::ValidationError(_)
-        ));
+        let err = service.get_gateway(request).await.unwrap_err();
+        assert!(matches!(err, DomainError::ValidationError(_)));
     }
 
     #[tokio::test]
@@ -495,16 +515,12 @@ mod tests {
             gateway_id: "gw-123".to_string(),
             organization_id: "".to_string(),
             name: None,
-            gateway_type: None,
-            gateway_config: None,
+            broker_url: None,
+            credentials: None,
         };
 
-        let result = service.update_gateway(request).await;
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            DomainError::ValidationError(_)
-        ));
+        let err = service.update_gateway(request).await.unwrap_err();
+        assert!(matches!(err, DomainError::ValidationError(_)));
     }
 
     #[tokio::test]
@@ -523,11 +539,7 @@ mod tests {
             organization_id: "".to_string(),
         };
 
-        let result = service.delete_gateway(request).await;
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            DomainError::ValidationError(_)
-        ));
+        let err = service.delete_gateway(request).await.unwrap_err();
+        assert!(matches!(err, DomainError::ValidationError(_)));
     }
 }

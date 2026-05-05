@@ -36,10 +36,7 @@ GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"End Device Test Gateway\",
-        \"type\": \"GATEWAY_TYPE_EMQX\",
-        \"emqx_config\": {
-            \"broker_url\": \"mqtt://localhost:1883\"
-        }
+        \"broker_url\": \"mqtt://localhost:1883\"
     }")
 
 GATEWAY_ID=$(echo "$GATEWAY_RESPONSE" | jq -r '.gateway.gatewayId // .gatewayId // empty')

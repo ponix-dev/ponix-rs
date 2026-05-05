@@ -1,6 +1,6 @@
 use crate::domain::{
     DeployerType, GatewayDeployer, GatewayOrchestrationService, GatewayOrchestrationServiceConfig,
-    GatewayRunnerFactory, InMemoryDeploymentHandleStore, InProcessDeployer,
+    GatewayRunner, InMemoryDeploymentHandleStore, InProcessDeployer,
 };
 use crate::mqtt::EmqxGatewayRunner;
 use crate::nats::{GatewayCdcConsumer, RawEnvelopeProducer};
@@ -37,9 +37,8 @@ impl GatewayOrchestrator {
             RawEnvelopeProducer::new(publisher_client, config.raw_envelopes_stream.clone()),
         );
 
-        // Configure gateway runner factory with supported gateway types
-        let mut runner_factory = GatewayRunnerFactory::new();
-        runner_factory.register_emqx(|| Arc::new(EmqxGatewayRunner::new()));
+        // All gateways today are LoRaWAN MQTT — there's a single runner.
+        let runner: Arc<dyn GatewayRunner> = Arc::new(EmqxGatewayRunner::new());
 
         // Resolve deployer from configuration
         let deployer: Arc<dyn GatewayDeployer> = match &config.deployer_type {
@@ -49,7 +48,6 @@ impl GatewayOrchestrator {
 
         let handle_store = Arc::new(InMemoryDeploymentHandleStore::new());
 
-        // Initialize orchestrator
         let orchestrator_config = GatewayOrchestrationServiceConfig::default();
         let orchestrator = Arc::new(GatewayOrchestrationService::new(
             gateway_repository,
@@ -58,14 +56,13 @@ impl GatewayOrchestrator {
             orchestrator_config,
             orchestrator_shutdown_token,
             raw_envelope_producer,
-            runner_factory,
+            runner,
         ));
 
         // Start orchestrator to load existing gateways
         orchestrator.launch_gateways().await?;
         debug!("gateway orchestrator started");
 
-        // Setup CDC consumer
         let cdc_consumer = GatewayCdcConsumer::new(
             Arc::clone(&nats_client),
             config.gateway_stream.clone(),
@@ -79,7 +76,6 @@ impl GatewayOrchestrator {
     }
 
     pub fn into_runner_process(self) -> ponix_runner::AppProcess {
-        // Gateway CDC Consumer process - handles NATS CDC events and orchestrates gateways
         Box::new({
             let cdc_consumer = self.cdc_consumer;
             move |ctx| Box::pin(async move { cdc_consumer.run(ctx).await })
