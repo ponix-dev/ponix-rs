@@ -10,7 +10,7 @@ use crate::domain::{
     DeploymentHandle, GatewayDeployer, GatewayOrchestrationServiceConfig, GatewayRunner,
 };
 
-use super::hash_gateway_config;
+use super::hash_gateway_connection;
 
 /// Deployer that runs gateway processes in-process via `tokio::spawn`.
 pub struct InProcessDeployer;
@@ -43,7 +43,7 @@ impl GatewayDeployer for InProcessDeployer {
 
         let handle = InProcessDeploymentHandle {
             gateway: gateway.clone(),
-            config_hash: hash_gateway_config(&gateway.gateway_config),
+            config_hash: hash_gateway_connection(gateway),
             cancellation_token: process_token,
             join_handle: Some(join_handle),
         };
@@ -104,7 +104,7 @@ impl DeploymentHandle for InProcessDeploymentHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::domain::{EmqxGatewayConfig, GatewayConfig, MockRawEnvelopeProducer};
+    use common::domain::MockRawEnvelopeProducer;
 
     struct MockRunner;
 
@@ -123,10 +123,6 @@ mod tests {
                 _ = shutdown_token.cancelled() => {}
             }
         }
-
-        fn gateway_type(&self) -> &'static str {
-            "MOCK"
-        }
     }
 
     fn test_gateway() -> Gateway {
@@ -134,10 +130,8 @@ mod tests {
             gateway_id: "gw-test".to_string(),
             organization_id: "org-001".to_string(),
             name: "Test Gateway".to_string(),
-            gateway_type: "emqx".to_string(),
-            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-                broker_url: "mqtt://localhost:1883".to_string(),
-            }),
+            broker_url: "mqtt://localhost:1883".to_string(),
+            credentials: None,
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),
             deleted_at: None,

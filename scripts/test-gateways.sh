@@ -43,9 +43,10 @@ GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"EMQX Gateway 01\",
-        \"type\": \"GATEWAY_TYPE_EMQX\",
-        \"emqx_config\": {
-            \"broker_url\": \"mqtt://ponix-emqx:1883\"
+        \"broker_url\": \"mqtt://ponix-emqx:1883\",
+        \"credentials\": {
+            \"username\": \"ponix\",
+            \"password\": \"ponix\"
         }
     }")
 
@@ -120,10 +121,7 @@ GATEWAY2_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Gateway to Delete\",
-        \"type\": \"GATEWAY_TYPE_EMQX\",
-        \"emqx_config\": {
-            \"broker_url\": \"mqtt://localhost:1883\"
-        }
+        \"broker_url\": \"mqtt://localhost:1883\"
     }")
 
 GATEWAY2_ID=$(echo "$GATEWAY2_RESPONSE" | jq -r '.gateway.gatewayId // .gatewayId // empty')
@@ -163,7 +161,7 @@ fi
 print_step "Testing CreateGateway without auth..."
 test_unauthenticated \
     "gateway.v1.GatewayService/CreateGateway" \
-    "{\"organization_id\": \"$ORG_ID\", \"name\": \"Unauthorized\", \"type\": \"GATEWAY_TYPE_EMQX\"}"
+    "{\"organization_id\": \"$ORG_ID\", \"name\": \"Unauthorized\", \"broker_url\": \"mqtt://localhost:1883\"}"
 
 print_step "Testing GetGateway without auth..."
 test_unauthenticated \
@@ -192,7 +190,7 @@ test_unauthenticated \
 print_step "Testing CreateGateway with invalid token..."
 test_invalid_token \
     "gateway.v1.GatewayService/CreateGateway" \
-    "{\"organization_id\": \"$ORG_ID\", \"name\": \"Invalid Token\", \"type\": \"GATEWAY_TYPE_EMQX\"}"
+    "{\"organization_id\": \"$ORG_ID\", \"name\": \"Invalid Token\", \"broker_url\": \"mqtt://localhost:1883\"}"
 
 # ============================================
 # SUMMARY

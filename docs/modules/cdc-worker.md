@@ -15,7 +15,7 @@ related-files:
   - crates/cdc_worker/src/domain/end_device_definition_converter.rs
   - crates/cdc_worker/src/domain/user_converter.rs
   - crates/cdc_worker/src/nats/nats_sink.rs
-last-updated: 2026-03-18
+last-updated: 2026-05-04
 ---
 
 # CDC Worker
@@ -69,7 +69,7 @@ Each converter follows the same pattern: extract fields from JSON, map database 
 
 - **UserConverter** excludes `password_hash` from CDC events for security.
 
-- **GatewayConverter** extracts `broker_url` from the `gateway_config` JSONB column and maps it into the protobuf `Config` oneof as `EmqxGatewayConfig`.
+- **GatewayConverter** reads `broker_url` directly from the gateways table and emits a flat protobuf `Gateway` message. It deliberately does **not** read `username` or `password` — those columns are excluded from the Postgres publication, so MQTT credentials never travel through CDC. The gateway orchestrator fetches credentials from Postgres directly when starting a runner.
 
 - **OrganizationConverter** derives status enums from the presence of `deleted_at` (active vs. inactive).
 

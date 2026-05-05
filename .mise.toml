@@ -58,3 +58,16 @@ run = "cargo watch -x 'test --workspace --features integration-tests -- --test-t
 [tasks."test:e2e"]
 description = "Run end-to-end tests (requires running service)"
 run = "./scripts/test-all.sh"
+
+# Tilt / dev environment tasks
+[tasks."tilt:up"]
+description = "Start the local dev stack (deps + service) via Tilt"
+run = "tilt up"
+
+[tasks."tilt:down"]
+description = "Stop the local dev stack (deps + service) via Tilt"
+run = "tilt down"
+
+[tasks."tilt:wipe"]
+description = "Remove dev volumes (Postgres, NATS, ClickHouse, EMQX). Destroys all local data. Run 'tilt:down' first."
+run = "docker volume rm -f docker_postgres-data docker_nats-data docker_clickhouse-data docker_emqx-data docker_otel-data"

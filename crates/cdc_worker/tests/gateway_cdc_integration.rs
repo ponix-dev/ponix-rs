@@ -4,8 +4,8 @@ use async_nats::jetstream;
 use cdc_worker::domain::{CdcConfig, CdcProcess, EntityConfig, GatewayConverter};
 use common::domain::{
     CreateGatewayRepoInput, CreateOrganizationRepoInputWithId, DeleteGatewayRepoInput,
-    EmqxGatewayConfig, GatewayConfig, GatewayRepository, OrganizationRepository,
-    RegisterUserRepoInputWithId, UpdateGatewayRepoInput, UserRepository,
+    GatewayRepository, MqttCredentials, OrganizationRepository, RegisterUserRepoInputWithId,
+    UpdateGatewayRepoInput, UserRepository,
 };
 use common::nats::NatsClient;
 use common::postgres::{
@@ -14,7 +14,7 @@ use common::postgres::{
 };
 use futures_util::stream::StreamExt;
 use goose::MigrationRunner;
-use ponix_proto_prost::gateway::v1::{Gateway, GatewayType};
+use ponix_proto_prost::gateway::v1::Gateway;
 use prost::Message;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,9 +23,6 @@ use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tokio::time::{sleep, timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
-
-// For manual CDC publication setup
-use tokio_postgres::NoTls;
 
 const STREAM_NAME: &str = "test_gateways";
 const SUBJECT_PREFIX: &str = "test_gateways";
@@ -110,22 +107,12 @@ async fn setup_test_env() -> TestEnvironment {
 
     info!("PostgreSQL migrations completed");
 
-    // Set replica identity for gateways table (required for CDC)
-    let client = tokio_postgres::connect(&pg_dsn, NoTls)
-        .await
-        .expect("Failed to connect for CDC setup");
-    let (pg_client, connection) = client;
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("PostgreSQL connection error: {}", e);
-        }
-    });
-
-    pg_client
-        .execute("ALTER TABLE gateways REPLICA IDENTITY FULL", &[])
-        .await
-        .expect("Failed to set replica identity");
+    // Replica identity stays at the default (PRIMARY KEY) because the
+    // gateways publication uses a column list that excludes username/password.
+    // Postgres requires the replica identity columns to be a subset of the
+    // publication's column list, so REPLICA IDENTITY FULL would fail on
+    // UPDATE/DELETE with "Column list used by the publication does not cover
+    // the replica identity".
     info!("CDC publication created by migration");
 
     // Create PostgreSQL client and repository
@@ -301,9 +288,10 @@ async fn test_gateway_create_cdc_event() {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-001".to_string(),
         name: "Test Gateway Create 001".to_string(),
-        gateway_type: "EMQX".to_string(),
-        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-            broker_url: "mqtt://test.example.com:1883".to_string(),
+        broker_url: "mqtt://test.example.com:1883".to_string(),
+        credentials: Some(MqttCredentials {
+            username: "alice".to_string(),
+            password: "s3cret".to_string(),
         }),
     };
 
@@ -320,20 +308,16 @@ async fn test_gateway_create_cdc_event() {
         .await
         .expect("Failed to receive CDC create event");
 
-    // Validate the CDC event
+    // Validate the CDC event. Credentials must NOT be present — the CDC
+    // publication's column list excludes username/password.
     assert_eq!(gateway_event.gateway_id, gateway_id);
     assert_eq!(gateway_event.organization_id, "test-org-001");
-    assert_eq!(gateway_event.r#type, GatewayType::Emqx as i32);
+    assert_eq!(gateway_event.broker_url, "mqtt://test.example.com:1883");
     assert!(gateway_event.created_at.is_some());
-
-    // Validate config
-    if let Some(config) = gateway_event.config {
-        match config {
-            ponix_proto_prost::gateway::v1::gateway::Config::EmqxConfig(emqx) => {
-                assert_eq!(emqx.broker_url, "mqtt://test.example.com:1883");
-            }
-        }
-    }
+    assert!(
+        gateway_event.credentials.is_none(),
+        "credentials must never travel through CDC"
+    );
 
     debug!("CDC create event validated successfully");
 }
@@ -356,10 +340,8 @@ async fn test_gateway_update_cdc_event() {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-002".to_string(),
         name: "Test Gateway Update 001".to_string(),
-        gateway_type: "EMQX".to_string(),
-        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-            broker_url: "mqtt://original.example.com:1883".to_string(),
-        }),
+        broker_url: "mqtt://original.example.com:1883".to_string(),
+        credentials: None,
     };
 
     env.gateway_repo
@@ -380,10 +362,8 @@ async fn test_gateway_update_cdc_event() {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-002".to_string(),
         name: None,
-        gateway_type: None,
-        gateway_config: Some(GatewayConfig::Emqx(EmqxGatewayConfig {
-            broker_url: "mqtt://updated.example.com:8883".to_string(),
-        })),
+        broker_url: Some("mqtt://updated.example.com:8883".to_string()),
+        credentials: None,
     };
 
     env.gateway_repo
@@ -399,18 +379,10 @@ async fn test_gateway_update_cdc_event() {
         .await
         .expect("Failed to receive CDC update event");
 
-    // Validate the CDC event
     assert_eq!(gateway_event.gateway_id, gateway_id);
     assert!(gateway_event.updated_at.is_some());
-
-    // Validate config
-    if let Some(config) = gateway_event.config {
-        match config {
-            ponix_proto_prost::gateway::v1::gateway::Config::EmqxConfig(emqx) => {
-                assert_eq!(emqx.broker_url, "mqtt://updated.example.com:8883");
-            }
-        }
-    }
+    assert_eq!(gateway_event.broker_url, "mqtt://updated.example.com:8883");
+    assert!(gateway_event.credentials.is_none());
 
     debug!("CDC update event validated successfully");
 }
@@ -433,10 +405,8 @@ async fn test_gateway_delete_cdc_event() {
         gateway_id: gateway_id.clone(),
         organization_id: "test-org-003".to_string(),
         name: "Test Gateway Delete 001".to_string(),
-        gateway_type: "EMQX".to_string(),
-        gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-            broker_url: "mqtt://delete-test.example.com:1883".to_string(),
-        }),
+        broker_url: "mqtt://delete-test.example.com:1883".to_string(),
+        credentials: None,
     };
 
     env.gateway_repo

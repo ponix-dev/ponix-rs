@@ -3,27 +3,43 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use garde::Validate;
 
-/// Gateway entity representing a configured gateway for an organization
+/// MQTT credentials for connecting to a gateway's broker.
+///
+/// Stored in plaintext for now; encryption-at-rest is tracked in #208.
+#[derive(Debug, Clone, PartialEq, Eq, Validate)]
+pub struct MqttCredentials {
+    #[garde(length(min = 1))]
+    pub username: String,
+    #[garde(length(min = 1))]
+    pub password: String,
+}
+
+/// Gateway entity representing a LoRaWAN network server MQTT connection.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Gateway {
     pub gateway_id: String,
     pub organization_id: String,
     pub name: String,
-    pub gateway_type: String,
-    pub gateway_config: GatewayConfig,
+    pub broker_url: String,
+    pub credentials: Option<MqttCredentials>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
 
 /// Repository input for creating a gateway (domain service -> repository)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Validate)]
 pub struct CreateGatewayRepoInput {
+    #[garde(skip)]
     pub gateway_id: String,
+    #[garde(skip)]
     pub organization_id: String,
+    #[garde(length(min = 1))]
     pub name: String,
-    pub gateway_type: String,
-    pub gateway_config: GatewayConfig,
+    #[garde(length(min = 1))]
+    pub broker_url: String,
+    #[garde(dive)]
+    pub credentials: Option<MqttCredentials>,
 }
 
 /// Repository input for getting a gateway by ID
@@ -34,13 +50,18 @@ pub struct GetGatewayRepoInput {
 }
 
 /// Repository input for updating a gateway
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Validate)]
 pub struct UpdateGatewayRepoInput {
+    #[garde(skip)]
     pub gateway_id: String,
+    #[garde(skip)]
     pub organization_id: String,
+    #[garde(inner(length(min = 1)))]
     pub name: Option<String>,
-    pub gateway_type: Option<String>,
-    pub gateway_config: Option<GatewayConfig>,
+    #[garde(inner(length(min = 1)))]
+    pub broker_url: Option<String>,
+    #[garde(dive)]
+    pub credentials: Option<MqttCredentials>,
 }
 
 /// Repository input for deleting a gateway
@@ -54,21 +75,6 @@ pub struct DeleteGatewayRepoInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListGatewaysRepoInput {
     pub organization_id: String,
-}
-
-/// Gateway configuration types
-/// Mirrors the protobuf Gateway config structure but as a domain type
-#[derive(Debug, Clone, PartialEq, Validate)]
-pub enum GatewayConfig {
-    /// EMQX gateway configuration
-    Emqx(#[garde(dive)] EmqxGatewayConfig),
-}
-
-/// EMQX gateway configuration
-#[derive(Debug, Clone, PartialEq, Validate)]
-pub struct EmqxGatewayConfig {
-    #[garde(length(min = 1))]
-    pub broker_url: String,
 }
 
 /// Repository trait for gateway persistence operations

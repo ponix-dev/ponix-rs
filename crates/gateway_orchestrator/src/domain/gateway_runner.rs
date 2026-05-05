@@ -7,14 +7,15 @@ use crate::domain::GatewayOrchestrationServiceConfig;
 
 /// Trait for running gateway subscriber processes.
 ///
-/// Each gateway type (EMQX, TTN, ChirpStack, etc.) implements this trait
-/// to define how to connect and subscribe to messages from that gateway.
+/// All gateways today are LoRaWAN MQTT connections. The trait remains so that
+/// future provider-specific runners (TTN, ChirpStack) can implement custom
+/// connection / topic semantics.
 #[async_trait]
 pub trait GatewayRunner: Send + Sync {
     /// Run the gateway subscriber process.
     ///
     /// This method should:
-    /// 1. Connect to the gateway's message broker/API
+    /// 1. Connect to the gateway's MQTT broker (using credentials when present)
     /// 2. Subscribe to messages for the organization
     /// 3. Convert received messages to RawEnvelopes
     /// 4. Publish RawEnvelopes to NATS via the producer
@@ -22,11 +23,11 @@ pub trait GatewayRunner: Send + Sync {
     /// 6. Stop gracefully when either cancellation token is triggered
     ///
     /// # Arguments
-    /// * `gateway` - The gateway configuration and metadata
-    /// * `config` - Orchestration service configuration (retry settings, etc.)
-    /// * `process_token` - Token for cancelling this specific gateway process
-    /// * `shutdown_token` - Token for global shutdown signal
-    /// * `raw_envelope_producer` - Producer for publishing RawEnvelopes to NATS
+    /// * `gateway` — full gateway record, including credentials when present
+    /// * `config` — orchestration service configuration (retry settings, etc.)
+    /// * `process_token` — token for cancelling this specific gateway process
+    /// * `shutdown_token` — token for global shutdown signal
+    /// * `raw_envelope_producer` — producer for publishing RawEnvelopes to NATS
     async fn run(
         &self,
         gateway: Gateway,
@@ -35,7 +36,4 @@ pub trait GatewayRunner: Send + Sync {
         shutdown_token: CancellationToken,
         raw_envelope_producer: Arc<dyn RawEnvelopeProducer>,
     );
-
-    /// Returns the gateway type name this runner handles (e.g., "EMQX", "TTN")
-    fn gateway_type(&self) -> &'static str;
 }

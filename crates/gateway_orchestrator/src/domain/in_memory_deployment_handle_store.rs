@@ -67,7 +67,7 @@ impl DeploymentHandleStore for InMemoryDeploymentHandleStore {
 mod tests {
     use super::*;
     use crate::domain::DeploymentHandle;
-    use common::domain::{EmqxGatewayConfig, Gateway, GatewayConfig};
+    use common::domain::Gateway;
     use std::time::Duration;
 
     struct StubHandle {
@@ -93,10 +93,8 @@ mod tests {
             gateway_id: id.to_string(),
             organization_id: "org-001".to_string(),
             name: format!("Gateway {}", id),
-            gateway_type: "emqx".to_string(),
-            gateway_config: GatewayConfig::Emqx(EmqxGatewayConfig {
-                broker_url: "mqtt://localhost:1883".to_string(),
-            }),
+            broker_url: "mqtt://localhost:1883".to_string(),
+            credentials: None,
             created_at: Some(chrono::Utc::now()),
             updated_at: None,
             deleted_at: None,

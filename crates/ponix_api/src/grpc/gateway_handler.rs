@@ -9,10 +9,7 @@ use crate::domain::{
 };
 use common::auth::AuthTokenProvider;
 use common::grpc::{domain_error_to_status, extract_user_context};
-use common::proto::{
-    proto_create_config_to_domain, proto_gateway_type_to_string, proto_update_config_to_domain,
-    to_proto_gateway,
-};
+use common::proto::{proto_to_domain_credentials, to_proto_gateway};
 use ponix_proto_prost::gateway::v1::{
     CreateGatewayRequest, CreateGatewayResponse, DeleteGatewayRequest, DeleteGatewayResponse,
     GetGatewayRequest, GetGatewayResponse, ListGatewaysRequest, ListGatewaysResponse,
@@ -53,24 +50,19 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<CreateGatewayRequest>,
     ) -> Result<Response<CreateGatewayResponse>, Status> {
-        // Extract user context from JWT
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert proto types before constructing request (to avoid borrow issues)
-        let gateway_type = proto_gateway_type_to_string(req.r#type());
-        let gateway_config = proto_create_config_to_domain(req.config);
+        let credentials = req.credentials.as_ref().map(proto_to_domain_credentials);
 
-        // Construct domain request
         let service_request = DomainCreateRequest {
             user_id: user_context.user_id,
             organization_id: req.organization_id,
             name: req.name,
-            gateway_type,
-            gateway_config,
+            broker_url: req.broker_url,
+            credentials,
         };
 
-        // Call domain service
         let gateway = self
             .domain_service
             .create_gateway(service_request)
@@ -96,18 +88,15 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<GetGatewayRequest>,
     ) -> Result<Response<GetGatewayResponse>, Status> {
-        // Extract user context from JWT
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Construct domain request directly
         let service_request = DomainGetRequest {
             user_id: user_context.user_id,
             gateway_id: req.gateway_id,
             organization_id: req.organization_id,
         };
 
-        // Call domain service
         let gateway = self
             .domain_service
             .get_gateway(service_request)
@@ -128,17 +117,14 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<ListGatewaysRequest>,
     ) -> Result<Response<ListGatewaysResponse>, Status> {
-        // Extract user context from JWT
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Construct domain request directly
         let service_request = DomainListRequest {
             user_id: user_context.user_id,
             organization_id: req.organization_id,
         };
 
-        // Call domain service
         let gateways = self
             .domain_service
             .list_gateways(service_request)
@@ -166,38 +152,26 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<UpdateGatewayRequest>,
     ) -> Result<Response<UpdateGatewayResponse>, Status> {
-        // Extract user context from JWT
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
 
-        // Convert gateway_type (only if not 0/unspecified)
-        let gateway_type = if req.r#type != 0 {
-            Some(proto_gateway_type_to_string(
-                ponix_proto_prost::gateway::v1::GatewayType::try_from(req.r#type)
-                    .unwrap_or(ponix_proto_prost::gateway::v1::GatewayType::Unspecified),
-            ))
-        } else {
-            None
-        };
-
-        // Convert name (only if not empty)
         let name = if req.name.is_empty() {
             None
         } else {
             Some(req.name)
         };
 
-        // Construct domain request directly
+        let credentials = req.credentials.as_ref().map(proto_to_domain_credentials);
+
         let service_request = DomainUpdateRequest {
             user_id: user_context.user_id,
             gateway_id: req.gateway_id,
             organization_id: req.organization_id,
             name,
-            gateway_type,
-            gateway_config: proto_update_config_to_domain(req.config),
+            broker_url: req.broker_url,
+            credentials,
         };
 
-        // Call domain service
         let gateway = self
             .domain_service
             .update_gateway(service_request)
@@ -223,19 +197,16 @@ impl GatewayServiceTrait for GatewayServiceHandler {
         &self,
         request: Request<DeleteGatewayRequest>,
     ) -> Result<Response<DeleteGatewayResponse>, Status> {
-        // Extract user context from JWT
         let user_context = extract_user_context(&request, self.auth_token_provider.as_ref())?;
         let req = request.into_inner();
         let gateway_id = req.gateway_id.clone();
 
-        // Construct domain request directly
         let service_request = DomainDeleteRequest {
             user_id: user_context.user_id,
             gateway_id: req.gateway_id,
             organization_id: req.organization_id,
         };
 
-        // Call domain service
         self.domain_service
             .delete_gateway(service_request)
             .await

@@ -1,6 +1,6 @@
 use crate::domain::{
-    CreateGatewayRepoInput, DeleteGatewayRepoInput, DomainError, DomainResult, EmqxGatewayConfig,
-    Gateway, GatewayConfig, GatewayRepository, GetGatewayRepoInput, ListGatewaysRepoInput,
+    CreateGatewayRepoInput, DeleteGatewayRepoInput, DomainError, DomainResult, Gateway,
+    GatewayRepository, GetGatewayRepoInput, ListGatewaysRepoInput, MqttCredentials,
     UpdateGatewayRepoInput,
 };
 use crate::postgres::PostgresClient;
@@ -15,50 +15,30 @@ pub struct GatewayRow {
     pub gateway_id: String,
     pub organization_id: String,
     pub name: String,
-    pub gateway_type: String,
-    pub gateway_config: serde_json::Value,
+    pub broker_url: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-/// Convert database GatewayRow to domain Gateway
 impl From<GatewayRow> for Gateway {
     fn from(row: GatewayRow) -> Self {
-        // Convert JSON config to domain GatewayConfig enum
-        let gateway_config = json_to_gateway_config(&row.gateway_config);
+        let credentials = match (row.username, row.password) {
+            (Some(username), Some(password)) => Some(MqttCredentials { username, password }),
+            _ => None,
+        };
 
         Gateway {
             gateway_id: row.gateway_id,
             organization_id: row.organization_id,
             name: row.name,
-            gateway_type: row.gateway_type,
-            gateway_config,
+            broker_url: row.broker_url,
+            credentials,
             deleted_at: row.deleted_at,
             created_at: Some(row.created_at),
             updated_at: Some(row.updated_at),
-        }
-    }
-}
-
-/// Convert serde_json::Value to domain GatewayConfig
-fn json_to_gateway_config(json: &serde_json::Value) -> GatewayConfig {
-    let broker_url = json
-        .get("broker_url")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-
-    GatewayConfig::Emqx(EmqxGatewayConfig { broker_url })
-}
-
-/// Convert domain GatewayConfig to serde_json::Value
-pub fn gateway_config_to_json(config: &GatewayConfig) -> serde_json::Value {
-    match config {
-        GatewayConfig::Emqx(emqx) => {
-            serde_json::json!({
-                "broker_url": emqx.broker_url
-            })
         }
     }
 }
@@ -87,20 +67,20 @@ impl GatewayRepository for PostgresGatewayRepository {
             .map_err(DomainError::RepositoryError)?;
 
         let now = Utc::now();
-
-        // Convert domain GatewayConfig to JSON for storage
-        let gateway_config_json = gateway_config_to_json(&input.gateway_config);
+        let username = input.credentials.as_ref().map(|c| c.username.clone());
+        let password = input.credentials.as_ref().map(|c| c.password.clone());
 
         let result = conn
             .execute(
-                "INSERT INTO gateways (gateway_id, organization_id, name, gateway_type, gateway_config, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                "INSERT INTO gateways (gateway_id, organization_id, name, broker_url, username, password, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                 &[
                     &input.gateway_id,
                     &input.organization_id,
                     &input.name,
-                    &input.gateway_type,
-                    &gateway_config_json,
+                    &input.broker_url,
+                    &username,
+                    &password,
                     &now,
                     &now,
                 ],
@@ -122,8 +102,8 @@ impl GatewayRepository for PostgresGatewayRepository {
             gateway_id: input.gateway_id,
             organization_id: input.organization_id,
             name: input.name,
-            gateway_type: input.gateway_type,
-            gateway_config: input.gateway_config,
+            broker_url: input.broker_url,
+            credentials: input.credentials,
             deleted_at: None,
             created_at: Some(now),
             updated_at: Some(now),
@@ -142,7 +122,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let row = conn
             .query_opt(
-                "SELECT gateway_id, organization_id, name, gateway_type, gateway_config, deleted_at, created_at, updated_at
+                "SELECT gateway_id, organization_id, name, broker_url, username, password, deleted_at, created_at, updated_at
                  FROM gateways
                  WHERE gateway_id = $1 AND organization_id = $2 AND deleted_at IS NULL",
                 &[&input.gateway_id, &input.organization_id],
@@ -155,11 +135,12 @@ impl GatewayRepository for PostgresGatewayRepository {
                 gateway_id: row.get(0),
                 organization_id: row.get(1),
                 name: row.get(2),
-                gateway_type: row.get(3),
-                gateway_config: row.get(4),
-                deleted_at: row.get(5),
-                created_at: row.get(6),
-                updated_at: row.get(7),
+                broker_url: row.get(3),
+                username: row.get(4),
+                password: row.get(5),
+                deleted_at: row.get(6),
+                created_at: row.get(7),
+                updated_at: row.get(8),
             };
             gateway_row.into()
         });
@@ -179,10 +160,9 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let now = Utc::now();
 
-        // Convert domain GatewayConfig to JSON if provided
-        let gateway_config_json = input.gateway_config.as_ref().map(gateway_config_to_json);
+        let username = input.credentials.as_ref().map(|c| c.username.clone());
+        let password = input.credentials.as_ref().map(|c| c.password.clone());
 
-        // Build dynamic UPDATE query based on provided fields
         let mut query = String::from("UPDATE gateways SET updated_at = $1");
         let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![&now];
         let mut param_idx = 2;
@@ -193,21 +173,26 @@ impl GatewayRepository for PostgresGatewayRepository {
             param_idx += 1;
         }
 
-        if let Some(ref gateway_type) = input.gateway_type {
-            query.push_str(&format!(", gateway_type = ${}", param_idx));
-            params.push(gateway_type);
+        if let Some(ref broker_url) = input.broker_url {
+            query.push_str(&format!(", broker_url = ${}", param_idx));
+            params.push(broker_url);
             param_idx += 1;
         }
 
-        if let Some(ref config_json) = gateway_config_json {
-            query.push_str(&format!(", gateway_config = ${}", param_idx));
-            params.push(config_json);
-            param_idx += 1;
+        if input.credentials.is_some() {
+            query.push_str(&format!(
+                ", username = ${}, password = ${}",
+                param_idx,
+                param_idx + 1
+            ));
+            params.push(&username);
+            params.push(&password);
+            param_idx += 2;
         }
 
         query.push_str(&format!(
             " WHERE gateway_id = ${} AND organization_id = ${} AND deleted_at IS NULL
-             RETURNING gateway_id, organization_id, name, gateway_type, gateway_config, deleted_at, created_at, updated_at",
+             RETURNING gateway_id, organization_id, name, broker_url, username, password, deleted_at, created_at, updated_at",
             param_idx,
             param_idx + 1
         ));
@@ -225,11 +210,12 @@ impl GatewayRepository for PostgresGatewayRepository {
                     gateway_id: row.get(0),
                     organization_id: row.get(1),
                     name: row.get(2),
-                    gateway_type: row.get(3),
-                    gateway_config: row.get(4),
-                    deleted_at: row.get(5),
-                    created_at: row.get(6),
-                    updated_at: row.get(7),
+                    broker_url: row.get(3),
+                    username: row.get(4),
+                    password: row.get(5),
+                    deleted_at: row.get(6),
+                    created_at: row.get(7),
+                    updated_at: row.get(8),
                 };
                 debug!(gateway_id = %gateway_row.gateway_id, "gateway updated in database");
                 Ok(gateway_row.into())
@@ -280,7 +266,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let rows = conn
             .query(
-                "SELECT gateway_id, organization_id, name, gateway_type, gateway_config, deleted_at, created_at, updated_at
+                "SELECT gateway_id, organization_id, name, broker_url, username, password, deleted_at, created_at, updated_at
                  FROM gateways
                  WHERE organization_id = $1 AND deleted_at IS NULL
                  ORDER BY created_at DESC",
@@ -296,11 +282,12 @@ impl GatewayRepository for PostgresGatewayRepository {
                     gateway_id: row.get(0),
                     organization_id: row.get(1),
                     name: row.get(2),
-                    gateway_type: row.get(3),
-                    gateway_config: row.get(4),
-                    deleted_at: row.get(5),
-                    created_at: row.get(6),
-                    updated_at: row.get(7),
+                    broker_url: row.get(3),
+                    username: row.get(4),
+                    password: row.get(5),
+                    deleted_at: row.get(6),
+                    created_at: row.get(7),
+                    updated_at: row.get(8),
                 };
                 gateway_row.into()
             })
@@ -322,7 +309,7 @@ impl GatewayRepository for PostgresGatewayRepository {
 
         let rows = conn
             .query(
-                "SELECT gateway_id, organization_id, name, gateway_type, gateway_config, deleted_at, created_at, updated_at
+                "SELECT gateway_id, organization_id, name, broker_url, username, password, deleted_at, created_at, updated_at
                  FROM gateways
                  WHERE deleted_at IS NULL
                  ORDER BY created_at DESC",
@@ -338,11 +325,12 @@ impl GatewayRepository for PostgresGatewayRepository {
                     gateway_id: row.get(0),
                     organization_id: row.get(1),
                     name: row.get(2),
-                    gateway_type: row.get(3),
-                    gateway_config: row.get(4),
-                    deleted_at: row.get(5),
-                    created_at: row.get(6),
-                    updated_at: row.get(7),
+                    broker_url: row.get(3),
+                    username: row.get(4),
+                    password: row.get(5),
+                    deleted_at: row.get(6),
+                    created_at: row.get(7),
+                    updated_at: row.get(8),
                 };
                 gateway_row.into()
             })

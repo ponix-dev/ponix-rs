@@ -14,7 +14,8 @@ A LoRaWAN-native IoT platform that connects to network servers like The Things N
 
 Strip out abstractions that don't serve the LoRaWAN direction. Gateways become LoRaWAN MQTT connections (no type enum). End device definitions get a single transform expression and schema (no match expressions, no contract list).
 
-- [ ] #196 — Remove gateway type abstraction — drop `gateway_type` enum, `EmqxGatewayConfig`, and the `GatewayRunner` factory pattern. A gateway is a LoRaWAN network server MQTT connection with a broker URL and credentials
+- [x] #196 — Remove gateway type abstraction — drop `gateway_type` enum, `EmqxGatewayConfig`, and the `GatewayRunner` factory pattern. A gateway is a LoRaWAN network server MQTT connection with a broker URL and credentials
+- [ ] #208 — Encrypt sensitive credentials at rest — introduce a `SecretCipher` abstraction and AES-GCM implementation; encrypt gateway credentials in PostgreSQL with a master key from `PONIX_SECRET_KEY`. Blocks any TTN deployment with a real API key
 - [ ] #197 — Simplify end device definitions to single contract — replace the ordered `contracts: Vec<PayloadContract>` with a single `transform_expression` and `json_schema` on the definition itself. Remove match expressions
 - [ ] #198 — Update gateway orchestrator for LoRaWAN MQTT — remove the pluggable runner abstraction, assume all gateways connect to a LoRaWAN network server MQTT broker
 

@@ -18,6 +18,8 @@ source "$SCRIPT_DIR/lib/common.sh"
 # Additional MQTT configuration
 MQTT_HOST="${PONIX_MQTT_HOST:-localhost}"
 MQTT_PORT="${PONIX_MQTT_PORT:-1883}"
+MQTT_USERNAME="${PONIX_MQTT_USERNAME:-ponix}"
+MQTT_PASSWORD="${PONIX_MQTT_PASSWORD:-ponix}"
 GATEWAY_BROKER_URL="${PONIX_GATEWAY_BROKER_URL:-mqtt://ponix-emqx:1883}"
 
 init_test_script "MQTT Pipeline E2E Test"
@@ -64,9 +66,10 @@ GATEWAY_RESPONSE=$(grpc_call "$AUTH_TOKEN" \
     "{
         \"organization_id\": \"$ORG_ID\",
         \"name\": \"Test EMQX Gateway\",
-        \"type\": \"GATEWAY_TYPE_EMQX\",
-        \"emqx_config\": {
-            \"broker_url\": \"$GATEWAY_BROKER_URL\"
+        \"broker_url\": \"$GATEWAY_BROKER_URL\",
+        \"credentials\": {
+            \"username\": \"ponix\",
+            \"password\": \"ponix\"
         }
     }")
 
@@ -146,6 +149,8 @@ echo -e "  Decoded: Temperature 25.5C, Humidity 50%"
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
+    -u "${MQTT_USERNAME}" \
+    -P "${MQTT_PASSWORD}" \
     -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "${CAYENNE_PAYLOAD_HEX}" \
     --format hex
@@ -159,6 +164,8 @@ print_step "Publishing additional test messages..."
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
+    -u "${MQTT_USERNAME}" \
+    -P "${MQTT_PASSWORD}" \
     -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "0167012C02688C" \
     --format hex
@@ -170,6 +177,8 @@ sleep 1
 mqttx-cli pub \
     -h "${MQTT_HOST}" \
     -p "${MQTT_PORT}" \
+    -u "${MQTT_USERNAME}" \
+    -P "${MQTT_PASSWORD}" \
     -t "${ORG_ID}/${END_DEVICE_ID}" \
     -m "016700B902685A" \
     --format hex

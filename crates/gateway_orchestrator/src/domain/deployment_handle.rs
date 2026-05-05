@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use common::domain::{DomainResult, Gateway, GatewayConfig};
+use common::domain::{DomainResult, Gateway};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
@@ -15,7 +15,9 @@ pub trait DeploymentHandle: Send + Sync {
     /// The gateway this handle is managing
     fn gateway(&self) -> &Gateway;
 
-    /// Hash of the gateway config at deployment time, for change detection
+    /// Hash of the gateway connection details at deployment time, for change
+    /// detection. Includes broker URL and credentials so credential rotation
+    /// triggers a reconnect.
     fn config_hash(&self) -> &str;
 
     /// Cancel the running gateway process
@@ -86,16 +88,14 @@ impl std::str::FromStr for DeployerType {
     }
 }
 
-/// Hash a gateway config for change detection.
-///
-/// Extracted as a free function so both deployers and orchestration logic
-/// can use the same hashing strategy.
-pub fn hash_gateway_config(config: &GatewayConfig) -> String {
+/// Hash a gateway's connection details (broker URL and credentials) for change
+/// detection. A change in either field triggers a reconnect.
+pub fn hash_gateway_connection(gateway: &Gateway) -> String {
     let mut hasher = DefaultHasher::new();
-    match config {
-        GatewayConfig::Emqx(emqx) => {
-            emqx.broker_url.hash(&mut hasher);
-        }
+    gateway.broker_url.hash(&mut hasher);
+    if let Some(creds) = gateway.credentials.as_ref() {
+        creds.username.hash(&mut hasher);
+        creds.password.hash(&mut hasher);
     }
     format!("{:x}", hasher.finish())
 }
