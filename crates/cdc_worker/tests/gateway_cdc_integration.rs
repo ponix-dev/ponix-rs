@@ -24,9 +24,6 @@ use tokio::time::{sleep, timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-// For manual CDC publication setup
-use tokio_postgres::NoTls;
-
 const STREAM_NAME: &str = "test_gateways";
 const SUBJECT_PREFIX: &str = "test_gateways";
 const TEST_USER_ID: &str = "test-user-001";
@@ -110,22 +107,12 @@ async fn setup_test_env() -> TestEnvironment {
 
     info!("PostgreSQL migrations completed");
 
-    // Set replica identity for gateways table (required for CDC)
-    let client = tokio_postgres::connect(&pg_dsn, NoTls)
-        .await
-        .expect("Failed to connect for CDC setup");
-    let (pg_client, connection) = client;
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("PostgreSQL connection error: {}", e);
-        }
-    });
-
-    pg_client
-        .execute("ALTER TABLE gateways REPLICA IDENTITY FULL", &[])
-        .await
-        .expect("Failed to set replica identity");
+    // Replica identity stays at the default (PRIMARY KEY) because the
+    // gateways publication uses a column list that excludes username/password.
+    // Postgres requires the replica identity columns to be a subset of the
+    // publication's column list, so REPLICA IDENTITY FULL would fail on
+    // UPDATE/DELETE with "Column list used by the publication does not cover
+    // the replica identity".
     info!("CDC publication created by migration");
 
     // Create PostgreSQL client and repository
